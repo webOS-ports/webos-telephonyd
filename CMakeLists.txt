@@ -30,6 +30,14 @@ pkg_check_modules(GLIB2 REQUIRED glib-2.0)
 include_directories(${GLIB2_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${GLIB2_CFLAGS})
 
+pkg_check_modules(GIO2 REQUIRED gio-2.0)
+include_directories(${GIO2_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${GIO2_CFLAGS})
+
+pkg_check_modules(GOBJECT2 REQUIRED gobject-2.0)
+include_directories(${GOBJECT2_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${GOBJECT2_CFLAGS})
+
 pkg_check_modules(LUNASERVICE2 REQUIRED luna-service2)
 include_directories(${LUNASERVICE2_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${LUNASERVICE2_CFLAGS})
@@ -41,11 +49,13 @@ webos_add_compiler_flags(ALL ${CJSON_CFLAGS})
 webos_add_compiler_flags(ALL -Wall)
 webos_add_linker_options(ALL --no-undefined)
 
-file(GLOB SOURCE_FILES src/*.c)
+include_directories(src)
+file(GLOB SOURCE_FILES src/*.c src/ofono/*.c)
 
 add_executable(tild ${SOURCE_FILES})
 target_link_libraries(tild
     ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${CJSON_LDFLAGS}
+    ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
     rt pthread)
 
 webos_build_daemon()
