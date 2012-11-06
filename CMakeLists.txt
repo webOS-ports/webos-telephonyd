@@ -1,0 +1,52 @@
+# @@@LICENSE
+#
+# Copyright (c) 2012 Simon Busch <morphis@gravedo.de>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# LICENSE@@@
+
+cmake_minimum_required(VERSION 2.8.7)
+
+project(tild C)
+
+include(webOS/webOS)
+webos_modules_init(1 0 0 QUALIFIER RC2)
+webos_component(0 1 0)
+
+include(FindPkgConfig)
+
+pkg_check_modules(GLIB2 REQUIRED glib-2.0)
+include_directories(${GLIB2_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${GLIB2_CFLAGS})
+
+pkg_check_modules(LUNASERVICE2 REQUIRED luna-service2)
+include_directories(${LUNASERVICE2_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${LUNASERVICE2_CFLAGS})
+
+pkg_check_modules(CJSON REQUIRED cjson)
+include_directories(${CJSON_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${CJSON_CFLAGS})
+
+webos_add_compiler_flags(ALL -Wall)
+webos_add_linker_options(ALL --no-undefined)
+
+file(GLOB SOURCE_FILES src/*.c)
+
+add_executable(tild ${SOURCE_FILES})
+target_link_libraries(tild
+    ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${CJSON_LDFLAGS}
+    rt pthread)
+
+webos_build_daemon()
+webos_build_system_bus_files()
