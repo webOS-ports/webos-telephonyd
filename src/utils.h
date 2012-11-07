@@ -20,6 +20,23 @@
 #define UTILS_H_
 
 #include <glib.h>
+#include <luna-service2/lunaservice.h>
+
+struct service_request_data {
+	LSHandle *handle;
+	LSMessage *message;
+};
+
+static inline struct service_request_data *service_request_data_new(LSHandle *handle, LSMessage *message)
+{
+	struct service_request_data *req;
+
+	req = g_new0(struct service_request_data, 1);
+	req->handle = handle;
+	req->message = message;
+
+	return req;
+}
 
 struct cb_data {
 	void *cb;

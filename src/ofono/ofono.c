@@ -25,7 +25,7 @@
 struct ofono_data {
 };
 
-int ofono_power_set(struct telephony_service *service, int power, telephony_power_set_cb cb, void *data)
+int ofono_power_set(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data)
 {
 	return 0;
 }

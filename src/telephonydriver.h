@@ -21,13 +21,13 @@
 
 struct telephony_service;
 
-typedef int (*telephony_power_set_cb)(int success, void *data);
+typedef int (*telephony_power_set_cb)(bool success, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);
 
-	int (*power_set)(struct telephony_service *service, int power, telephony_power_set_cb cb, void *data);
+	int (*power_set)(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data);
 };
 
 #endif

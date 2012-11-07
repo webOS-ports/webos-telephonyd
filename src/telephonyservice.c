@@ -21,9 +21,11 @@
 #include <unistd.h>
 #include <string.h>
 #include <glib.h>
+#include <cjson/json.h>
 #include <luna-service2/lunaservice.h>
 
 #include "telephonydriver.h"
+#include "utils.h"
 
 struct telephony_service {
 	struct telephony_driver *driver;
@@ -93,8 +95,92 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 	}
 }
 
-bool _service_power_set_cb(LSHandle* lshandle, LSMessage *message, void *user_data)
+int _service_power_set_finish(bool success, void *data)
 {
+	struct service_request_data *req_data = data;
+	struct json_object *response_object;
+	LSError error;
+
+	response_object = json_object_new_object();
+
+	json_object_object_add(response_object, "returnValue", json_object_new_boolean(success));
+
+	if (LSMessageReply(req_data->handle, req_data->message, json_object_to_json_string(response_object), &error)) {
+		LSErrorFree(&error);
+		return -1;
+	}
+
+	json_object_put(response_object);
+
+	g_free(req_data);
+
+	return 0;
+}
+
+bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct service_request_data *req_data;
+	bool power = false;
+	struct json_object *request_object;
+	struct json_object *response_object;
+	struct json_object *state_object;
+	LSError error;
+	const char *payload;
+	const char *state_value;
+
+	if (!service->driver || !service->driver->power_set) {
+		g_error("No implementation available for service powerSet API method");
+		return false;
+	}
+
+	payload = LSMessageGetPayload(message);
+	if (!payload)
+		return false;
+
+	request_object = json_tokener_parse(payload);
+	if (!request_object || is_error(request_object)) {
+		request_object = 0;
+		goto error;
+	}
+
+	if (!json_object_object_get_ex(request_object, "state", &state_object))
+		goto error;
+
+	state_value = json_object_get_string(state_object);
+
+	if (!strncmp(state_value, "on", 2))
+		power = true;
+	else if (!strncmp(state_value, "off", 3))
+		power = false;
+	/* FIXME we're not supporting saving the power state yet so default will always power
+	 * up the service */
+	else if (!strncmp(state_value, "default", 7))
+		power = true;
+
+	req_data = service_request_data_new(handle, message);
+
+	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
+		g_error("Failed to process service powerSet request in our driver");
+		goto error;
+	}
+
+	return true;
+
+error:
+	response_object = json_object_new_object();
+	json_object_object_add(response_object, "returnValue", json_object_new_boolean(false));
+
+	if (LSMessageReply(handle, message, json_object_to_json_string(response_object), &error)) {
+		LSErrorPrint(&error, stderr);
+		LSErrorFree(&error);
+	}
+
+	json_object_put(response_object);
+
+	if (request_object)
+		json_object_put(request_object);
+
 	return true;
 }
 
