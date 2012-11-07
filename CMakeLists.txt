@@ -49,7 +49,7 @@ webos_add_compiler_flags(ALL ${CJSON_CFLAGS})
 webos_add_compiler_flags(ALL -Wall)
 webos_add_linker_options(ALL --no-undefined)
 
-include_directories(src)
+include_directories(src src/ofono)
 file(GLOB SOURCE_FILES src/*.c src/ofono/*.c)
 
 add_executable(tild ${SOURCE_FILES})
