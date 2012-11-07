@@ -24,8 +24,10 @@
 #include <sys/signalfd.h>
 
 #include <luna-service2/lunaservice.h>
-
 #include <glib.h>
+
+#include "telephonyservice.h"
+#include "ofono/ofonoservicebase.h"
 
 #define SHUTDOWN_GRACE_SECONDS		2
 #define VERSION						"0.1"
@@ -37,6 +39,9 @@ static gboolean option_debug = FALSE;
 static unsigned int __terminated = 0;
 static LSHandle* private_service_handle = NULL;
 static LSPalmService *palm_serivce_handle = NULL;
+
+extern void ofono_init(struct telephony_service *service);
+extern void ofono_exit(struct telephony_service *service);
 
 static GOptionEntry options[] = {
 	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
@@ -137,6 +142,7 @@ int main(int argc, char **argv)
 	LSError lserror;
 	GError *err = NULL;
 	guint signal;
+	struct telephony_service *service;
 
 	g_message("Telephony Interface Layer Daemon %s", VERSION);
 
@@ -190,9 +196,18 @@ int main(int argc, char **argv)
 
 	private_service_handle = LSPalmServiceGetPrivateConnection(palm_serivce_handle);
 
+	service = telephony_service_create(palm_serivce_handle);
+	/* FIXME this should be done as part of a plugin mechanism */
+	ofono_init(service);
+
 	g_main_loop_run(event_loop);
 
 cleanup:
+	/* FIXME this should be done as part of a plugin mechanism */
+	ofono_exit(service);
+
+	telephony_service_free(service);
+
 	if (palm_serivce_handle != NULL && LSUnregisterPalmService(palm_serivce_handle, &lserror) < 0) {
 		g_error("Could not unregister palm service: %s", lserror.message);
 		LSErrorFree(&lserror);
