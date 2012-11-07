@@ -1,6 +1,6 @@
 {
     "role": {
-        "exeName":"@WEBOS_INSTALL_SBINDIR@/tild",
+        "exeName":"@WEBOS_INSTALL_SBINDIR@/telephonyd",
         "type": "privileged",
         "allowedNames": ["com.palm.telephony"]
     },

@@ -1,5 +1,5 @@
-tild
-====
+telephonyd
+==========
 
 Summary
 -------
@@ -14,7 +14,8 @@ How to Build on Linux
 
 ## Dependencies
 
-Below are the tools and libraries (and their minimum versions) required to build tild:
+Below are the tools and libraries (and their minimum versions) required to build
+telephonyd:
 
 * cmake (version required by openwebos/cmake-modules-webos)
 * gcc 4.6.3

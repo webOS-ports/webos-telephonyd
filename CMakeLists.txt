@@ -18,7 +18,7 @@
 
 cmake_minimum_required(VERSION 2.8.7)
 
-project(tild C)
+project(telephonyd C)
 
 include(webOS/webOS)
 webos_modules_init(1 0 0 QUALIFIER RC2)
@@ -52,8 +52,8 @@ webos_add_linker_options(ALL --no-undefined)
 include_directories(src src/ofono)
 file(GLOB SOURCE_FILES src/*.c src/ofono/*.c)
 
-add_executable(tild ${SOURCE_FILES})
-target_link_libraries(tild
+add_executable(telephonyd ${SOURCE_FILES})
+target_link_libraries(telephonyd
     ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${CJSON_LDFLAGS}
     ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
     rt pthread)

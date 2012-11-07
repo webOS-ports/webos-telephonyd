@@ -29,4 +29,4 @@ stop on started start_update
 respawn
 
 service
-exec @WEBOS_INSTALL_SBINDIR@/tild
+exec @WEBOS_INSTALL_SBINDIR@/telephonyd
