@@ -29,7 +29,6 @@
 #define DBUS_MAX_INTERFACE_NAME_LENGTH			255
 
 struct ofono_service_base {
-	GDBusConnection *conn;
 	GDBusProxy *proxy;
 	char path[DBUS_MAX_PATH_LENGTH];
 	char interface_name[DBUS_MAX_INTERFACE_NAME_LENGTH];
@@ -122,7 +121,7 @@ void ofono_service_base_free(struct ofono_service_base *service)
 	g_assert(service != NULL);
 
 	g_hash_table_destroy(service->properties);
-	g_object_unref(service->conn);
+	g_object_unref(service->proxy);
 	g_free(service);
 }
 
