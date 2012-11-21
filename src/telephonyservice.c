@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <glib.h>
-#include <cjson/json.h>
+#include <pbnjson.h>
 #include <luna-service2/lunaservice.h>
 
 #include "telephonydriver.h"
@@ -98,88 +98,108 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 int _service_power_set_finish(bool success, void *data)
 {
 	struct service_request_data *req_data = data;
-	struct json_object *response_object;
-	LSError error;
+	jvalue_ref reply_obj = NULL;
+	jschema_ref response_schema = NULL;
+	LSError lserror;
 
-	response_object = json_object_new_object();
+	LSErrorInit(&lserror);
 
-	json_object_object_add(response_object, "returnValue", json_object_new_boolean(success));
+	reply_obj = jobject_create();
 
-	if (LSMessageReply(req_data->handle, req_data->message, json_object_to_json_string(response_object), &error)) {
-		LSErrorFree(&error);
-		return -1;
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+	if(!response_schema)
+	{
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
 	}
 
-	json_object_put(response_object);
+	if (LSMessageReply(req_data->handle, req_data->message,
+					jvalue_tostring(reply_obj, response_schema), &lserror)) {
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+		goto cleanup;
+	}
 
+cleanup:
+	j_release(reply_obj);
 	g_free(req_data);
-
 	return 0;
 }
 
 bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
-	struct service_request_data *req_data;
+	struct service_request_data *req_data = NULL;
 	bool power = false;
-	struct json_object *request_object;
-	struct json_object *response_object;
-	struct json_object *state_object;
+	jschema_ref input_schema = NULL;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref state_obj = NULL;
+	JSchemaInfo schema_info;
 	LSError error;
 	const char *payload;
 	const char *state_value;
 
 	if (!service->driver || !service->driver->power_set) {
 		g_error("No implementation available for service powerSet API method");
-		return false;
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+	if (!input_schema) {
+		g_error("Failed to create json validation schema");
+		luna_service_message_reply_error_internal(handle, message);
+		goto cleanup;
 	}
 
 	payload = LSMessageGetPayload(message);
-	if (!payload)
-		return false;
 
-	request_object = json_tokener_parse(payload);
-	if (!request_object || is_error(request_object)) {
-		request_object = 0;
-		goto error;
+	jschema_info_init(&schema_info, input_schema, NULL, NULL);
+	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
+	jschema_release(&input_schema);
+
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
 	}
 
-	if (!json_object_object_get_ex(request_object, "state", &state_object))
-		goto error;
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("state"), &state_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
 
-	state_value = json_object_get_string(state_object);
-
-	if (!strncmp(state_value, "on", 2))
+	if (jstring_equal2(state_obj, J_CSTR_TO_BUF("on"))) {
 		power = true;
-	else if (!strncmp(state_value, "off", 3))
+	}
+	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("off"))) {
 		power = false;
+	}
 	/* FIXME we're not supporting saving the power state yet so default will always power
 	 * up the service */
-	else if (!strncmp(state_value, "default", 7))
+	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("default"))) {
 		power = true;
+	}
+	else {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
 
 	req_data = service_request_data_new(handle, message);
 
 	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
 		g_error("Failed to process service powerSet request in our driver");
-		goto error;
+		luna_service_message_reply_custom_error(handle, message, "Failed to set power mode");
+		goto cleanup;
 	}
 
-	return true;
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
-error:
-	response_object = json_object_new_object();
-	json_object_object_add(response_object, "returnValue", json_object_new_boolean(false));
-
-	if (LSMessageReply(handle, message, json_object_to_json_string(response_object), &error)) {
-		LSErrorPrint(&error, stderr);
-		LSErrorFree(&error);
-	}
-
-	json_object_put(response_object);
-
-	if (request_object)
-		json_object_put(request_object);
+	if (req_data)
+		g_free(req_data);
 
 	return true;
 }

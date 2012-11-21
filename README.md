@@ -21,7 +21,7 @@ telephonyd:
 * gcc 4.6.3
 * glib-2.0 2.32.1
 * make (any version)
-* openwebos/cjson 1.8.0
+* openwebos/pbnjson_c 1.3.0
 * openwebos/luna-service2 3.0.0
 * pkg-config 0.26
 

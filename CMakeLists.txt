@@ -42,9 +42,9 @@ pkg_check_modules(LUNASERVICE2 REQUIRED luna-service2)
 include_directories(${LUNASERVICE2_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${LUNASERVICE2_CFLAGS})
 
-pkg_check_modules(CJSON REQUIRED cjson)
-include_directories(${CJSON_INCLUDE_DIRS})
-webos_add_compiler_flags(ALL ${CJSON_CFLAGS})
+pkg_check_modules(PBNJSON_C REQUIRED pbnjson_c)
+include_directories(${PBNJSON_C_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${PBNJSON_C_CFLAGS_OTHER})
 
 webos_add_compiler_flags(ALL -Wall)
 webos_add_linker_options(ALL --no-undefined)
@@ -54,7 +54,7 @@ file(GLOB SOURCE_FILES src/*.c src/ofono/*.c)
 
 add_executable(telephonyd ${SOURCE_FILES})
 target_link_libraries(telephonyd
-    ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${CJSON_LDFLAGS}
+    ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${PBNJSON_C_LDFLAGS}
     ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
     rt pthread)
 
