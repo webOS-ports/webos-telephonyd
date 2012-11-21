@@ -128,6 +128,13 @@ cleanup:
 	return 0;
 }
 
+/**
+ * @brief Set power mode for the telephony service
+ *
+ * JSON format:
+ *    {"state":"<on|off|default>"}
+ **/
+
 bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
