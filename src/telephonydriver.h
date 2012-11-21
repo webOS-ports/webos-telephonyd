@@ -22,12 +22,14 @@
 struct telephony_service;
 
 typedef int (*telephony_power_set_cb)(bool success, void *data);
+typedef int (*telephony_power_query_cb)(bool success, bool power_state, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);
 
 	int (*power_set)(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data);
+	int (*power_query)(struct telephony_service *service, telephony_power_query_cb, void *data);
 };
 
 #endif

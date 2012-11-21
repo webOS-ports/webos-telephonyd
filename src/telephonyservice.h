@@ -30,6 +30,8 @@ void telephony_service_set_data(struct telephony_service *service, void *data);
 void* telephony_service_get_data(struct telephony_service *service);
 void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver);
 
+void telephony_service_power_status_notify(struct telephony_service *service, bool power);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab
