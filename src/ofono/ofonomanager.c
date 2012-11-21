@@ -103,7 +103,7 @@ int ofono_manager_get_modems(struct ofono_manager *manager,
 
 	cbd = cb_data_new(cb, user_data);
 
-	g_dbus_proxy_call(manager->proxy, "SetProperty", NULL, G_DBUS_CALL_FLAGS_NONE,
+	g_dbus_proxy_call(manager->proxy, "GetModems", NULL, G_DBUS_CALL_FLAGS_NONE,
 		-1, NULL, _get_modems_cb, cbd);
 
 	return 0;
