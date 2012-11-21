@@ -97,7 +97,7 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 
 int _service_power_set_finish(bool success, void *data)
 {
-	struct service_request_data *req_data = data;
+	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jschema_ref response_schema = NULL;
 	LSError lserror;
@@ -124,14 +124,14 @@ int _service_power_set_finish(bool success, void *data)
 
 cleanup:
 	j_release(reply_obj);
-	g_free(req_data);
+	luna_service_req_data_free(req_data);
 	return 0;
 }
 
 bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
-	struct service_request_data *req_data = NULL;
+	struct luna_service_req_data *req_data = NULL;
 	bool power = false;
 	jschema_ref input_schema = NULL;
 	jvalue_ref parsed_obj = NULL;
@@ -186,7 +186,7 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
-	req_data = service_request_data_new(handle, message);
+	req_data = luna_service_req_data_new(handle, message);
 
 	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
 		g_error("Failed to process service powerSet request in our driver");
@@ -199,7 +199,7 @@ cleanup:
 		j_release(&parsed_obj);
 
 	if (req_data)
-		g_free(req_data);
+		luna_service_req_data_free(req_data);
 
 	return true;
 }

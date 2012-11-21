@@ -22,20 +22,33 @@
 #include <glib.h>
 #include <luna-service2/lunaservice.h>
 
-struct service_request_data {
+struct luna_service_req_data {
 	LSHandle *handle;
 	LSMessage *message;
 };
 
-static inline struct service_request_data *service_request_data_new(LSHandle *handle, LSMessage *message)
+static inline struct luna_service_req_data *luna_service_req_data_new(LSHandle *handle, LSMessage *message)
 {
-	struct service_request_data *req;
+	struct luna_service_req_data *req;
 
-	req = g_new0(struct service_request_data, 1);
+	req = g_new0(struct luna_service_req_data, 1);
 	req->handle = handle;
 	req->message = message;
 
+	LSMessageRef(req->message);
+
 	return req;
+}
+
+static inline void luna_service_req_data_free(struct luna_service_req_data *req)
+{
+	if (!req)
+		return;
+
+	if (req->message)
+		LSMessageUnref(req->message);
+
+	g_free(req);
 }
 
 struct cb_data {
