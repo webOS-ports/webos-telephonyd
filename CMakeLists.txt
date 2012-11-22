@@ -34,6 +34,10 @@ pkg_check_modules(GIO2 REQUIRED gio-2.0)
 include_directories(${GIO2_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${GIO2_CFLAGS})
 
+pkg_check_modules(GIO-UNIX REQUIRED gio-unix-2.0)
+include_directories(${GIO-UNIX_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${GIO-UNIX_CFLAGS_OTHER})
+
 pkg_check_modules(GOBJECT2 REQUIRED gobject-2.0)
 include_directories(${GOBJECT2_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${GOBJECT2_CFLAGS})
@@ -46,16 +50,34 @@ pkg_check_modules(PBNJSON_C REQUIRED pbnjson_c)
 include_directories(${PBNJSON_C_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${PBNJSON_C_CFLAGS_OTHER})
 
+find_program(GDBUS_CODEGEN_EXECUTABLE NAMES gdbus-codegen DOC "gdbus-codegen executable")
+if(NOT GDBUS_CODEGEN_EXECUTABLE)
+	message(FATAL_ERROR "Executable gdbus-codegen not found")
+endif(GDBUS_CODEGEN_EXECUTABLE)
+
+set(GDBUS_IF_DIR ${WEBOS_BINARY_CONFIGURED_DIR}/src)
+
+file (MAKE_DIRECTORY ${GDBUS_IF_DIR})
+
+execute_process(COMMAND ${GDBUS_CODEGEN_EXECUTABLE} --c-namespace OfonoInterface --generate-c-code
+						${GDBUS_IF_DIR}/ofono-interface --interface-prefix org.ofono.
+						${CMAKE_CURRENT_SOURCE_DIR}/files/xml/ofono.xml
+						RESULT_VARIABLE codegen_failed)
+if(codegen_failed)
+		message(FATAL_ERROR "Error in generating code for ofono interface using gdbus-codegen")
+endif()
+
+include_directories(src ${GDBUS_IF_DIR})
+include_directories(src src/ofono)
+file(GLOB SOURCE_FILES src/*.c src/ofono/*.c ${GDBUS_IF_DIR}/ofono-interface.c)
+
 webos_add_compiler_flags(ALL -Wall)
 webos_add_linker_options(ALL --no-undefined)
-
-include_directories(src src/ofono)
-file(GLOB SOURCE_FILES src/*.c src/ofono/*.c)
 
 add_executable(telephonyd ${SOURCE_FILES})
 target_link_libraries(telephonyd
     ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${PBNJSON_C_LDFLAGS}
-    ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
+    ${GIO2_LDFLAGS} ${GIO-UNIX_LDFLAGS} ${GOBJECT2_LDFLAGS}
     rt pthread)
 
 webos_build_daemon()
