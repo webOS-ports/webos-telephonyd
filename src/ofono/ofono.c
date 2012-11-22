@@ -55,14 +55,14 @@ void ofono_remove(struct telephony_service *service)
 }
 
 struct telephony_driver driver = {
-    .probe =		ofono_probe,
-    .remove =		ofono_remove,
-    .power_set =	ofono_power_set,
+	.probe =		ofono_probe,
+	.remove =		ofono_remove,
+	.power_set =	ofono_power_set,
 };
 
 void ofono_init(struct telephony_service *service)
 {
-    telephony_service_register_driver(service, &driver);
+	telephony_service_register_driver(service, &driver);
 }
 
 void ofono_exit(struct telephony_service *service)

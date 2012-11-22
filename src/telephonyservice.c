@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 #include <string.h>
 #include <glib.h>
 #include <pbnjson.h>
@@ -27,10 +28,13 @@
 #include "telephonydriver.h"
 #include "utils.h"
 
+extern GMainLoop *event_loop;
+
 struct telephony_service {
 	struct telephony_driver *driver;
 	void *data;
 	LSHandle *private_service;
+	bool initialized;
 };
 
 bool _service_power_set_cb(LSHandle* lshandle, LSMessage *message, void *user_data);
@@ -52,6 +56,7 @@ struct telephony_service* telephony_service_create(LSPalmService *palm_service)
 		return NULL;
 
 	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
+	service->initialized = false;
 
 	LSErrorInit(&error);
 
@@ -86,14 +91,33 @@ void* telephony_service_get_data(struct telephony_service *service)
 	return service->data;
 }
 
+void telephony_service_availability_changed_notify(struct telephony_service *service, bool available)
+{
+	if (!service)
+		return;
+
+	g_debug("Availability of the telephony service changed to: %s", available ? "available" : "not available");
+
+	service->initialized = available;
+}
+
 void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver)
 {
+	int err;
+
+	if (service->driver) {
+		g_error("Can not register a second telephony driver");
+		return;
+	}
+
 	service->driver = driver;
 
-	/* FIXME maybe move probing to somewhere else */
 	if (service->driver->probe(service) < 0) {
 		g_error("Telephony driver failed to initialize");
 		service->driver = NULL;
+	}
+	else {
+		service->initialized = true;
 	}
 }
 
@@ -178,6 +202,11 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	LSError error;
 	const char *payload;
 	const char *state_value;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
 
 	if (!service->driver || !service->driver->power_set) {
 		g_error("No implementation available for service powerSet API method");
@@ -311,6 +340,11 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	JSchemaInfo schema_info;
 	LSError error;
 	const char *payload;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
 
 	if (!service->driver || !service->driver->power_query) {
 		g_error("No implementation available for service powerQuery API method");

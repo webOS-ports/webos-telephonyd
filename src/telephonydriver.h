@@ -21,6 +21,8 @@
 
 struct telephony_service;
 
+typedef void (*telephony_driver_result_cb)(void *data);
+
 typedef int (*telephony_power_set_cb)(bool success, void *data);
 typedef int (*telephony_power_query_cb)(bool success, bool power_state, void *data);
 

@@ -32,7 +32,7 @@
 #define SHUTDOWN_GRACE_SECONDS		2
 #define VERSION						"0.1"
 
-static GMainLoop *event_loop;
+GMainLoop *event_loop;
 static gboolean option_detach = FALSE;
 static gboolean option_version = FALSE;
 static gboolean option_debug = FALSE;
