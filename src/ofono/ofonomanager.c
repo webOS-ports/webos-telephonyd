@@ -24,25 +24,111 @@
 
 #include "utils.h"
 #include "ofonomanager.h"
+#include "ofonomodem.h"
+#include "ofono-interface.h"
 
 struct ofono_manager {
-	GDBusProxy *proxy;
+	OfonoInterfaceManager *remote;
+	GList *modems;
+	ofono_manager_modems_chanaged_cb modems_changed_cb;
+	gpointer modems_changed_data;
 };
+
+static void notify_modems_changed(struct ofono_manager *manager)
+{
+	if (manager->modems_changed_cb)
+		manager->modems_changed_cb(manager->modems_changed_data);
+}
+
+static void modem_added_cb(OfonoInterfaceManager *object, const gchar *path, GVariant *properties, gpointer user_data)
+{
+	struct ofono_manager *manager = user_data;
+	struct ofono_modem *modem = NULL;
+	GList *iter = NULL;
+	const gchar *modem_path = NULL;
+	gboolean found_modem = FALSE;
+
+	for (iter = manager->modems; iter != NULL; iter = iter->next) {
+		modem = (struct ofono_modem*)(iter->data);
+
+		modem_path = ofono_modem_get_path(modem);
+		if (g_str_equal(modem_path, path)) {
+			found_modem = TRUE;
+			break;
+		}
+	}
+
+	if (!found_modem) {
+		modem = ofono_modem_create(path);
+		manager->modems = g_list_append(manager->modems, modem);
+
+		notify_modems_changed(manager);
+	}
+}
+
+static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, gpointer user_data)
+{
+	struct ofono_manager *manager = user_data;
+	struct ofono_modem *modem = NULL;
+	GList *iter = NULL;
+	const gchar *modem_path = NULL;
+	gboolean found_modem = FALSE;
+
+	for (iter = manager->modems; iter != NULL; iter = iter->next) {
+		modem = (struct ofono_modem*)(iter->data);
+
+		modem_path = ofono_modem_get_path(modem);
+		if (g_str_equal(modem_path, path)) {
+			manager->modems = g_list_remove_link(manager->modems, g_list_find(manager->modems, modem));
+			ofono_modem_free(modem);
+
+			notify_modems_changed(manager);
+
+			break;
+		}
+	}
+}
+
+static void get_modems_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+{
+	struct ofono_manager *manager = user_data;
+	GError *error = NULL;
+	gboolean ret = FALSE;
+	GVariant *modems = NULL;
+	GVariant *properties = NULL;
+	gchar *path;
+	GVariantIter iter;
+	struct ofono_modem *modem = NULL;
+
+	ret = ofono_interface_manager_call_get_modems_finish(manager->remote, &modems, res, &error);
+	if (error) {
+		g_error("Failed to retrieve list of available modems from manager: %s", error->message);
+		g_error_free(error);
+		return;
+	}
+
+	g_variant_get(modems, "a(oa{sv})", &iter);
+	while (g_variant_iter_loop(&iter, "{oa{sv}}", &path, &properties)) {
+		modem = ofono_modem_create(path);
+		manager->modems = g_list_append(manager->modems, modem);
+	}
+
+	notify_modems_changed(manager);
+}
 
 struct ofono_manager* ofono_manager_create(void)
 {
 	struct ofono_manager *manager;
-	GDBusProxyFlags flags;
-	GError *error;
+	GError *error = NULL;
 
 	manager = g_try_new0(struct ofono_manager, 1);
 	if (!manager)
 		return NULL;
 
-	flags = G_DBUS_PROXY_FLAGS_NONE | G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START;
+	manager->modems = g_list_alloc();
 
-	manager->proxy = g_dbus_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM, flags, NULL, "org.ofono",
-		"/", "org.ofono.Manager", NULL, &error);
+	manager->remote = ofono_interface_manager_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
+							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", "/", NULL, &error);
 	if (error) {
 		g_error("Unable to initialize proxy for the org.ofono.Manager interface");
 		g_error_free(error);
@@ -50,63 +136,45 @@ struct ofono_manager* ofono_manager_create(void)
 		return NULL;
 	}
 
+	g_signal_connect(G_OBJECT(manager->remote), "modem-added",
+		G_CALLBACK(modem_added_cb), manager);
+
+	g_signal_connect(G_OBJECT(manager->remote), "modem-removed",
+		G_CALLBACK(modem_removed_cb), manager);
+
+	ofono_interface_manager_call_get_modems(manager->remote, NULL, get_modems_cb, manager);
+
 	return manager;
 }
 
 void ofono_manager_free(struct ofono_manager *manager)
 {
-	if (manager->proxy)
-		g_object_unref(manager->proxy);
+	if (!manager)
+		return;
+
+	if (manager->remote)
+		g_object_unref(manager->remote);
+
+	g_list_free_full(manager->modems, ofono_modem_free);
 
 	g_free(manager);
 }
 
-static void _get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
+const GList* ofono_manager_get_modems(struct ofono_manager *manager)
 {
-	struct cb_data *cbd = user_data;
-	ofono_manager_get_modems_cb cb = cbd->cb;
-	GVariantIter iter;
-	GList *modems;
-	GError *error;
-	GVariant *result;
-	gchar *path;
-	GVariant *properties;
+	if (!manager)
+		return NULL;
 
-	result = g_dbus_proxy_call_finish(G_DBUS_PROXY(source_object), res, &error);
-	if (error) {
-		g_error("Unable to retrieve list of available modems from ofono: %s", error->message);
-		g_error_free(error);
-		cb(false, NULL, cbd->data);
-		return;
-	}
-
-	modems = g_list_alloc();
-
-	g_variant_get(result, "a(oa{sv})", &iter);
-	while (g_variant_iter_loop(&iter, "{oa{sv}}", &path, &properties)) {
-		modems = g_list_append(modems, path);
-	}
-
-	cb(true, modems, cbd->data);
-
-	g_list_free_full(modems, g_free);
-
-	g_free(cbd);
+	return manager->modems;
 }
 
-int ofono_manager_get_modems(struct ofono_manager *manager,
-									ofono_manager_get_modems_cb cb, void *user_data)
+void ofono_manager_set_modems_changed_callback(struct ofono_manager *manager, ofono_manager_modems_chanaged_cb cb, gpointer user_data)
 {
-	struct cb_data *cbd;
+	if (!manager)
+		return;
 
-	g_assert(manager != NULL);
-
-	cbd = cb_data_new(cb, user_data);
-
-	g_dbus_proxy_call(manager->proxy, "GetModems", NULL, G_DBUS_CALL_FLAGS_NONE,
-		-1, NULL, _get_modems_cb, cbd);
-
-	return 0;
+	manager->modems_changed_cb = cb;
+	manager->modems_changed_data = user_data;
 }
 
 // vim:ts=4:sw=4:noexpandtab

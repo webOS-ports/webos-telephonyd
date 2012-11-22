@@ -16,21 +16,16 @@
 *
 * LICENSE@@@ */
 
-#ifndef OFONO_SERVICE_BASE_H_
-#define OFONO_SERVICE_BASE_H_
+#ifndef OFONO_MODEM_H_
+#define OFONO_MODEM_H_
 
 #include <glib.h>
 
-struct ofono_service_base;
+struct ofono_modem;
 
-typedef void (*ofono_service_base_result_cb)(gboolean success, void *user_data);
-
-struct ofono_service_base* ofono_service_base_create(const char *path, const char *interface_name);
-void ofono_service_base_free(struct ofono_service_base *service);
-
-int ofono_service_base_set_property(struct ofono_service_base *service, const char *name, GVariant *value,
-                                    ofono_service_base_result_cb cb, void *user_data);
-GVariant* ofono_service_base_get_property(struct ofono_service_base *service, const char *name);
+struct ofono_modem* ofono_modem_create(const gchar *path);
+void ofono_modem_free(struct ofono_modem *modem);
+const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 
 #endif
 

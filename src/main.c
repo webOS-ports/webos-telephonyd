@@ -27,7 +27,6 @@
 #include <glib.h>
 
 #include "telephonyservice.h"
-#include "ofono/ofonoservicebase.h"
 
 #define SHUTDOWN_GRACE_SECONDS		2
 #define VERSION						"0.1"

@@ -23,13 +23,14 @@
 
 struct ofono_manager;
 
-typedef void (*ofono_manager_get_modems_cb)(bool success, GList *modems, void *user_data);
+typedef void (*ofono_manager_modems_chanaged_cb)(gpointer *user_data);
 
 struct ofono_manager* ofono_manager_create(void);
-void ofono_manager_free(struct ofono_manager *service);
+void ofono_manager_free(struct ofono_manager *manager);
 
-int ofono_manager_get_modems(struct ofono_manager *service,
-									ofono_manager_get_modems_cb cb, void *user_data);
+const GList* ofono_manager_get_modems(struct ofono_manager *manager);
+
+void ofono_manager_set_modems_changed_callback(struct ofono_manager *manager, ofono_manager_modems_chanaged_cb cb, gpointer user_data);
 
 #endif
 
