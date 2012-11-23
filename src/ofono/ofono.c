@@ -22,12 +22,28 @@
 #include "telephonyservice.h"
 #include "telephonydriver.h"
 
+#include "ofonomanager.h"
+
 struct ofono_data {
+	struct ofono_manager *manager;
+	struct ofono_modem *modem;
 };
 
 int ofono_power_set(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data)
 {
 	return 0;
+}
+
+static void modems_changed_cb(gpointer user_data)
+{
+	struct ofono_data *data = user_data;
+	const GList *modems = NULL;
+
+	modems = ofono_manager_get_modems(data->manager);
+
+	/* select first modem from the list as default for now */
+	modems = g_list_first(modems);
+	data->modem = modems->data;
 }
 
 int ofono_probe(struct telephony_service *service)
@@ -40,6 +56,9 @@ int ofono_probe(struct telephony_service *service)
 
 	telephony_service_set_data(service, data);
 
+	data->manager = ofono_manager_create();
+	ofono_manager_set_modems_changed_callback(data->manager, modems_changed_cb, data);
+
 	return 0;
 }
 
@@ -48,6 +67,8 @@ void ofono_remove(struct telephony_service *service)
 	struct ofono_data *data;
 
 	data = telephony_service_get_data(service);
+
+	ofono_manager_free(data->manager);
 
 	g_free(data);
 
