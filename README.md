@@ -1,5 +1,5 @@
-telephonyd
-==========
+webos-telephonyd
+================
 
 Summary
 -------
