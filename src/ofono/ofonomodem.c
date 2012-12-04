@@ -29,7 +29,58 @@
 struct ofono_modem {
 	gchar *path;
 	OfonoInterfaceModem *remote;
+	gboolean powered;
+	gboolean online;
+	gboolean lockdown;
+	gboolean emergency;
+	gchar *name;
 };
+
+static void update_property(struct ofono_modem *modem, const gchar *name, const GVariant *value)
+{
+	if (g_str_equal(name, "Powered"))
+		modem->powered = g_variant_get_boolean(value);
+	else if (g_str_equal(name, "Online"))
+		modem->online = g_variant_get_boolean(value);
+	else if (g_str_equal(name, "LockDown"))
+		modem->lockdown = g_variant_get_boolean(value);
+	else if (g_str_equal(name, "Emergency"))
+		modem->emergency = g_variant_get_boolean(value);
+	else if (g_str_equal(value, "Name"))
+		modem->name = g_variant_dup_string(value, NULL);
+}
+
+static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+{
+	struct ofono_modem *modem = user_data;
+	GError *error = NULL;
+	gboolean ret = FALSE;
+	GVariant *properties = NULL;
+	gchar *property_name = NULL;
+	GVariant *property_value = NULL;
+	GVariantIter iter;
+
+	ret = ofono_interface_modem_call_get_properties_finish(modem->remote, &properties, res, &error);
+	if (error) {
+		g_error("Failed to retrieve properties from modem: %s", error->message);
+		g_error_free(error);
+		return;
+	}
+
+	g_variant_get(properties, "a{sv}", &iter);
+	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
+		update_property(modem, property_name, property_value);
+	}
+}
+
+static void property_changed_cb(OfonoInterfaceModem *object, const gchar *name, GVariant *value, gpointer *user_data)
+{
+	struct ofono_modem *modem = user_data;
+
+	g_debug("[Modem:%s] property %s changed", modem->path, name);
+
+	update_property(modem, name, value);
+}
 
 struct ofono_modem* ofono_modem_create(const gchar *path)
 {
@@ -50,6 +101,17 @@ struct ofono_modem* ofono_modem_create(const gchar *path)
 	}
 
 	modem->path = g_strdup(path);
+
+	modem->powered = FALSE;
+	modem->online = FALSE;
+	modem->lockdown = FALSE;
+	modem->emergency = FALSE;
+	modem->name = NULL;
+
+	g_signal_connect(G_OBJECT(modem->remote), "property-changed",
+		G_CALLBACK(property_changed_cb), modem);
+
+	ofono_interface_modem_call_get_properties(modem->remote, NULL, get_properties_cb, modem);
 
 	return modem;
 }
