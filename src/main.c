@@ -129,10 +129,10 @@ static guint setup_signalfd(void)
 	return source;
 }
 
-static void debug_handler(const gchar *log_domain, GLogLevelFlags log_level,
+static void log_handler(const gchar *log_domain, GLogLevelFlags log_level,
 						const gchar *message, gpointer user_data)
 {
-	g_print("DEBUG: %s\n", message);
+	g_print("%s\n", message);
 }
 
 int main(int argc, char **argv)
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
 
 	g_message("Telephony Interface Layer Daemon %s", VERSION);
 
-	g_log_set_handler (NULL, G_LOG_LEVEL_DEBUG, debug_handler, NULL);
+	g_log_set_handler (NULL, G_LOG_LEVEL_MASK, log_handler, NULL);
 
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
