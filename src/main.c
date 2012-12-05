@@ -143,6 +143,8 @@ int main(int argc, char **argv)
 	guint signal;
 	struct telephony_service *service;
 
+	g_type_init();
+
 	g_message("Telephony Interface Layer Daemon %s", VERSION);
 
 	g_log_set_handler (NULL, G_LOG_LEVEL_DEBUG, debug_handler, NULL);
