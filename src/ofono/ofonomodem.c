@@ -38,6 +38,8 @@ struct ofono_modem {
 
 static void update_property(struct ofono_modem *modem, const gchar *name, const GVariant *value)
 {
+	g_message("[Modem:%s] property %s changed", modem->path, name);
+
 	if (g_str_equal(name, "Powered"))
 		modem->powered = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Online"))
@@ -67,7 +69,7 @@ static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gp
 		return;
 	}
 
-	g_variant_get(properties, "a{sv}", &iter);
+	g_variant_iter_init(&iter, properties);
 	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
 		update_property(modem, property_name, property_value);
 	}

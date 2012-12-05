@@ -96,8 +96,9 @@ static void get_modems_cb(GDBusConnection *connection, GAsyncResult *res, gpoint
 	gboolean ret = FALSE;
 	GVariant *modems = NULL;
 	GVariant *properties = NULL;
+	GVariant *child = NULL;
 	gchar *path;
-	GVariantIter iter;
+	int n = 0;
 	struct ofono_modem *modem = NULL;
 
 	ret = ofono_interface_manager_call_get_modems_finish(manager->remote, &modems, res, &error);
@@ -107,8 +108,13 @@ static void get_modems_cb(GDBusConnection *connection, GAsyncResult *res, gpoint
 		return;
 	}
 
-	g_variant_get(modems, "a(oa{sv})", &iter);
-	while (g_variant_iter_loop(&iter, "{oa{sv}}", &path, &properties)) {
+	for (n = 0; n < g_variant_n_children(modems); n++) {
+		child = g_variant_get_child_value(modems, n);
+
+		path = g_variant_dup_string(g_variant_get_child_value(child, 0), NULL);
+
+		g_message("Found modem %s", path);
+
 		modem = ofono_modem_create(path);
 		manager->modems = g_list_append(manager->modems, modem);
 	}

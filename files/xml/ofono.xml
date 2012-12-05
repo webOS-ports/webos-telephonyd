@@ -3,7 +3,7 @@
 <node>
 	<interface name="org.ofono.Manager">
 		<method name="GetModems">
-			<arg type="a{oa{sv}}" direction="out"/>
+			<arg type="a(oa{sv})" direction="out"/>
 		</method>
 		<signal name="ModemAdded">
 			<arg type="o" name="path"/>
