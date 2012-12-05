@@ -20,5 +20,5 @@
 
 [D-BUS Service]
 Name=com.palm.telephony
-Exec=@WEBOS_INSTALL_SBINDIR@/telephonyd
+Exec=@WEBOS_INSTALL_SBINDIR@/webos-telephonyd
 Type=static
