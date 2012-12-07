@@ -107,7 +107,7 @@ static void property_changed_cb(OfonoInterfaceModem *object, const gchar *name, 
 {
 	struct ofono_modem *modem = user_data;
 
-	update_property(modem, name, value);
+	update_property(modem, name, g_variant_get_variant(value));
 }
 
 struct ofono_modem* ofono_modem_create(const gchar *path)
