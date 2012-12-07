@@ -73,9 +73,20 @@ static void modems_changed_cb(gpointer user_data)
 	modems = ofono_manager_get_modems(data->manager);
 
 	/* select first modem from the list as default for now */
-	data->modem = modems->data;
+	if (modems) {
+		ofono_modem_ref(modems->data);
+		data->modem = modems->data;
 
-	telephony_service_availability_changed_notify(data->service, true);
+		telephony_service_availability_changed_notify(data->service, true);
+	}
+	else {
+		if (data->modem)
+			ofono_modem_unref(data->modem);
+
+		data->modem = NULL;
+
+		telephony_service_availability_changed_notify(data->service, false);
+	}
 }
 
 int ofono_probe(struct telephony_service *service)
