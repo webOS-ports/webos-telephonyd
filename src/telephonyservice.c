@@ -33,6 +33,7 @@ extern GMainLoop *event_loop;
 struct telephony_service {
 	struct telephony_driver *driver;
 	void *data;
+	LSPalmService *palm_service;
 	LSHandle *private_service;
 	bool initialized;
 };
@@ -46,25 +47,40 @@ static LSMethod _telephony_service_methods[]  = {
 	{ 0, 0 }
 };
 
+static int initialize_luna_service(struct telephony_service *service)
+{
+	LSError error;
+
+	g_message("Initializing luna service ...");
+
+	LSErrorInit(&error);
+
+	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
+			NULL, service, &error)) {
+		g_error("Could not register service category");
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static void shutdown_luna_service(struct telephony_service *service)
+{
+	g_message("Shutting down luna service ...");
+}
+
 struct telephony_service* telephony_service_create(LSPalmService *palm_service)
 {
 	struct telephony_service *service;
-	LSError error;
 
 	service = g_try_new0(struct telephony_service, 1);
 	if (!service)
 		return NULL;
 
+	service->palm_service = palm_service;
 	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
 	service->initialized = false;
-
-	LSErrorInit(&error);
-
-	if (!LSPalmServiceRegisterCategory(palm_service, "/", NULL, _telephony_service_methods,
-			NULL, service, &error)) {
-		g_error("Could not register service category");
-		LSErrorFree(&error);
-	}
 
 	return service;
 }
@@ -98,6 +114,16 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 
 	g_debug("Availability of the telephony service changed to: %s", available ? "available" : "not available");
 
+	/* If backend is now available but service is not yet initialized do it now */
+	if (!service->initialized && available) {
+		if (initialize_luna_service(service) < 0) {
+			g_critical("Failed to initialize luna service. Wront service configuration?");
+			return;
+		}
+	}
+	else if (service->initialized && !available)
+		shutdown_luna_service(service);
+
 	service->initialized = available;
 }
 
@@ -115,9 +141,6 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 	if (service->driver->probe(service) < 0) {
 		g_error("Telephony driver failed to initialize");
 		service->driver = NULL;
-	}
-	else {
-		service->initialized = true;
 	}
 }
 
