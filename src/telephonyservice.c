@@ -57,7 +57,7 @@ static int initialize_luna_service(struct telephony_service *service)
 
 	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
 			NULL, service, &error)) {
-		g_error("Could not register service category");
+		g_warning("Could not register service category");
 		LSErrorFree(&error);
 		return -EIO;
 	}
@@ -132,14 +132,14 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 	int err;
 
 	if (service->driver) {
-		g_error("Can not register a second telephony driver");
+		g_warning("Can not register a second telephony driver");
 		return;
 	}
 
 	service->driver = driver;
 
 	if (service->driver->probe(service) < 0) {
-		g_error("Telephony driver failed to initialize");
+		g_warning("Telephony driver failed to initialize");
 		service->driver = NULL;
 	}
 }
@@ -232,14 +232,14 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	}
 
 	if (!service->driver || !service->driver->power_set) {
-		g_error("No implementation available for service powerSet API method");
+		g_warning("No implementation available for service powerSet API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
 	}
 
 	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
 	if (!input_schema) {
-		g_error("Failed to create json validation schema");
+		g_warning("Failed to create json validation schema");
 		luna_service_message_reply_error_internal(handle, message);
 		goto cleanup;
 	}
@@ -279,7 +279,7 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	req_data = luna_service_req_data_new(handle, message);
 
 	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
-		g_error("Failed to process service powerSet request in our driver");
+		g_warning("Failed to process service powerSet request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed to set power mode");
 		goto cleanup;
 	}
@@ -370,7 +370,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	if (!service->driver || !service->driver->power_query) {
-		g_error("No implementation available for service powerQuery API method");
+		g_warning("No implementation available for service powerQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
 	}
@@ -389,7 +389,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	req_data = luna_service_req_data_new(handle, message);
 
 	if (service->driver->power_query(service, _service_power_query_finish, req_data) < 0) {
-		g_error("Failed to process service powerQuery request in our driver");
+		g_warning("Failed to process service powerQuery request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed to query power status");
 		goto cleanup;
 	}
