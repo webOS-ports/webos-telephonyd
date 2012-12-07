@@ -377,6 +377,8 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	payload = LSMessageGetPayload(message);
 
+	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+
 	jschema_info_init(&schema_info, input_schema, NULL, NULL);
 	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
 	jschema_release(&input_schema);
