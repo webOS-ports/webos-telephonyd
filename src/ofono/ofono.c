@@ -34,6 +34,18 @@ int ofono_power_set(struct telephony_service *service, bool power, telephony_pow
 	return 0;
 }
 
+int ofono_power_query(struct telephony_service *service, telephony_power_query_cb cb, void *data)
+{
+	bool powered = false;
+	struct ofono_data *od = telephony_service_get_data(service);
+
+	powered = ofono_modem_get_powered(od->modem);
+
+	cb(true, powered, data);
+
+	return 0;
+}
+
 static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
@@ -79,6 +91,7 @@ struct telephony_driver driver = {
 	.probe =		ofono_probe,
 	.remove =		ofono_remove,
 	.power_set =	ofono_power_set,
+	.power_query =	ofono_power_query,
 };
 
 void ofono_init(struct telephony_service *service)

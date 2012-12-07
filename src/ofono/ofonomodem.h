@@ -27,6 +27,8 @@ struct ofono_modem* ofono_modem_create(const gchar *path);
 void ofono_modem_free(struct ofono_modem *modem);
 const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 
+bool ofono_modem_get_powered(struct ofono_modem *modem);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab

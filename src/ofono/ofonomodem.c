@@ -137,5 +137,14 @@ const gchar* ofono_modem_get_path(struct ofono_modem *modem)
 	return modem->path;
 }
 
+bool ofono_modem_get_powered(struct ofono_modem *modem)
+{
+	if (!modem)
+		return false;
+
+
+	return modem->powered;
+}
+
 // vim:ts=4:sw=4:noexpandtab
 
