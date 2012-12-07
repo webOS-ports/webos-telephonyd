@@ -193,7 +193,7 @@ int _service_power_set_finish(bool success, void *data)
 		goto cleanup;
 	}
 
-	if (LSMessageReply(req_data->handle, req_data->message,
+	if (!LSMessageReply(req_data->handle, req_data->message,
 					jvalue_tostring(reply_obj, response_schema), &lserror)) {
 		LSErrorPrint(&lserror, stderr);
 		LSErrorFree(&lserror);
@@ -284,6 +284,8 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
+	return true;
+
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
@@ -332,7 +334,7 @@ int _service_power_query_finish(bool success, bool power, void *data)
 		goto cleanup;
 	}
 
-	if (LSMessageReply(req_data->handle, req_data->message,
+	if (!LSMessageReply(req_data->handle, req_data->message,
 					jvalue_tostring(reply_obj, response_schema), &lserror)) {
 		LSErrorPrint(&lserror, stderr);
 		LSErrorFree(&lserror);
@@ -340,7 +342,6 @@ int _service_power_query_finish(bool success, bool power, void *data)
 	}
 
 cleanup:
-	j_release(&extended_obj);
 	j_release(&reply_obj);
 	luna_service_req_data_free(req_data);
 	return 0;
@@ -395,6 +396,8 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 		luna_service_message_reply_custom_error(handle, message, "Failed to query power status");
 		goto cleanup;
 	}
+
+	return true;
 
 cleanup:
 	if (!jis_null(parsed_obj))

@@ -22,8 +22,8 @@
 			<arg type="v" name="value" direction="in"/>
 		</method>
 		<signal name="PropertyChanged">
-			<arg type="o" name="path"/>
-			<arg type="a{sv}" name="properties"/>
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
 		</signal>
 	</interface>
 </node>

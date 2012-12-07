@@ -25,6 +25,7 @@
 #include "utils.h"
 
 struct ofono_data {
+	struct telephony_service *service;
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
 };
@@ -54,6 +55,9 @@ int ofono_power_query(struct telephony_service *service, telephony_power_query_c
 	bool powered = false;
 	struct ofono_data *od = telephony_service_get_data(service);
 
+	if (!od->modem)
+		return -EINVAL;
+
 	powered = ofono_modem_get_powered(od->modem);
 
 	cb(true, powered, data);
@@ -69,8 +73,9 @@ static void modems_changed_cb(gpointer user_data)
 	modems = ofono_manager_get_modems(data->manager);
 
 	/* select first modem from the list as default for now */
-	modems = g_list_first(modems);
 	data->modem = modems->data;
+
+	telephony_service_availability_changed_notify(data->service, true);
 }
 
 int ofono_probe(struct telephony_service *service)
@@ -82,6 +87,7 @@ int ofono_probe(struct telephony_service *service)
 		return -ENOMEM;
 
 	telephony_service_set_data(service, data);
+	data->service = service;
 
 	data->manager = ofono_manager_create();
 	ofono_manager_set_modems_changed_callback(data->manager, modems_changed_cb, data);

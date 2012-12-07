@@ -60,10 +60,10 @@ static void set_property(struct ofono_modem *modem, const gchar *name, const GVa
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	cbd->user = modem;
 
-	ofono_interface_modem_call_set_property(modem->remote, NULL, name, value, set_property_cb, cbd);
+	ofono_interface_modem_call_set_property(modem->remote, name, value, NULL, set_property_cb, cbd);
 }
 
-static void update_property(struct ofono_modem *modem, const gchar *name, const GVariant *value)
+static void update_property(struct ofono_modem *modem, const gchar *name, GVariant *value)
 {
 	g_message("[Modem:%s] property %s changed", modem->path, name);
 
@@ -105,8 +105,6 @@ static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gp
 static void property_changed_cb(OfonoInterfaceModem *object, const gchar *name, GVariant *value, gpointer *user_data)
 {
 	struct ofono_modem *modem = user_data;
-
-	g_debug("[Modem:%s] property %s changed", modem->path, name);
 
 	update_property(modem, name, value);
 }
@@ -166,8 +164,10 @@ const gchar* ofono_modem_get_path(struct ofono_modem *modem)
 
 int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, gpointer user_data)
 {
+	GVariant *value = NULL;
+
 	if (!modem)
-		return -1;
+		return -EINVAL;
 
 	/* check wether we're already in the desired powered state */
 	if (powered == modem->powered) {
@@ -175,7 +175,8 @@ int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_m
 		return 0;
 	}
 
-	set_property(modem, "Powered", g_variant_new_boolean(powered), cb, user_data);
+	value = g_variant_new_variant(g_variant_new_boolean(powered));
+	set_property(modem, "Powered", value, cb, user_data);
 
 	return -EINPROGRESS;
 }

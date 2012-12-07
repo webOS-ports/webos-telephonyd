@@ -131,7 +131,7 @@ struct ofono_manager* ofono_manager_create(void)
 	if (!manager)
 		return NULL;
 
-	manager->modems = g_list_alloc();
+	manager->modems = NULL;
 
 	manager->remote = ofono_interface_manager_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", "/", NULL, &error);
