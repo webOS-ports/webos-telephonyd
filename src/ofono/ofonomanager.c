@@ -60,6 +60,8 @@ static void modem_added_cb(OfonoInterfaceManager *object, const gchar *path, GVa
 
 	if (!found_modem) {
 		modem = ofono_modem_create(path);
+
+		ofono_modem_ref(modem);
 		manager->modems = g_list_append(manager->modems, modem);
 
 		notify_modems_changed(manager);
@@ -80,7 +82,7 @@ static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, g
 		modem_path = ofono_modem_get_path(modem);
 		if (g_str_equal(modem_path, path)) {
 			manager->modems = g_list_remove_link(manager->modems, g_list_find(manager->modems, modem));
-			ofono_modem_free(modem);
+			ofono_modem_unref(modem);
 
 			notify_modems_changed(manager);
 

@@ -34,6 +34,7 @@ struct ofono_modem {
 	gboolean lockdown;
 	gboolean emergency;
 	gchar *name;
+	int ref_count;
 };
 
 static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
@@ -141,6 +142,25 @@ struct ofono_modem* ofono_modem_create(const gchar *path)
 	ofono_interface_modem_call_get_properties(modem->remote, NULL, get_properties_cb, modem);
 
 	return modem;
+}
+
+void ofono_modem_ref(struct ofono_modem *modem)
+{
+	if (!modem)
+		return;
+
+	__sync_fetch_and_add(&modem->ref_count, 1);
+}
+
+void ofono_modem_unref(struct ofono_modem *modem)
+{
+	if (!modem)
+		return;
+
+	if (__sync_sub_and_fetch(&modem->ref_count, 1))
+		return;
+
+	ofono_modem_free(modem);
 }
 
 void ofono_modem_free(struct ofono_modem *modem)
