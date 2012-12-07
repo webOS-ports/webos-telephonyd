@@ -36,6 +36,33 @@ struct ofono_modem {
 	gchar *name;
 };
 
+static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	ofono_modem_result_cb cb = cbd->cb;
+	struct ofono_modem *modem = cbd->user;
+	gboolean result = FALSE;
+	GError *error = NULL;
+
+	result = ofono_interface_modem_call_set_property_finish(modem->remote, res, &error);
+	if (error) {
+		g_error("Failed to retrieve properties from modem: %s", error->message);
+		g_error_free(error);
+	}
+
+	cb(result, cbd->data);
+	g_free(cbd);
+}
+
+static void set_property(struct ofono_modem *modem, const gchar *name, const GVariant *value,
+						 ofono_modem_result_cb cb, gpointer user_data)
+{
+	struct cb_data *cbd = cb_data_new(cb, user_data);
+	cbd->user = modem;
+
+	ofono_interface_modem_call_set_property(modem->remote, NULL, name, value, set_property_cb, cbd);
+}
+
 static void update_property(struct ofono_modem *modem, const gchar *name, const GVariant *value)
 {
 	g_message("[Modem:%s] property %s changed", modem->path, name);
@@ -137,11 +164,26 @@ const gchar* ofono_modem_get_path(struct ofono_modem *modem)
 	return modem->path;
 }
 
+int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, gpointer user_data)
+{
+	if (!modem)
+		return -1;
+
+	/* check wether we're already in the desired powered state */
+	if (powered == modem->powered) {
+		cb(TRUE, user_data);
+		return 0;
+	}
+
+	set_property(modem, "Powered", g_variant_new_boolean(powered), cb, user_data);
+
+	return -EINPROGRESS;
+}
+
 bool ofono_modem_get_powered(struct ofono_modem *modem)
 {
 	if (!modem)
 		return false;
-
 
 	return modem->powered;
 }

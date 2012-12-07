@@ -21,16 +21,31 @@
 
 #include "telephonyservice.h"
 #include "telephonydriver.h"
-
 #include "ofonomanager.h"
+#include "utils.h"
 
 struct ofono_data {
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
 };
 
+void set_powered_cb(gboolean result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	telephony_power_set_cb cb = cbd->cb;
+
+	cb(result, cbd->data);
+
+	g_free(cbd);
+}
+
 int ofono_power_set(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data)
 {
+	struct cb_data *cbd = cb_data_new(cb, data);
+	struct ofono_data *od = telephony_service_get_data(service);
+
+	ofono_modem_set_powered(od->modem, power, set_powered_cb, cbd);
+
 	return 0;
 }
 

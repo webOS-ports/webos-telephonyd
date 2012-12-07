@@ -23,10 +23,13 @@
 
 struct ofono_modem;
 
+typedef void (*ofono_modem_result_cb)(gboolean success, void *data);
+
 struct ofono_modem* ofono_modem_create(const gchar *path);
 void ofono_modem_free(struct ofono_modem *modem);
 const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 
+int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, void *data);
 bool ofono_modem_get_powered(struct ofono_modem *modem);
 
 #endif
