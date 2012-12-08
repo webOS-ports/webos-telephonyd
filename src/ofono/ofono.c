@@ -33,14 +33,21 @@ struct ofono_data {
 void set_powered_cb(gboolean result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	telephony_power_set_cb cb = cbd->cb;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error error;
 
-	cb(result, cbd->data);
+	if (result) {
+		cb(NULL, cbd->data);
+	}
+	else {
+		error.code = 1; /* FIXME */
+		cb(&error, cbd->data);
+	}
 
 	g_free(cbd);
 }
 
-int ofono_power_set(struct telephony_service *service, bool power, telephony_power_set_cb cb, void *data)
+int ofono_power_set(struct telephony_service *service, bool power, telephony_result_cb cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct ofono_data *od = telephony_service_get_data(service);
@@ -60,7 +67,7 @@ int ofono_power_query(struct telephony_service *service, telephony_power_query_c
 
 	powered = ofono_modem_get_powered(od->modem);
 
-	cb(true, powered, data);
+	cb(NULL, powered, data);
 
 	return 0;
 }

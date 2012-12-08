@@ -21,6 +21,10 @@
 
 struct telephony_service;
 
+const struct telephony_error {
+	int code;
+};
+
 enum telephony_sim_status {
 	TELEPHONY_SIM_STATUS_SIM_NOT_FOUND = 0,
 	TELEPHONY_SIM_STATUS_SIM_INVALID,
@@ -94,14 +98,14 @@ struct telephony_network {
 
 typedef void (*telephony_driver_result_cb)(void *data);
 
-typedef int (*telephony_result_cb)(bool success, void *data);
-typedef int (*telephony_power_query_cb)(bool success, bool power_state, void *data);
-typedef int (*telephony_sim_status_query_cb)(bool success, enum telephony_sim_status status, void *data);
-typedef int (*telephony_network_status_query_cb)(bool success, struct telephony_network_status *status, void *data);
-typedef int (*telephony_signal_strength_query_cb)(bool success, unsigned int rssi, unsigned int max_bars, unsigned int bars, void *data);
-typedef int (*telephony_pin_status_query_cb)(bool success, struct telephony_pin_status, void *data);
-typedef int (*telephony_network_list_query_cb)(bool success, GList *networks, void *data);
-typedef int (*telephony_platform_query_cb)(bool success, struct telephony_platform_info *platform_info, void *data);
+typedef int (*telephony_result_cb)(const struct telephony_error* error, void *data);
+typedef int (*telephony_power_query_cb)(const struct telephony_error* error, bool power_state, void *data);
+typedef int (*telephony_sim_status_query_cb)(const struct telephony_error* error, enum telephony_sim_status status, void *data);
+typedef int (*telephony_network_status_query_cb)(const struct telephony_error* error, struct telephony_network_status *status, void *data);
+typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* error, unsigned int rssi, unsigned int max_bars, unsigned int bars, void *data);
+typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status, void *data);
+typedef int (*telephony_network_list_query_cb)(const struct telephony_error* error, GList *networks, void *data);
+typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);

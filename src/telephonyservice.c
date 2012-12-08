@@ -296,7 +296,7 @@ cleanup:
 	return true;
 }
 
-int _service_power_query_finish(bool success, bool power, void *data)
+int _service_power_query_finish(const struct telephony_error *error, bool power, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
@@ -304,6 +304,7 @@ int _service_power_query_finish(bool success, bool power, void *data)
 	jschema_ref response_schema = NULL;
 	LSError lserror;
 	bool subscribed = false;
+	bool success = (error == NULL);
 
 	LSErrorInit(&lserror);
 
@@ -325,6 +326,11 @@ int _service_power_query_finish(bool success, bool power, void *data)
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
 	}
 
 	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
