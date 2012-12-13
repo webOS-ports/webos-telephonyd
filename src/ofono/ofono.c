@@ -72,6 +72,25 @@ int ofono_power_query(struct telephony_service *service, telephony_power_query_c
 	return 0;
 }
 
+int ofono_platform_query(struct telephony_service *service, telephony_platform_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_platform_info pinfo;
+
+	if (!od->modem)
+		return -EINVAL;
+
+	memset(&pinfo, 0, sizeof(struct telephony_platform_info));
+	pinfo.platform_type = TELEPHONY_PLATFORM_TYPE_GSM;
+	pinfo.imei = ofono_modem_get_serial(od->modem);
+	pinfo.version = ofono_modem_get_revision(od->modem);
+	/* FIXME set mcc/mnc */
+
+	cb(NULL, &pinfo, data);
+
+	return 0;
+}
+
 static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
@@ -129,6 +148,7 @@ void ofono_remove(struct telephony_service *service)
 struct telephony_driver driver = {
 	.probe =		ofono_probe,
 	.remove =		ofono_remove,
+	.platform_query		= ofono_platform_query,
 	.power_set =	ofono_power_set,
 	.power_query =	ofono_power_query,
 };

@@ -34,6 +34,8 @@ const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 
 int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, void *data);
 bool ofono_modem_get_powered(struct ofono_modem *modem);
+const gchar* ofono_modem_get_serial(struct ofono_modem *modem);
+const gchar* ofono_modem_get_revision(struct ofono_modem *modem);
 
 #endif
 

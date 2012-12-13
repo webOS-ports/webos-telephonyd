@@ -34,6 +34,8 @@ struct ofono_modem {
 	gboolean lockdown;
 	gboolean emergency;
 	gchar *name;
+	gchar *serial;
+	gchar *revision;
 	int ref_count;
 };
 
@@ -76,8 +78,12 @@ static void update_property(struct ofono_modem *modem, const gchar *name, GVaria
 		modem->lockdown = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Emergency"))
 		modem->emergency = g_variant_get_boolean(value);
-	else if (g_str_equal(value, "Name"))
+	else if (g_str_equal(name, "Name"))
 		modem->name = g_variant_dup_string(value, NULL);
+	else if (g_str_equal(name, "Serial"))
+		modem->serial = g_variant_dup_string(value, NULL);
+	else if (g_str_equal(name, "Revision"))
+		modem->revision = g_variant_dup_string(value, NULL);
 }
 
 static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
@@ -207,6 +213,22 @@ bool ofono_modem_get_powered(struct ofono_modem *modem)
 		return false;
 
 	return modem->powered;
+}
+
+const gchar* ofono_modem_get_serial(struct ofono_modem *modem)
+{
+	if (!modem)
+		return NULL;
+
+	return modem->serial;
+}
+
+const gchar* ofono_modem_get_revision(struct ofono_modem *modem)
+{
+	if (!modem)
+		return NULL;
+
+	return modem->revision;
 }
 
 // vim:ts=4:sw=4:noexpandtab
