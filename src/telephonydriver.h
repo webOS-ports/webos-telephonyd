@@ -64,6 +64,8 @@ enum telephony_platform_type {
 	TELEPHONY_PLATFORM_TYPE_CDMA,
 };
 
+const char* telephony_platform_type_to_string(enum telephony_platform_type type);
+
 struct telephony_network_status {
 	enum telephony_network_state state;
 	enum telephony_network_registration registration;

@@ -40,10 +40,12 @@ struct telephony_service {
 
 bool _service_power_set_cb(LSHandle* lshandle, LSMessage *message, void *user_data);
 bool _service_power_query_cb(LSHandle *lshandle, LSMessage *message, void *user_data);
+bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "powerSet", _service_power_set_cb },
 	{ "powerQuery", _service_power_query_cb },
+	{ "platformQuery", _service_platform_query_cb },
 	{ 0, 0 }
 };
 
@@ -400,6 +402,137 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	if (service->driver->power_query(service, _service_power_query_finish, req_data) < 0) {
 		g_warning("Failed to process service powerQuery request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed to query power status");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
+static int _service_platform_query_finish(const struct telephony_error *error, struct telephony_platform_info *platform_info, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	jschema_ref response_schema = NULL;
+	LSError lserror;
+	bool subscribed = false;
+	bool success = (error == NULL);
+
+	LSErrorInit(&lserror);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	/* handle possible subscriptions */
+	if (LSMessageIsSubscription(req_data->message)) {
+		if (!LSSubscriptionProcess(req_data->handle, req_data->message, &subscribed, &lserror)) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
+
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	}
+
+	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
+			jstring_create(telephony_platform_type_to_string(platform_info->platform_type));
+
+		if (platform_info->imei != NULL)
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("imei"), jstring_create(platform_info->imei));
+
+		if (platform_info->carrier != NULL)
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("carrier"), jstring_create(platform_info->carrier));
+
+		if (platform_info->mcc > 0 && platform_info->mnc > 0) {
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("mcc"), jnumber_create_i32(platform_info->mcc));
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("mnc"), jnumber_create_i32(platform_info->mnc));
+		}
+
+		if (platform_info->version != NULL)
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("version"), jstring_create(platform_info->version));
+
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+	if(!response_schema)
+	{
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	if (!LSMessageReply(req_data->handle, req_data->message,
+					jvalue_tostring(reply_obj, response_schema), &lserror)) {
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Query various information about the platform we're running on
+ **/
+
+bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+	jschema_ref input_schema = NULL;
+	jvalue_ref parsed_obj = NULL;
+	JSchemaInfo schema_info;
+	LSError error;
+	const char *payload;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->platform_query) {
+		g_warning("No implementation available for service platformQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	payload = LSMessageGetPayload(message);
+
+	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+
+	jschema_info_init(&schema_info, input_schema, NULL, NULL);
+	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
+	jschema_release(&input_schema);
+
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->platform_query(service, _service_platform_query_finish, req_data) < 0) {
+		g_warning("Failed to process service platformQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query platform information");
 		goto cleanup;
 	}
 
