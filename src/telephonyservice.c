@@ -27,6 +27,7 @@
 
 #include "telephonydriver.h"
 #include "utils.h"
+#include "luna_service_utils.h"
 
 extern GMainLoop *event_loop;
 
@@ -149,28 +150,12 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 void telephony_service_power_status_notify(struct telephony_service *service, bool power)
 {
 	jvalue_ref reply_obj = NULL;
-	jschema_ref response_schema = NULL;
-	LSError lserror;
-
-	LSErrorInit(&lserror);
 
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jboolean_create(power));
 
-	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-	if(!response_schema)
-		goto cleanup;
-
-	if (!LSSubscriptionPost(service->private_service, "/", "powerQuery",
-						jvalue_tostring(reply_obj, response_schema), &lserror)) {
-		LSErrorPrint(&lserror, stderr);
-		LSErrorFree(&lserror);
-	}
-
-cleanup:
-	if (response_schema)
-		jschema_release(&response_schema);
+	luna_service_post_subscription(service->private_service, "/", "powerQuery", reply_obj);
 
 	j_release(&reply_obj);
 }
@@ -179,30 +164,14 @@ int _service_power_set_finish(bool success, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
-	jschema_ref response_schema = NULL;
-	LSError lserror;
-
-	LSErrorInit(&lserror);
 
 	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
-	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-	if(!response_schema)
-	{
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj))
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
-		goto cleanup;
-	}
 
-	if (!LSMessageReply(req_data->handle, req_data->message,
-					jvalue_tostring(reply_obj, response_schema), &lserror)) {
-		LSErrorPrint(&lserror, stderr);
-		LSErrorFree(&lserror);
-		goto cleanup;
-	}
-
-cleanup:
 	j_release(&reply_obj);
 	luna_service_req_data_free(req_data);
 	return 0;
@@ -220,11 +189,8 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 	bool power = false;
-	jschema_ref input_schema = NULL;
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref state_obj = NULL;
-	JSchemaInfo schema_info;
-	LSError error;
 	const char *payload;
 	const char *state_value;
 
@@ -239,19 +205,8 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
-	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-	if (!input_schema) {
-		g_warning("Failed to create json validation schema");
-		luna_service_message_reply_error_internal(handle, message);
-		goto cleanup;
-	}
-
 	payload = LSMessageGetPayload(message);
-
-	jschema_info_init(&schema_info, input_schema, NULL, NULL);
-	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
-	jschema_release(&input_schema);
-
+	parsed_obj = luna_service_message_parse_and_validate(payload);
 	if (jis_null(parsed_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
@@ -303,12 +258,8 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
-	jschema_ref response_schema = NULL;
-	LSError lserror;
 	bool subscribed = false;
 	bool success = (error == NULL);
-
-	LSErrorInit(&lserror);
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
@@ -316,14 +267,8 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (LSMessageIsSubscription(req_data->message)) {
-		if (!LSSubscriptionProcess(req_data->handle, req_data->message, &subscribed, &lserror)) {
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-
+	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
-	}
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
@@ -335,17 +280,8 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 		goto cleanup;
 	}
 
-	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-	if(!response_schema)
-	{
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
-		goto cleanup;
-	}
-
-	if (!LSMessageReply(req_data->handle, req_data->message,
-					jvalue_tostring(reply_obj, response_schema), &lserror)) {
-		LSErrorPrint(&lserror, stderr);
-		LSErrorFree(&lserror);
 		goto cleanup;
 	}
 
@@ -367,10 +303,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-	jschema_ref input_schema = NULL;
 	jvalue_ref parsed_obj = NULL;
-	JSchemaInfo schema_info;
-	LSError error;
 	const char *payload;
 
 	if (!service->initialized) {
@@ -385,13 +318,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	payload = LSMessageGetPayload(message);
-
-	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-
-	jschema_info_init(&schema_info, input_schema, NULL, NULL);
-	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
-	jschema_release(&input_schema);
-
+	parsed_obj = luna_service_message_parse_and_validate(payload);
 	if (jis_null(parsed_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
@@ -422,12 +349,8 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
-	jschema_ref response_schema = NULL;
-	LSError lserror;
 	bool subscribed = false;
 	bool success = (error == NULL);
-
-	LSErrorInit(&lserror);
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
@@ -435,18 +358,12 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (LSMessageIsSubscription(req_data->message)) {
-		if (!LSSubscriptionProcess(req_data->handle, req_data->message, &subscribed, &lserror)) {
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-
+	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
-	}
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
-			jstring_create(telephony_platform_type_to_string(platform_info->platform_type));
+			jstring_create(telephony_platform_type_to_string(platform_info->platform_type)));
 
 		if (platform_info->imei != NULL)
 			jobject_put(extended_obj, J_CSTR_TO_JVAL("imei"), jstring_create(platform_info->imei));
@@ -470,17 +387,8 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 		goto cleanup;
 	}
 
-	response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-	if(!response_schema)
-	{
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
-		goto cleanup;
-	}
-
-	if (!LSMessageReply(req_data->handle, req_data->message,
-					jvalue_tostring(reply_obj, response_schema), &lserror)) {
-		LSErrorPrint(&lserror, stderr);
-		LSErrorFree(&lserror);
 		goto cleanup;
 	}
 
@@ -498,10 +406,7 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-	jschema_ref input_schema = NULL;
 	jvalue_ref parsed_obj = NULL;
-	JSchemaInfo schema_info;
-	LSError error;
 	const char *payload;
 
 	if (!service->initialized) {
@@ -516,13 +421,7 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	}
 
 	payload = LSMessageGetPayload(message);
-
-	input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
-
-	jschema_info_init(&schema_info, input_schema, NULL, NULL);
-	parsed_obj = jdom_parse(j_cstr_to_buffer(payload), DOMOPT_NOOPT, &schema_info);
-	jschema_release(&input_schema);
-
+	parsed_obj = luna_service_message_parse_and_validate(payload);
 	if (jis_null(parsed_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
