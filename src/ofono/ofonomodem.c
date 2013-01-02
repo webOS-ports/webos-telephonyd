@@ -207,12 +207,39 @@ int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_m
 	return -EINPROGRESS;
 }
 
+int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_modem_result_cb cb, gpointer user_data)
+{
+	GVariant *value = NULL;
+
+	if (!modem)
+		return -EINVAL;
+
+	/* check wether we're already in the desired state */
+	if (online == modem->online) {
+		cb(TRUE, user_data);
+		return 0;
+	}
+
+	value = g_variant_new_variant(g_variant_new_boolean(online));
+	set_property(modem, "Online", value, cb, user_data);
+
+	return -EINPROGRESS;
+}
+
 bool ofono_modem_get_powered(struct ofono_modem *modem)
 {
 	if (!modem)
 		return false;
 
 	return modem->powered;
+}
+
+bool ofono_modem_get_online(struct ofono_modem *modem)
+{
+	if (!modem)
+		return false;
+
+	return modem->online;
 }
 
 const gchar* ofono_modem_get_serial(struct ofono_modem *modem)

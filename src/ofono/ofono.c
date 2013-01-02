@@ -30,27 +30,57 @@ struct ofono_data {
 	struct ofono_modem *modem;
 };
 
-void set_powered_cb(gboolean result, gpointer user_data)
+void set_online_cb(gboolean result, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error error;
 
-	if (result) {
-		cb(NULL, cbd->data);
-	}
-	else {
+	if (!result) {
 		error.code = 1; /* FIXME */
 		cb(&error, cbd->data);
+		goto cleanup;
 	}
 
+	cb(NULL, cbd->data);
+
+cleanup:
 	g_free(cbd);
+}
+
+void set_powered_cb(gboolean result, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_data *od = cbd->user;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error error;
+	bool powered;
+
+	if (!result) {
+		error.code = 1; /* FIXME */
+		cb(&error, cbd->data);
+		g_free(cbd);
+		return;
+	}
+
+	/* When the modem was set to be unpowered we don't have to set it offline */
+	powered = ofono_modem_get_powered(od->modem);
+	if (powered) {
+		ofono_modem_set_online(od->modem, powered, set_online_cb, cbd);
+	}
+	else {
+		cb(NULL, cbd->data);
+		g_free(cbd);
+	}
 }
 
 int ofono_power_set(struct telephony_service *service, bool power, telephony_result_cb cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct ofono_data *od = telephony_service_get_data(service);
+
+	cbd->user = od;
 
 	ofono_modem_set_powered(od->modem, power, set_powered_cb, cbd);
 
@@ -65,7 +95,8 @@ int ofono_power_query(struct telephony_service *service, telephony_power_query_c
 	if (!od->modem)
 		return -EINVAL;
 
-	powered = ofono_modem_get_powered(od->modem);
+	powered = ofono_modem_get_powered(od->modem) &&
+			  ofono_modem_get_online(od->modem);
 
 	cb(NULL, powered, data);
 
