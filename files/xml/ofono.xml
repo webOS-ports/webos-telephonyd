@@ -26,4 +26,63 @@
 			<arg type="v" name="value" direction="out"/>
 		</signal>
 	</interface>
+	<interface name="org.ofono.SimManager">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SetProperty">
+			<arg type="s" name="property" direction="in"/>
+			<arg type="v" name="value" direction="in"/>
+		</method>
+		<method name="ChangePin">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="s" name="oldpin" direction="in"/>
+			<arg type="s" name="newpin" direction="in"/>
+		</method>
+		<method name="EnterPin">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="s" name="pin" direction="in"/>
+		</method>
+		<method name="ResetPin">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="s" name="puk" direction="in"/>
+			<arg type="s" name="newpin" direction="in"/>
+		</method>
+		<method name="LockPin">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="s" name="pin" direction="in"/>
+		</method>
+		<method name="UnlockPin">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="s" name="pin" direction="in"/>
+		</method>
+		<method name="GetIcon">
+			<arg type="y" name="id" direction="in"/>
+			<arg type="ay" name="icon" direction="out"/>
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
+	<interface name="org.ofono.NetworkRegistration">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SetProperty">
+			<arg type="s" name="property" direction="in"/>
+			<arg type="v" name="value" direction="in"/>
+		</method>
+		<method name="GetOperator">
+			<arg type="a(oa{sv})" direction="out"/>
+		</method>
+		<method name="Scan">
+			<arg type="a(oa{sv})" direction="out"/>
+		</method>
+		<method name="Register"/>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
 </node>
