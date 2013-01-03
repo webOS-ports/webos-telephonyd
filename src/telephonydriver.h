@@ -65,6 +65,7 @@ enum telephony_platform_type {
 };
 
 const char* telephony_platform_type_to_string(enum telephony_platform_type type);
+const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status);
 
 struct telephony_network_status {
 	enum telephony_network_state state;

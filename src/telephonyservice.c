@@ -42,11 +42,13 @@ struct telephony_service {
 bool _service_power_set_cb(LSHandle* lshandle, LSMessage *message, void *user_data);
 bool _service_power_query_cb(LSHandle *lshandle, LSMessage *message, void *user_data);
 bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "powerSet", _service_power_set_cb },
 	{ "powerQuery", _service_power_query_cb },
 	{ "platformQuery", _service_platform_query_cb },
+	{ "simStatusQuery", _service_sim_status_query_cb },
 	{ 0, 0 }
 };
 
@@ -398,6 +400,46 @@ cleanup:
 	return 0;
 }
 
+static int _service_sim_status_query_finish(const struct telephony_error *error, enum telephony_sim_status sim_status, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	/* handle possible subscriptions */
+	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
+			jstring_create(telephony_sim_status_to_string(sim_status)));
+
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
 /**
  * @brief Query various information about the platform we're running on
  **/
@@ -441,6 +483,42 @@ cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
+/**
+ * @brief Query the current sim status
+ **/
+bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->platform_query) {
+		g_warning("No implementation available for service simStatusQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->sim_status_query(service, _service_sim_status_query_finish, req_data) < 0) {
+		g_warning("Failed to process service simStatusQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query sim card status");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
 	if (req_data)
 		luna_service_req_data_free(req_data);
 

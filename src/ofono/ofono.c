@@ -22,6 +22,7 @@
 #include "telephonyservice.h"
 #include "telephonydriver.h"
 #include "ofonomanager.h"
+#include "ofonomodem.h"
 #include "ofonosimmanager.h"
 #include "utils.h"
 
@@ -129,10 +130,10 @@ int ofono_sim_status_query(struct telephony_service *service, telephony_sim_stat
 	struct ofono_data *od = telephony_service_get_data(service);
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 
-	if (!od->sim)
-		return -EINVAL;
+	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
+		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
 
-	if (ofono_sim_manager_get_present(od->sim)) {
+	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
 		enum ofono_sim_pin pin_type = ofono_sim_manager_get_pin_required(od->sim);
 
 		switch (pin_type) {

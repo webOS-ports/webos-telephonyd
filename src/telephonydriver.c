@@ -30,3 +30,24 @@ const char* telephony_platform_type_to_string(enum telephony_platform_type type)
 	}
 	return NULL;
 }
+
+const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status)
+{
+	switch (sim_status) {
+		case TELEPHONY_SIM_STATUS_SIM_NOT_FOUND:
+			return "simnotfound";
+		case TELEPHONY_SIM_STATUS_SIM_INVALID:
+			return "siminvalid";
+		case TELEPHONY_SIM_STATUS_SIM_READY:
+			return "simready";
+		case TELEPHONY_SIM_STATUS_PIN_REQUIRED:
+			return "pinrequired";
+		case TELEPHONY_SIM_STATUS_PUK_REQUIRED:
+			return "pukrequired";
+		case TELEPHONY_SIM_STATUS_PIN_PERM_BLOCKED:
+			return "pinpermblocked";
+		default:
+			break;
+	}
+	return NULL;
+}
