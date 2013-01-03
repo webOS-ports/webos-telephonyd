@@ -22,12 +22,14 @@
 #include "telephonyservice.h"
 #include "telephonydriver.h"
 #include "ofonomanager.h"
+#include "ofonosimmanager.h"
 #include "utils.h"
 
 struct ofono_data {
 	struct telephony_service *service;
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
+	struct ofono_sim_manager *sim;
 };
 
 void set_online_cb(gboolean result, gpointer user_data)
@@ -122,6 +124,37 @@ int ofono_platform_query(struct telephony_service *service, telephony_platform_q
 	return 0;
 }
 
+int ofono_sim_status_query(struct telephony_service *service, telephony_sim_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
+
+	if (!od->sim)
+		return -EINVAL;
+
+	if (ofono_sim_manager_get_present(od->sim)) {
+		enum ofono_sim_pin pin_type = ofono_sim_manager_get_pin_required(od->sim);
+
+		switch (pin_type) {
+		case OFONO_SIM_PIN_TYPE_NONE:
+			sim_status = TELEPHONY_SIM_STATUS_SIM_READY;
+			break;
+		case OFONO_SIM_PIN_TYPE_PIN:
+			sim_status = TELEPHONY_SIM_STATUS_PIN_REQUIRED;
+			break;
+		OFONO_SIM_PIN_TYPE_PUK:
+			sim_status = TELEPHONY_SIM_STATUS_PUK_REQUIRED;
+			break;
+		}
+
+		/* FIXME maybe we have to take the lock status of the pin/puk into account here */
+	}
+
+	cb(NULL, sim_status, data);
+
+	return 0;
+}
+
 static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
@@ -169,6 +202,9 @@ void ofono_remove(struct telephony_service *service)
 
 	data = telephony_service_get_data(service);
 
+	if (data->sim)
+		ofono_sim_manager_free(data->sim);
+
 	ofono_manager_free(data->manager);
 
 	g_free(data);
@@ -182,6 +218,7 @@ struct telephony_driver driver = {
 	.platform_query		= ofono_platform_query,
 	.power_set =	ofono_power_set,
 	.power_query =	ofono_power_query,
+	.sim_status_query = ofono_sim_status_query,
 };
 
 void ofono_init(struct telephony_service *service)
