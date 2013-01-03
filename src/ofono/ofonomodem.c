@@ -23,12 +23,14 @@
 #include <gio/gio.h>
 
 #include "utils.h"
+#include "ofonobase.h"
 #include "ofonomodem.h"
 #include "ofono-interface.h"
 
 struct ofono_modem {
 	gchar *path;
 	OfonoInterfaceModem *remote;
+	struct ofono_base *base;
 	gboolean powered;
 	gboolean online;
 	gboolean lockdown;
@@ -39,35 +41,10 @@ struct ofono_modem {
 	int ref_count;
 };
 
-static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
-	struct cb_data *cbd = user_data;
-	ofono_modem_result_cb cb = cbd->cb;
-	struct ofono_modem *modem = cbd->user;
-	gboolean result = FALSE;
-	GError *error = NULL;
+	struct ofono_modem *modem = user_data;
 
-	result = ofono_interface_modem_call_set_property_finish(modem->remote, res, &error);
-	if (error) {
-		g_error("Failed to retrieve properties from modem: %s", error->message);
-		g_error_free(error);
-	}
-
-	cb(result, cbd->data);
-	g_free(cbd);
-}
-
-static void set_property(struct ofono_modem *modem, const gchar *name, const GVariant *value,
-						 ofono_modem_result_cb cb, gpointer user_data)
-{
-	struct cb_data *cbd = cb_data_new(cb, user_data);
-	cbd->user = modem;
-
-	ofono_interface_modem_call_set_property(modem->remote, name, value, NULL, set_property_cb, cbd);
-}
-
-static void update_property(struct ofono_modem *modem, const gchar *name, GVariant *value)
-{
 	g_message("[Modem:%s] property %s changed", modem->path, name);
 
 	if (g_str_equal(name, "Powered"))
@@ -86,35 +63,13 @@ static void update_property(struct ofono_modem *modem, const gchar *name, GVaria
 		modem->revision = g_variant_dup_string(value, NULL);
 }
 
-static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
-{
-	struct ofono_modem *modem = user_data;
-	GError *error = NULL;
-	gboolean ret = FALSE;
-	GVariant *properties = NULL;
-	gchar *property_name = NULL;
-	GVariant *property_value = NULL;
-	GVariantIter iter;
-
-	ret = ofono_interface_modem_call_get_properties_finish(modem->remote, &properties, res, &error);
-	if (error) {
-		g_error("Failed to retrieve properties from modem: %s", error->message);
-		g_error_free(error);
-		return;
-	}
-
-	g_variant_iter_init(&iter, properties);
-	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
-		update_property(modem, property_name, property_value);
-	}
-}
-
-static void property_changed_cb(OfonoInterfaceModem *object, const gchar *name, GVariant *value, gpointer *user_data)
-{
-	struct ofono_modem *modem = user_data;
-
-	update_property(modem, name, g_variant_get_variant(value));
-}
+struct ofono_base_funcs modem_base_funcs = {
+	.update_property = update_property,
+	.set_property = ofono_interface_modem_call_set_property,
+	.set_property_finish = ofono_interface_modem_call_set_property_finish,
+	.get_properties = ofono_interface_modem_call_get_properties,
+	.get_properties_finish = ofono_interface_modem_call_get_properties_finish
+};
 
 struct ofono_modem* ofono_modem_create(const gchar *path)
 {
@@ -142,10 +97,7 @@ struct ofono_modem* ofono_modem_create(const gchar *path)
 	modem->emergency = FALSE;
 	modem->name = NULL;
 
-	g_signal_connect(G_OBJECT(modem->remote), "property-changed",
-		G_CALLBACK(property_changed_cb), modem);
-
-	ofono_interface_modem_call_get_properties(modem->remote, NULL, get_properties_cb, modem);
+	modem->base = ofono_base_create(&modem_base_funcs, modem->remote, modem);
 
 	return modem;
 }
@@ -177,6 +129,9 @@ void ofono_modem_free(struct ofono_modem *modem)
 	if (modem->remote)
 		g_object_unref(modem->remote);
 
+	if (modem->base)
+		ofono_base_free(modem->base);
+
 	g_free(modem);
 }
 
@@ -202,7 +157,7 @@ int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_m
 	}
 
 	value = g_variant_new_variant(g_variant_new_boolean(powered));
-	set_property(modem, "Powered", value, cb, user_data);
+	ofono_base_set_property(modem->base, "Powered", value, cb, user_data);
 
 	return -EINPROGRESS;
 }
@@ -221,7 +176,7 @@ int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_mod
 	}
 
 	value = g_variant_new_variant(g_variant_new_boolean(online));
-	set_property(modem, "Online", value, cb, user_data);
+	ofono_base_set_property(modem->base, "Online", value, cb, user_data);
 
 	return -EINPROGRESS;
 }
