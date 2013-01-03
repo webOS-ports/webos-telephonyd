@@ -25,6 +25,32 @@ struct ofono_modem;
 
 typedef void (*ofono_modem_result_cb)(gboolean success, void *data);
 
+enum ofono_modem_interface {
+	OFONO_MODEM_INTERFACE_ASSISTET_SATELLITE_NAVIGATION = 0,
+	OFONO_MODEM_INTERFACE_AUDIO_SETTINGS,
+	OFONO_MODEM_INTERFACE_CALL_BARRING,
+	OFONO_MODEM_INTERFACE_CALL_FORWARDING,
+	OFONO_MODEM_INTERFACE_CALL_METER,
+	OFONO_MODEM_INTERFACE_CALL_SETTINGS,
+	OFONO_MODEM_INTERFACE_CALL_VOLUME,
+	OFONO_MODEM_INTERFACE_CELL_BROADCAST,
+	OFONO_MODEM_INTERFACE_HANDSFREE,
+	OFONO_MODEM_INTERFACE_LOCATION_REPORTING,
+	OFONO_MODEM_INTERFACE_MESSAGE_MANAGER,
+	OFONO_MODEM_INTERFACE_MESSAGE_WAITING,
+	OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION,
+	OFONO_MODEM_INTERFACE_PHONEBOOK,
+	OFONO_MODEM_INTERFACE_PUSH_NOTIFICATION,
+	OFONO_MODEM_INTERFACE_RADIO_SETTINGS,
+	OFONO_MODEM_INTERFACE_SIM_MANAGER,
+	OFONO_MODEM_INTERFACE_SMART_MESSAGING,
+	OFONO_MODEM_INTERFACE_SIM_TOOLKIT,
+	OFONO_MODEM_INTERFACE_SUPPLEMENTARY_SERVICES,
+	OFONO_MODEM_INTERFACE_TEXT_TELEPHONY,
+	OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER,
+	OFONO_MODEM_INTERFACE_MAX,
+};
+
 struct ofono_modem* ofono_modem_create(const gchar *path);
 void ofono_modem_ref(struct ofono_modem *modem);
 void ofono_modem_unref(struct ofono_modem *modem);
@@ -38,6 +64,7 @@ int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_mod
 bool ofono_modem_get_online(struct ofono_modem *modem);
 const gchar* ofono_modem_get_serial(struct ofono_modem *modem);
 const gchar* ofono_modem_get_revision(struct ofono_modem *modem);
+bool ofono_modem_is_interface_supported(struct ofono_modem *modem, enum ofono_modem_interface interface);
 
 #endif
 
