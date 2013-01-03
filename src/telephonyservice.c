@@ -160,14 +160,14 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 	j_release(&reply_obj);
 }
 
-int _service_power_set_finish(bool success, void *data)
+int _service_power_set_finish(const struct telephony_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = jobject_create();
 
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create((error == NULL)));
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj))
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
