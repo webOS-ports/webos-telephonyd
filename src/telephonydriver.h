@@ -89,6 +89,9 @@ struct telephony_platform_info {
 struct telephony_pin_status {
 	bool enabled;
 	bool required;
+	bool puk_required;
+	bool perm_blocked;
+	bool device_locked;
 	bool pin_attempts_remaining;
 	bool puk_attempts_remaining;
 };
@@ -106,7 +109,7 @@ typedef int (*telephony_power_query_cb)(const struct telephony_error* error, boo
 typedef int (*telephony_sim_status_query_cb)(const struct telephony_error* error, enum telephony_sim_status status, void *data);
 typedef int (*telephony_network_status_query_cb)(const struct telephony_error* error, struct telephony_network_status *status, void *data);
 typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* error, unsigned int rssi, unsigned int max_bars, unsigned int bars, void *data);
-typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status, void *data);
+typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status *status, void *data);
 typedef int (*telephony_network_list_query_cb)(const struct telephony_error* error, GList *networks, void *data);
 typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);
 
