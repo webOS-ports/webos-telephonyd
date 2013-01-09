@@ -136,22 +136,52 @@ int ofono_sim_status_query(struct telephony_service *service, telephony_sim_stat
 	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
 		enum ofono_sim_pin pin_type = ofono_sim_manager_get_pin_required(od->sim);
 
-		switch (pin_type) {
-		case OFONO_SIM_PIN_TYPE_NONE:
+		if (pin_type == OFONO_SIM_PIN_TYPE_NONE)
 			sim_status = TELEPHONY_SIM_STATUS_SIM_READY;
-			break;
-		case OFONO_SIM_PIN_TYPE_PIN:
+		else if (pin_type == OFONO_SIM_PIN_TYPE_PIN)
 			sim_status = TELEPHONY_SIM_STATUS_PIN_REQUIRED;
-			break;
-		OFONO_SIM_PIN_TYPE_PUK:
+		else if (pin_type == OFONO_SIM_PIN_TYPE_PUK)
 			sim_status = TELEPHONY_SIM_STATUS_PUK_REQUIRED;
-			break;
-		}
 
 		/* FIXME maybe we have to take the lock status of the pin/puk into account here */
 	}
 
 	cb(NULL, sim_status, data);
+
+	return 0;
+}
+
+int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_pin_status pin_status;
+	struct telephony_error err;
+	enum ofono_sim_pin pin_required;
+
+	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
+		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
+
+	memset(&pin_status, 0, sizeof(pin_status));
+
+	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
+		pin_required = ofono_sim_manager_get_pin_required(od->sim);
+		if (pin_required == OFONO_SIM_PIN_TYPE_PIN)
+			pin_status.required = true;
+		else if (pin_required == OFONO_SIM_PIN_TYPE_PUK)
+			pin_status.puk_required = true;
+
+		/* FIXME how can we map device_locked and perm_blocked to the ofono bits ? */
+
+		pin_status.pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PIN);
+		pin_status.puk_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PUK);
+
+		cb(NULL, &pin_status, data);
+	}
+	else {
+		/* No SIM available return error */
+		err.code = 1;
+		cb(&err, NULL, data);
+	}
 
 	return 0;
 }
@@ -220,6 +250,7 @@ struct telephony_driver driver = {
 	.power_set =	ofono_power_set,
 	.power_query =	ofono_power_query,
 	.sim_status_query = ofono_sim_status_query,
+	.pin1_status_query = ofono_pin1_status_query,
 };
 
 void ofono_init(struct telephony_service *service)

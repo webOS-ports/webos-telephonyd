@@ -37,13 +37,55 @@ struct ofono_sim_manager {
 	gchar *mcc;
 	gchar *mnc;
 	enum ofono_sim_pin pin_required;
-	GList *locked_pins;
+	bool locked_pins[OFONO_SIM_PIN_TYPE_MAX];
+	int pin_retries[OFONO_SIM_PIN_TYPE_MAX];
 };
+
+enum ofono_sim_pin parse_ofono_sim_pin_type(const gchar *pin)
+{
+	if (g_str_equal(pin, "none"))
+		return OFONO_SIM_PIN_TYPE_NONE;
+	else if (g_str_equal(pin, "pin"))
+		return OFONO_SIM_PIN_TYPE_PIN;
+	else if (g_str_equal(pin, "phone"))
+		return OFONO_SIM_PIN_TYPE_PHONE;
+	else if (g_str_equal(pin, "firstphone"))
+		return OFONO_SIM_PIN_TYPE_FIRST_PHONE;
+	else if (g_str_equal(pin, "pin2"))
+		return OFONO_SIM_PIN_TYPE_PIN2;
+	else if (g_str_equal(pin, "network"))
+		return OFONO_SIM_PIN_TYPE_NETWORK;
+	else if (g_str_equal(pin, "netsub"))
+		return OFONO_SIM_PIN_TYPE_NET_SUB;
+	else if (g_str_equal(pin, "service"))
+		return OFONO_SIM_PIN_TYPE_SERVICE;
+	else if (g_str_equal(pin, "corp"))
+		return OFONO_SIM_PIN_TYPE_CORP;
+	else if (g_str_equal(pin, "puk"))
+		return OFONO_SIM_PIN_TYPE_PUK;
+	else if (g_str_equal(pin, "firstphonepuk"))
+		return OFONO_SIM_PIN_TYPE_FIRST_PHONE_PUK;
+	else if (g_str_equal(pin, "puk2"))
+		return OFONO_SIM_PIN_TYPE_PUK2;
+	else if (g_str_equal(pin, "networkpuk"))
+		return OFONO_SIM_PIN_TYPE_NETWORK_PUK;
+	else if (g_str_equal(pin, "netsubpuk"))
+		return OFONO_SIM_PIN_TYPE_NET_SUB_PUK;
+	else if (g_str_equal(pin, "servicepuk"))
+		return OFONO_SIM_PIN_TYPE_SERVICE_PUK;
+	else if (g_str_equal(pin, "corppuk"))
+		return OFONO_SIM_PIN_TYPE_CORP_PUK;
+
+	return OFONO_SIM_PIN_TYPE_INVALID;
+}
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_sim_manager *sim = user_data;
-	gchar *pin_required;
+	gchar *pin_type_str = NULL;
+	int n;
+	GVariant *child, *prop_value, *prop_key;
+	enum ofono_sim_pin pin_type;
 
 	g_message("[SIM:%s] property %s changed", sim->path, name);
 
@@ -56,42 +98,36 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	else if (g_str_equal(name, "MobileNetworkCode"))
 		sim->mnc = g_variant_dup_string(value, NULL);
 	else if (g_str_equal(name, "PinRequired")) {
-		pin_required = g_variant_dup_string(value, NULL);
-
-		if (g_str_equal(pin_required, "none"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_NONE;
-		else if (g_str_equal(pin_required, "pin"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_PIN;
-		else if (g_str_equal(pin_required, "phone"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_PHONE;
-		else if (g_str_equal(pin_required, "firstphone"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_FIRST_PHONE;
-		else if (g_str_equal(pin_required, "pin2"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_PIN2;
-		else if (g_str_equal(pin_required, "network"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_NETWORK;
-		else if (g_str_equal(pin_required, "netsub"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_NET_SUB;
-		else if (g_str_equal(pin_required, "service"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_SERVICE;
-		else if (g_str_equal(pin_required, "corp"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_CORP;
-		else if (g_str_equal(pin_required, "puk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_PUK;
-		else if (g_str_equal(pin_required, "firstphonepuk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_FIRST_PHONE_PUK;
-		else if (g_str_equal(pin_required, "puk2"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_PUK2;
-		else if (g_str_equal(pin_required, "networkpuk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_NETWORK_PUK;
-		else if (g_str_equal(pin_required, "netsubpuk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_NET_SUB_PUK;
-		else if (g_str_equal(pin_required, "servicepuk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_SERVICE_PUK;
-		else if (g_str_equal(pin_required, "corppuk"))
-			sim->pin_required = OFONO_SIM_PIN_TYPE_CORP_PUK;
+		pin_type_str = g_variant_dup_string(value, NULL);
+		sim->pin_required = parse_ofono_sim_pin_type(pin_type_str);
+		g_free(pin_type_str);
 	}
 	else if (g_str_equal(name, "LockedPins")) {
+		for (n = 0; n < g_variant_n_children(value); n++) {
+			child = g_variant_get_child_value(value, n);
+
+			pin_type_str = g_variant_dup_string(child, NULL);
+			pin_type = parse_ofono_sim_pin_type(pin_type_str);
+			g_free(pin_type_str);
+
+			sim->locked_pins[pin_type] = (pin_type != OFONO_SIM_PIN_TYPE_INVALID);
+		}
+	}
+	else if (g_str_equal(name, "Retries")) {
+		memset(sim->pin_retries, 0, sizeof(sim->pin_retries));
+
+		for (n = 0; n < g_variant_n_children(value); n++) {
+			child = g_variant_get_child_value(value, n);
+
+			prop_key = g_variant_get_child_value(child, 0);
+			prop_value = g_variant_get_child_value(child, 1);
+
+			pin_type_str = g_variant_dup_string(prop_key, NULL);
+			pin_type = parse_ofono_sim_pin_type(pin_type_str);
+			g_free(pin_type_str);
+
+			sim->pin_retries[pin_type] = (int) g_variant_get_byte(prop_value);
+		}
 	}
 }
 
@@ -180,6 +216,14 @@ enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *
 		return OFONO_SIM_PIN_TYPE_INVALID;
 
 	return sim->pin_required;
+}
+
+int ofono_sim_manager_get_pin_retries(struct ofono_sim_manager *sim, enum ofono_sim_pin pin)
+{
+	if (!sim)
+		return -1;
+
+	return sim->pin_retries[pin];
 }
 
 // vim:ts=4:sw=4:noexpandtab

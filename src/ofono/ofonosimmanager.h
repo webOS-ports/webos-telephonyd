@@ -41,6 +41,7 @@ enum ofono_sim_pin {
 	OFONO_SIM_PIN_TYPE_SERVICE_PUK,
 	OFONO_SIM_PIN_TYPE_CORP_PUK,
 	OFONO_SIM_PIN_TYPE_INVALID,
+	OFONO_SIM_PIN_TYPE_MAX
 };
 
 typedef void (*ofono_sim_manager_result_cb)(gboolean success, void *data);
@@ -52,6 +53,7 @@ void ofono_sim_manager_free(struct ofono_sim_manager *sim);
 
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);
 enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *sim);
+int ofono_sim_manager_get_pin_retries(struct ofono_sim_manager *sim, enum ofono_sim_pin pin_type);
 
 #endif
 
