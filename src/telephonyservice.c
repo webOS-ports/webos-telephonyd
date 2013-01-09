@@ -164,6 +164,23 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 	j_release(&reply_obj);
 }
 
+void telephony_service_sim_status_notify(struct telephony_service *service, enum telephony_sim_status sim_status)
+{
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("state"), jstring_create(telephony_sim_status_to_string(sim_status)));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+
+	luna_service_post_subscription(service->private_service, "/", "simStatusQuery", reply_obj);
+
+	j_release(&reply_obj);
+}
+
 int _service_power_set_finish(const struct telephony_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
