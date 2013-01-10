@@ -21,6 +21,7 @@
 
 #include "telephonyservice.h"
 #include "telephonydriver.h"
+#include "ofonobase.h"
 #include "ofonomanager.h"
 #include "ofonomodem.h"
 #include "ofonosimmanager.h"
@@ -214,12 +215,13 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	return 0;
 }
 
-static void modem_online_changed_cb(bool online, void *data)
+static void modem_online_changed_cb(void *data)
 {
 	struct ofono_data *od = data;
-	bool powered = false;
+	bool powered = false, online = false;
 
 	powered = ofono_modem_get_powered(od->modem);
+	online = ofono_modem_get_online(od->modem);
 	telephony_service_power_status_notify(od->service, powered && online);
 }
 

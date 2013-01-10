@@ -45,14 +45,13 @@ enum ofono_sim_pin {
 };
 
 typedef void (*ofono_sim_manager_result_cb)(gboolean success, void *data);
-typedef void (*ofono_sim_manager_status_changed_cb)(void *data);
 
 struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path);
 void ofono_sim_manager_ref(struct ofono_sim_manager *sim);
 void ofono_sim_manager_unref(struct ofono_sim_manager *sim);
 void ofono_sim_manager_free(struct ofono_sim_manager *sim);
 
-void ofono_sim_manager_register_status_changed_handler(struct ofono_sim_manager *sim, ofono_sim_manager_status_changed_cb cb, void *data);
+void ofono_sim_manager_register_status_changed_handler(struct ofono_sim_manager *sim, ofono_property_changed_cb cb, void *data);
 
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);
 enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *sim);

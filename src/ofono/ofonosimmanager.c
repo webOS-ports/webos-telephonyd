@@ -39,7 +39,7 @@ struct ofono_sim_manager {
 	enum ofono_sim_pin pin_required;
 	bool locked_pins[OFONO_SIM_PIN_TYPE_MAX];
 	int pin_retries[OFONO_SIM_PIN_TYPE_MAX];
-	ofono_sim_manager_status_changed_cb status_changed_cb;
+	ofono_property_changed_cb status_changed_cb;
 	void *status_changed_data;
 };
 
@@ -168,7 +168,7 @@ struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path)
 	return sim;
 }
 
-void ofono_sim_manager_register_status_changed_handler(struct ofono_sim_manager *sim, ofono_sim_manager_status_changed_cb cb, void *data)
+void ofono_sim_manager_register_status_changed_handler(struct ofono_sim_manager *sim, ofono_property_changed_cb cb, void *data)
 {
 	if (!sim)
 		return;

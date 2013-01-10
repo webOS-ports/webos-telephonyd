@@ -20,6 +20,7 @@
 #define OFONO_BASE_H_
 
 #include <glib.h>
+#include <gio/gio.h>
 
 struct ofono_base;
 
