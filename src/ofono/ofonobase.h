@@ -24,6 +24,7 @@
 struct ofono_base;
 
 typedef void (*ofono_base_result_cb)(gboolean success, void *data);
+typedef void (*ofono_property_changed_cb)(void *data);
 
 struct ofono_base_funcs {
 	void (*update_property)(const gchar *name, const GVariant *value, void *user_data);
