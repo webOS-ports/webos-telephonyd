@@ -31,6 +31,7 @@ struct ofono_data {
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
 	struct ofono_sim_manager *sim;
+	enum telephony_sim_status sim_status;
 };
 
 void set_online_cb(gboolean result, gpointer user_data)
@@ -125,13 +126,9 @@ int ofono_platform_query(struct telephony_service *service, telephony_platform_q
 	return 0;
 }
 
-int ofono_sim_status_query(struct telephony_service *service, telephony_sim_status_query_cb cb, void *data)
+static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
-
-	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
-		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
 
 	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
 		enum ofono_sim_pin pin_type = ofono_sim_manager_get_pin_required(od->sim);
@@ -146,7 +143,37 @@ int ofono_sim_status_query(struct telephony_service *service, telephony_sim_stat
 		/* FIXME maybe we have to take the lock status of the pin/puk into account here */
 	}
 
-	cb(NULL, sim_status, data);
+	return sim_status;
+}
+
+static void sim_status_changed_cb(void *data)
+{
+	struct ofono_data *od = data;
+	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
+
+	sim_status = determine_sim_status(od);
+
+	if (sim_status != od->sim_status) {
+		od->sim_status = sim_status;
+		telephony_service_sim_status_notify(od->service, sim_status);
+	}
+}
+
+static struct ofono_sim_manager* create_sim_manager(struct ofono_data *od)
+{
+	od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
+	ofono_sim_manager_register_status_changed_handler(od->sim, sim_status_changed_cb, od);
+}
+
+int ofono_sim_status_query(struct telephony_service *service, telephony_sim_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+
+	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
+		create_sim_manager(od);
+
+	od->sim_status = determine_sim_status(od);
+	cb(NULL, od->sim_status, data);
 
 	return 0;
 }
@@ -159,7 +186,7 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	enum ofono_sim_pin pin_required;
 
 	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
-		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
+		create_sim_manager(od);
 
 	memset(&pin_status, 0, sizeof(pin_status));
 
@@ -229,6 +256,8 @@ int ofono_probe(struct telephony_service *service)
 
 	telephony_service_set_data(service, data);
 	data->service = service;
+
+	data->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 
 	data->manager = ofono_manager_create();
 	ofono_manager_set_modems_changed_callback(data->manager, modems_changed_cb, data);

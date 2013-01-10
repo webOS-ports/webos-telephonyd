@@ -32,6 +32,7 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 
 void telephony_service_availability_changed_notify(struct telephony_service *service, bool available);
 void telephony_service_power_status_notify(struct telephony_service *service, bool power);
+void telephony_service_sim_status_changed_notify(struct telephony_service *service, enum telephony_sim_status sim_status);
 
 #endif
 
