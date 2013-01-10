@@ -214,11 +214,13 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	return 0;
 }
 
-static void modem_powered_changed_cb(bool powered, void *data)
+static void modem_online_changed_cb(bool online, void *data)
 {
 	struct ofono_data *od = data;
+	bool powered = false;
 
-	telephony_service_power_status_notify(od->service, powered);
+	powered = ofono_modem_get_powered(od->modem);
+	telephony_service_power_status_notify(od->service, powered && online);
 }
 
 static void modem_interfaces_changed_cb(void *data)
@@ -247,7 +249,7 @@ static void modems_changed_cb(gpointer user_data)
 		ofono_modem_ref(modems->data);
 		data->modem = modems->data;
 
-		ofono_modem_set_powered_changed_handler(data->modem, modem_powered_changed_cb, data);
+		ofono_modem_set_online_changed_handler(data->modem, modem_online_changed_cb, data);
 		ofono_modem_set_interfaces_changed_handler(data->modem, modem_interfaces_changed_cb, data);
 
 		telephony_service_availability_changed_notify(data->service, true);

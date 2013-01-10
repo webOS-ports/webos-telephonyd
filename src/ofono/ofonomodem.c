@@ -44,6 +44,8 @@ struct ofono_modem {
 	void *powered_changed_data;
 	ofono_modem_property_changed_cb interfaces_changed_cb;
 	void *interfaces_changed_data;
+	ofono_modem_online_changed_cb online_changed_cb;
+	void *online_changed_data;
 };
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
@@ -57,15 +59,15 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	g_message("[Modem:%s] property %s changed", modem->path, name);
 
 	if (g_str_equal(name, "Powered")) {
-		powered = g_variant_get_boolean(value);
-		if (modem->powered != powered) {
-			modem->powered = powered;
-			if (modem->powered_changed_cb != NULL)
-				modem->powered_changed_cb(modem->powered, modem->powered_changed_data);
-		}
+		modem->powered = g_variant_get_boolean(value);
+		if (modem->powered_changed_cb != NULL)
+			modem->powered_changed_cb(modem->powered, modem->powered_changed_data);
 	}
-	else if (g_str_equal(name, "Online"))
+	else if (g_str_equal(name, "Online")) {
 		modem->online = g_variant_get_boolean(value);
+		if (modem->online_changed_cb != NULL)
+			modem->online_changed_cb(modem->online, modem->online_changed_data);
+	}
 	else if (g_str_equal(name, "LockDown"))
 		modem->lockdown = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Emergency"))
@@ -300,6 +302,14 @@ void ofono_modem_set_powered_changed_handler(struct ofono_modem *modem, ofono_mo
 	modem->powered_changed_data = data;
 }
 
+void ofono_modem_set_online_changed_handler(struct ofono_modem *modem, ofono_modem_online_changed_cb cb, void *data)
+{
+	if (!modem)
+		return;
+
+	modem->online_changed_cb = cb;
+	modem->online_changed_data = data;
+}
 
 void ofono_modem_set_interfaces_changed_handler(struct ofono_modem *modem, ofono_modem_property_changed_cb cb, void *data)
 {
