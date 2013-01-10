@@ -25,6 +25,7 @@ struct ofono_modem;
 
 typedef void (*ofono_modem_result_cb)(gboolean success, void *data);
 typedef void (*ofono_modem_powered_changed_cb)(bool powered, void *data);
+typedef void (*ofono_modem_property_changed_cb)(void *data);
 
 enum ofono_modem_interface {
 	OFONO_MODEM_INTERFACE_ASSISTET_SATELLITE_NAVIGATION = 0,
@@ -58,6 +59,7 @@ void ofono_modem_unref(struct ofono_modem *modem);
 void ofono_modem_free(struct ofono_modem *modem);
 
 void ofono_modem_set_powered_changed_handler(struct ofono_modem *modem, ofono_modem_powered_changed_cb cb, void *data);
+void ofono_modem_set_interfaces_changed_handler(struct ofono_modem *modem, ofono_modem_property_changed_cb cb, void *data);
 
 const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 

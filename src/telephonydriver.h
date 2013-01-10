@@ -25,6 +25,10 @@ const struct telephony_error {
 	int code;
 };
 
+enum telephony_error_type {
+	TELEPHONY_ERROR_NOT_IMPLEMENTED = 2,
+};
+
 enum telephony_sim_status {
 	TELEPHONY_SIM_STATUS_SIM_NOT_FOUND = 0,
 	TELEPHONY_SIM_STATUS_SIM_INVALID,

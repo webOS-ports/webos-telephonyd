@@ -159,18 +159,16 @@ static void sim_status_changed_cb(void *data)
 	}
 }
 
-static struct ofono_sim_manager* create_sim_manager(struct ofono_data *od)
-{
-	od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
-	ofono_sim_manager_register_status_changed_handler(od->sim, sim_status_changed_cb, od);
-}
-
 int ofono_sim_status_query(struct telephony_service *service, telephony_sim_status_query_cb cb, void *data)
 {
 	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error err;
 
-	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
-		create_sim_manager(od);
+	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
+		cb(&err, TELEPHONY_SIM_STATUS_SIM_INVALID, data);
+		return;
+	}
 
 	od->sim_status = determine_sim_status(od);
 	cb(NULL, od->sim_status, data);
@@ -185,8 +183,11 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	struct telephony_error err;
 	enum ofono_sim_pin pin_required;
 
-	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER))
-		create_sim_manager(od);
+	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
+		cb(&err, TELEPHONY_SIM_STATUS_SIM_INVALID, data);
+		return;
+	}
 
 	memset(&pin_status, 0, sizeof(pin_status));
 
@@ -220,6 +221,20 @@ static void modem_powered_changed_cb(bool powered, void *data)
 	telephony_service_power_status_notify(od->service, powered);
 }
 
+static void modem_interfaces_changed_cb(void *data)
+{
+	struct ofono_data *od = data;
+
+	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
+		ofono_sim_manager_register_status_changed_handler(od->sim, sim_status_changed_cb, od);
+	}
+	else if (od->sim && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		ofono_sim_manager_free(od->sim);
+		od->sim = NULL;
+	}
+}
+
 static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
@@ -233,13 +248,18 @@ static void modems_changed_cb(gpointer user_data)
 		data->modem = modems->data;
 
 		ofono_modem_set_powered_changed_handler(data->modem, modem_powered_changed_cb, data);
+		ofono_modem_set_interfaces_changed_handler(data->modem, modem_interfaces_changed_cb, data);
 
 		telephony_service_availability_changed_notify(data->service, true);
 	}
 	else {
+		if (data->sim)
+			ofono_sim_manager_free(data->sim);
+
 		if (data->modem)
 			ofono_modem_unref(data->modem);
 
+		data->sim = NULL;
 		data->modem = NULL;
 
 		telephony_service_availability_changed_notify(data->service, false);

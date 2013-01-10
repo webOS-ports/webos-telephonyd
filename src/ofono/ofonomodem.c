@@ -42,6 +42,8 @@ struct ofono_modem {
 	int ref_count;
 	ofono_modem_powered_changed_cb powered_changed_cb;
 	void *powered_changed_data;
+	ofono_modem_property_changed_cb interfaces_changed_cb;
+	void *interfaces_changed_data;
 };
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
@@ -124,6 +126,9 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			else if (g_str_equal(interface_name, "org.ofono.VoiceCallManager"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER] = 1;
 		}
+
+		if (modem->interfaces_changed_cb != NULL)
+			modem->interfaces_changed_cb(modem->interfaces_changed_data);
 	}
 }
 
@@ -295,6 +300,15 @@ void ofono_modem_set_powered_changed_handler(struct ofono_modem *modem, ofono_mo
 	modem->powered_changed_data = data;
 }
 
+
+void ofono_modem_set_interfaces_changed_handler(struct ofono_modem *modem, ofono_modem_property_changed_cb cb, void *data)
+{
+	if (!modem)
+		return;
+
+	modem->interfaces_changed_cb = cb;
+	modem->interfaces_changed_data = data;
+}
 
 // vim:ts=4:sw=4:noexpandtab
 
