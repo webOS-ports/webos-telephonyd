@@ -44,6 +44,8 @@ bool _service_power_query_cb(LSHandle *lshandle, LSMessage *message, void *user_
 bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "powerSet", _service_power_set_cb },
@@ -51,6 +53,8 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "platformQuery", _service_platform_query_cb },
 	{ "simStatusQuery", _service_sim_status_query_cb },
 	{ "pin1StatusQuery", _service_pin1_status_query_cb },
+	{ "signalStrengthQuery", _service_signal_strength_query_cb },
+	{ "networkStatusQuery", _service_network_status_query_cb },
 	{ 0, 0 }
 };
 
@@ -177,6 +181,50 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
 	luna_service_post_subscription(service->private_service, "/", "simStatusQuery", reply_obj);
+
+	j_release(&reply_obj);
+}
+
+void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status)
+{
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	jvalue_ref network_obj = NULL;
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+	network_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+
+	jobject_put(network_obj, J_CSTR_TO_JVAL("state"),
+				jstring_create(telephony_network_state_to_string(net_status->state)));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("registration"),
+				jstring_create(telephony_network_registration_to_string(net_status->registration)));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
+
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("eventNetwork"), network_obj);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+
+	luna_service_post_subscription(service->private_service, "/", "networkStatusQuery", reply_obj);
+
+	j_release(&reply_obj);
+}
+
+void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars)
+{
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+
+	luna_service_post_subscription(service->private_service, "/", "signalStrengthQuery", reply_obj);
 
 	j_release(&reply_obj);
 }
@@ -613,6 +661,156 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	if (service->driver->pin1_status_query(service, _service_pin1_status_query_finish, req_data) < 0) {
 		g_warning("Failed to process service simStatusQuery request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed to query sim card status");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
+static int _service_signal_strength_query_finish(const struct telephony_error *error, unsigned int bars, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	/* handle possible subscriptions */
+	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+
+/**
+ * @brief Query the strength of the current network
+ **/
+bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->signal_strength_query) {
+		g_warning("No implementation available for service signalStrengthQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data) < 0) {
+		g_warning("Failed to process service signalStrengthQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query network signal strength");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
+static int _service_network_status_query_finish(const struct telephony_error *error, struct telephony_network_status *net_status, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	/* handle possible subscriptions */
+	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
+					jstring_create(telephony_network_state_to_string(net_status->state)));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Query the status of the current network
+ **/
+bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->network_status_query) {
+		g_warning("No implementation available for service networkStatusQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->network_status_query(service, _service_network_status_query_finish, req_data) < 0) {
+		g_warning("Failed to process service networkStatusQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query network status");
 		goto cleanup;
 	}
 

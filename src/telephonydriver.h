@@ -26,7 +26,9 @@ const struct telephony_error {
 };
 
 enum telephony_error_type {
-	TELEPHONY_ERROR_NOT_IMPLEMENTED = 2,
+	TELEPHONY_ERROR_NOT_IMPLEMENTED = 0,
+	TELEPHONY_ERROR_INTERNAL,
+	TELEPHONY_ERROR_INVALID_ARGUMENT,
 };
 
 enum telephony_sim_status {
@@ -70,6 +72,8 @@ enum telephony_platform_type {
 
 const char* telephony_platform_type_to_string(enum telephony_platform_type type);
 const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status);
+const char* telephony_network_state_to_string(enum telephony_network_state state);
+const char* telephony_network_registration_to_string(enum telephony_network_registration netreg);
 
 struct telephony_network_status {
 	enum telephony_network_state state;
@@ -112,7 +116,7 @@ typedef int (*telephony_result_cb)(const struct telephony_error* error, void *da
 typedef int (*telephony_power_query_cb)(const struct telephony_error* error, bool power_state, void *data);
 typedef int (*telephony_sim_status_query_cb)(const struct telephony_error* error, enum telephony_sim_status status, void *data);
 typedef int (*telephony_network_status_query_cb)(const struct telephony_error* error, struct telephony_network_status *status, void *data);
-typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* error, unsigned int rssi, unsigned int max_bars, unsigned int bars, void *data);
+typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* error, unsigned int bars, void *data);
 typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status *status, void *data);
 typedef int (*telephony_network_list_query_cb)(const struct telephony_error* error, GList *networks, void *data);
 typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);

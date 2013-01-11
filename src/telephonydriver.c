@@ -28,7 +28,8 @@ const char* telephony_platform_type_to_string(enum telephony_platform_type type)
 		case TELEPHONY_PLATFORM_TYPE_CDMA:
 			return "cdma";
 	}
-	return NULL;
+
+	return "unknown";
 }
 
 const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status)
@@ -49,5 +50,44 @@ const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status)
 		default:
 			break;
 	}
-	return NULL;
+
+	return "unknown";
 }
+
+const char* telephony_network_state_to_string(enum telephony_network_state state)
+{
+	switch (state) {
+		case TELEPHONY_NETWORK_STATE_SERVICE:
+			return "service";
+		case TELEPHONY_NETWORK_STATE_NO_SERVICE:
+			return "noservice";
+		case TELEPHONY_NETWORK_STATE_LIMITED:
+			return "limited";
+		default:
+			break;
+	}
+
+	return "unknown";
+}
+
+const char* telephony_network_registration_to_string(enum telephony_network_registration netreg)
+{
+	switch (netreg) {
+		case TELEPHONY_NETWORK_REGISTRATION_HOME:
+			return "home";
+		case TELEPHONY_NETWORK_REGISTRATION_ROAM:
+			return "roam";
+		case TELEPHONY_NETWORK_REGISTRATION_ROAM_BLINK:
+			return "roamblink";
+		case TELEPHONY_NETWORK_REGISTRATION_SEARCHING:
+			return "searching";
+		case TELEPHONY_NETWORK_REGISTRATION_DENIED:
+			return "denied";
+		default:
+			break;
+	}
+
+	return "unknown";
+}
+
+// vim:ts=4:sw=4:noexpandtab

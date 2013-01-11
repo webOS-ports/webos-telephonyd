@@ -25,6 +25,7 @@
 #include "ofonomanager.h"
 #include "ofonomodem.h"
 #include "ofonosimmanager.h"
+#include "ofononetworkregistration.h"
 #include "utils.h"
 
 struct ofono_data {
@@ -32,6 +33,7 @@ struct ofono_data {
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
 	struct ofono_sim_manager *sim;
+	struct ofono_network_registration *netreg;
 	enum telephony_sim_status sim_status;
 };
 
@@ -215,6 +217,108 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	return 0;
 }
 
+static int retrieve_network_status(struct ofono_data *od, struct telephony_network_status *status)
+{
+	enum ofono_network_status net_status;
+
+	net_status = ofono_network_registration_get_status(od->netreg);
+	switch (net_status) {
+	case OFONO_NETWORK_REGISTRATION_STATUS_REGISTERED:
+		status->state = TELEPHONY_NETWORK_STATE_SERVICE;
+		status->registration = TELEPHONY_NETWORK_REGISTRATION_HOME;
+		break;
+	case OFONO_NETWORK_REGISTRATION_STATUS_UNREGISTERED:
+	case OFONO_NETWORK_REGISTRATION_STATUS_SEARCHING:
+		status->state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
+		status->registration = TELEPHONY_NETWORK_REGISTRATION_SEARCHING;
+		break;
+	case OFONO_NETWORK_REGISTRATION_STATUS_DENIED:
+		status->state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
+		status->registration = TELEPHONY_NETWORK_REGISTRATION_DENIED;
+		break;
+	case OFONO_NETWORK_REGISTRATION_STATUS_ROAMING:
+		status->state = TELEPHONY_NETWORK_STATE_SERVICE;
+		status->registration = TELEPHONY_NETWORK_REGISTRATION_ROAM;
+		break;
+	default:
+		break;
+	}
+
+	status->name = ofono_network_registration_get_operator_name(od->netreg);
+	/* FIXME when we support the relevant ofono interfaces set this correctly */
+	status->cause_code = 0;
+	status->data_registered = false;
+
+	return 0;
+}
+
+int ofono_network_status_query(struct telephony_service *service, telephony_network_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_network_status status;
+	struct telephony_error err;
+	enum ofono_network_status net_status;
+
+	if (!od->netreg) {
+		err.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+		cb(&err, NULL, data);
+		return 0;
+	}
+
+	if (retrieve_network_status(od, &status) < 0) {
+		err.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&err, NULL, data);
+		return 0;
+	}
+
+	cb(NULL, &status, data);
+
+	return 0;
+}
+
+static int convert_strength_to_bars(int rssi)
+{
+	return (rssi * 5) / 100;
+}
+
+int ofono_signal_strength_query(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error err;
+	unsigned int rssi = 0;
+
+	if (!od->netreg) {
+		err.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+		cb(&err, 0, data);
+		return;
+	}
+
+	rssi = ofono_network_registration_get_strength(od->netreg);
+	cb(NULL, convert_strength_to_bars(rssi), data);
+
+	return 0;
+}
+
+static void network_status_changed_cb(void *data)
+{
+	struct ofono_data *od = data;
+	struct telephony_network_status net_status;
+
+	if (retrieve_network_status(od, &net_status) < 0)
+		return 0;
+
+	telephony_service_network_status_changed_notify(od->service, &net_status);
+}
+
+static void network_strength_changed_cb(void *data)
+{
+	struct ofono_data *od = data;
+	int strength;
+
+	strength = ofono_network_registration_get_strength(od->netreg);
+	telephony_service_signal_strength_changed_notify(od->service, convert_strength_to_bars(strength));
+}
+
 static void modem_online_changed_cb(void *data)
 {
 	struct ofono_data *od = data;
@@ -228,14 +332,25 @@ static void modem_online_changed_cb(void *data)
 static void modem_interfaces_changed_cb(void *data)
 {
 	struct ofono_data *od = data;
+	gchar *path = ofono_modem_get_path(od->modem);
 
 	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
-		od->sim = ofono_sim_manager_create(ofono_modem_get_path(od->modem));
+		od->sim = ofono_sim_manager_create(path);
 		ofono_sim_manager_register_status_changed_handler(od->sim, sim_status_changed_cb, od);
 	}
 	else if (od->sim && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		ofono_sim_manager_free(od->sim);
 		od->sim = NULL;
+	}
+
+	if (!od->netreg && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+		od->netreg = ofono_network_registration_create(path);
+		ofono_network_registration_register_status_changed_handler(od->netreg, network_status_changed_cb, od);
+		ofono_network_registration_register_strength_changed_handler(od->netreg, network_strength_changed_cb, od);
+	}
+	else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+		ofono_network_registration_free(od->netreg);
+		od->netreg = NULL;
 	}
 }
 
@@ -313,6 +428,8 @@ struct telephony_driver driver = {
 	.power_query =	ofono_power_query,
 	.sim_status_query = ofono_sim_status_query,
 	.pin1_status_query = ofono_pin1_status_query,
+	.network_status_query = ofono_network_status_query,
+	.signal_strength_query = ofono_signal_strength_query,
 };
 
 void ofono_init(struct telephony_service *service)

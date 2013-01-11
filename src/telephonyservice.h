@@ -34,6 +34,9 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 void telephony_service_power_status_notify(struct telephony_service *service, bool power);
 void telephony_service_sim_status_changed_notify(struct telephony_service *service, enum telephony_sim_status sim_status);
 
+void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status);
+void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab
