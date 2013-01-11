@@ -32,7 +32,7 @@ void luna_service_message_reply_success(LSHandle *handle, LSMessage *message);
 
 jvalue_ref luna_service_message_parse_and_validate(const char *payload);
 bool luna_service_message_validate_and_send(LSHandle *handle, LSMessage *message, jvalue_ref reply_obj);
-bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message, bool *subscribed);
+bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message);
 void luna_service_post_subscription(LSHandle *handle, const char *path, const char *method, jvalue_ref reply_obj);
 
 #endif

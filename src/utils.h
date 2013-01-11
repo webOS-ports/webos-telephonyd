@@ -25,6 +25,7 @@
 struct luna_service_req_data {
 	LSHandle *handle;
 	LSMessage *message;
+	bool subscribed;
 };
 
 static inline struct luna_service_req_data *luna_service_req_data_new(LSHandle *handle, LSMessage *message)
@@ -34,6 +35,7 @@ static inline struct luna_service_req_data *luna_service_req_data_new(LSHandle *
 	req = g_new0(struct luna_service_req_data, 1);
 	req->handle = handle;
 	req->message = message;
+	req->subscribed = false;
 
 	LSMessageRef(req->message);
 

@@ -336,8 +336,8 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
@@ -394,6 +394,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->power_query(service, _service_power_query_finish, req_data) < 0) {
 		g_warning("Failed to process service powerQuery request in our driver");
@@ -427,8 +428,8 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
@@ -481,8 +482,8 @@ static int _service_sim_status_query_finish(const struct telephony_error *error,
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
@@ -537,6 +538,7 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->platform_query(service, _service_platform_query_finish, req_data) < 0) {
 		g_warning("Failed to process service platformQuery request in our driver");
@@ -576,6 +578,7 @@ bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->sim_status_query(service, _service_sim_status_query_finish, req_data) < 0) {
 		g_warning("Failed to process service simStatusQuery request in our driver");
@@ -606,8 +609,8 @@ static int _service_pin1_status_query_finish(const struct telephony_error *error
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(pin_status->enabled));
@@ -657,6 +660,7 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->pin1_status_query(service, _service_pin1_status_query_finish, req_data) < 0) {
 		g_warning("Failed to process service simStatusQuery request in our driver");
@@ -687,8 +691,8 @@ static int _service_signal_strength_query_finish(const struct telephony_error *e
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
@@ -732,6 +736,7 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data) < 0) {
 		g_warning("Failed to process service signalStrengthQuery request in our driver");
@@ -762,8 +767,8 @@ static int _service_network_status_query_finish(const struct telephony_error *er
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	/* handle possible subscriptions */
-	if (luna_service_check_for_subscription_and_process(req_data->handle, req_data->message, &subscribed))
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	if (req_data->subscribed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
@@ -807,6 +812,7 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
 	if (service->driver->network_status_query(service, _service_network_status_query_finish, req_data) < 0) {
 		g_warning("Failed to process service networkStatusQuery request in our driver");

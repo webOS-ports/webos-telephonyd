@@ -118,21 +118,21 @@ bool luna_service_message_validate_and_send(LSHandle *handle, LSMessage *message
 	return success;
 }
 
-bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message, bool *subscribed)
+bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message)
 {
 	LSError lserror;
+	bool subscribed = false;
+
 	LSErrorInit(&lserror);
 
 	if (LSMessageIsSubscription(message)) {
-		if (!LSSubscriptionProcess(handle, message, subscribed, &lserror)) {
+		if (!LSSubscriptionProcess(handle, message, &subscribed, &lserror)) {
 			LSErrorPrint(&lserror, stderr);
 			LSErrorFree(&lserror);
 		}
-
-		return true;
 	}
 
-	return false;
+	return subscribed;
 }
 
 void luna_service_post_subscription(LSHandle *handle, const char *path, const char *method, jvalue_ref reply_obj)
