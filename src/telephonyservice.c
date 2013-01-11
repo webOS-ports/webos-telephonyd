@@ -39,6 +39,7 @@ struct telephony_service {
 	bool initialized;
 };
 
+bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_power_set_cb(LSHandle* lshandle, LSMessage *message, void *user_data);
 bool _service_power_query_cb(LSHandle *lshandle, LSMessage *message, void *user_data);
 bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -48,6 +49,7 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
+	{ "subscribe", _service_subscribe_cb },
 	{ "powerSet", _service_power_set_cb },
 	{ "powerQuery", _service_power_query_cb },
 	{ "platformQuery", _service_platform_query_cb },
@@ -227,6 +229,55 @@ void telephony_service_signal_strength_changed_notify(struct telephony_service *
 	luna_service_post_subscription(service->private_service, "/", "signalStrengthQuery", reply_obj);
 
 	j_release(&reply_obj);
+}
+
+/**
+ * @brief Subscribe for a specific group of events
+ *
+ * JSON format:
+ *    {"events":"<type>"}
+ **/
+bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref events_obj = NULL;
+	bool result = false;
+	LSError lserror;
+	char *payload;
+
+	if (!service->initialized)
+		goto cleanup;
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj))
+		goto cleanup;
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("events"), &events_obj))
+		goto cleanup;
+
+	if (jstring_equal2(events_obj, J_CSTR_TO_BUF("network"))) {
+		result = LSSubscriptionAdd(handle, "/networkStatusQuery", message, &lserror);
+		if (!result) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+			goto cleanup;
+		}
+	}
+	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signals"))) {
+		result = LSSubscriptionAdd(handle, "/signalStrengthQuery", message, &lserror);
+		if (!result) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+			goto cleanup;
+		}
+	}
+
+cleanup:
+	j_release(&parsed_obj);
+
+	return true;
 }
 
 int _service_power_set_finish(const struct telephony_error *error, void *data)
