@@ -190,24 +190,17 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status)
 {
 	jvalue_ref reply_obj = NULL;
-	jvalue_ref extended_obj = NULL;
 	jvalue_ref network_obj = NULL;
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 	network_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
 	jobject_put(network_obj, J_CSTR_TO_JVAL("state"),
 				jstring_create(telephony_network_state_to_string(net_status->state)));
-	jobject_put(network_obj, J_CSTR_TO_JVAL("registration"),
-				jstring_create(telephony_network_registration_to_string(net_status->registration)));
-	jobject_put(network_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
-	jobject_put(network_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("eventNetwork"), network_obj);
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventNetwork"), network_obj);
 
 	luna_service_post_subscription(service->private_service, "/", "networkStatusQuery", reply_obj);
 
@@ -217,14 +210,14 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars)
 {
 	jvalue_ref reply_obj = NULL;
-	jvalue_ref extended_obj = NULL;
+	jvalue_ref signal_obj = NULL;
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
+	signal_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	jobject_put(signal_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventSignal"), signal_obj);
 
 	luna_service_post_subscription(service->private_service, "/", "signalStrengthQuery", reply_obj);
 
@@ -265,7 +258,7 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 			goto cleanup;
 		}
 	}
-	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signals"))) {
+	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signal"))) {
 		result = LSSubscriptionAdd(handle, "/signalStrengthQuery", message, &lserror);
 		if (!result) {
 			LSErrorPrint(&lserror, stderr);
@@ -824,6 +817,10 @@ static int _service_network_status_query_finish(const struct telephony_error *er
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
 					jstring_create(telephony_network_state_to_string(net_status->state)));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("registration"),
+				jstring_create(telephony_network_registration_to_string(net_status->registration)));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
 	else {
