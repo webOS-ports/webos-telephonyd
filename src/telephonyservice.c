@@ -25,6 +25,7 @@
 #include <pbnjson.h>
 #include <luna-service2/lunaservice.h>
 
+#include "telephonysettings.h"
 #include "telephonydriver.h"
 #include "utils.h"
 #include "luna_service_utils.h"
@@ -37,6 +38,7 @@ struct telephony_service {
 	LSPalmService *palm_service;
 	LSHandle *private_service;
 	bool initialized;
+	bool initial_power_state;
 };
 
 bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -60,6 +62,35 @@ static LSMethod _telephony_service_methods[]  = {
 	{ 0, 0 }
 };
 
+static bool retrieve_power_state_from_settings(void)
+{
+	const char *setting_value = NULL;
+	jvalue_ref parsed_obj;
+	jvalue_ref state_obj;
+	bool power_state = true;
+
+	setting_value = telephony_settings_load(TELEPHONY_SETTINGS_TYPE_POWER_STATE);
+	if (setting_value == NULL)
+		return true;
+
+	parsed_obj = luna_service_message_parse_and_validate(setting_value);
+	if (jis_null(parsed_obj))
+		return true;
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("state"), &state_obj))
+		return true;
+
+	jboolean_get(state_obj, &power_state);
+	j_release(parsed_obj);
+	return power_state;
+}
+
+static void store_power_state_setting(bool power_state)
+{
+	telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
+						power_state ? "{\"state\":true}" : "{\"state\":false}");
+}
+
 static int initialize_luna_service(struct telephony_service *service)
 {
 	LSError error;
@@ -72,6 +103,29 @@ static int initialize_luna_service(struct telephony_service *service)
 			NULL, service, &error)) {
 		g_warning("Could not register service category");
 		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int _service_initial_power_set_finish(const struct telephony_error *error, void *data)
+{
+	return 0;
+}
+
+static int configure_service(struct telephony_service *service)
+{
+	bool power_state = true;
+
+	power_state = retrieve_power_state_from_settings();
+	if (!service->driver || !service->driver->power_set) {
+		g_warning("API method powerSet not available for setting initial power mode");
+		return -EINVAL;
+	}
+
+	if (service->driver->power_set(service, power_state, _service_initial_power_set_finish, service) < 0) {
+		g_warning("Failed to set initial power state");
 		return -EIO;
 	}
 
@@ -131,6 +185,11 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 	if (!service->initialized && available) {
 		if (initialize_luna_service(service) < 0) {
 			g_critical("Failed to initialize luna service. Wront service configuration?");
+			return;
+		}
+
+		if (configure_service(service) < 0) {
+			g_error("Could not configure service");
 			return;
 		}
 	}
@@ -304,8 +363,10 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	bool power = false;
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref state_obj = NULL;
+	jvalue_ref save_obj = NULL;
 	const char *payload;
 	const char *state_value;
+	bool should_save = false;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
@@ -330,20 +391,22 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
-	if (jstring_equal2(state_obj, J_CSTR_TO_BUF("on"))) {
+	if (jstring_equal2(state_obj, J_CSTR_TO_BUF("on")))
 		power = true;
-	}
-	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("off"))) {
+	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("off")))
 		power = false;
-	}
-	/* FIXME we're not supporting saving the power state yet so default will always power
-	 * up the service */
 	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("default"))) {
 		power = true;
 	}
 	else {
 		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
+	}
+
+	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("save"), &save_obj)) {
+		jboolean_get(save_obj, &should_save);
+		if (should_save)
+			telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE, power ? "{\"state\":true}" : "{\"state\":false}");
 	}
 
 	req_data = luna_service_req_data_new(handle, message);

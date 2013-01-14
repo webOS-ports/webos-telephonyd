@@ -50,6 +50,11 @@ pkg_check_modules(PBNJSON_C REQUIRED pbnjson_c)
 include_directories(${PBNJSON_C_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${PBNJSON_C_CFLAGS_OTHER})
 
+pkg_check_modules(LUNAPREFS REQUIRED luna-prefs)
+include_directories(${LUNAPREFS_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${LUNAPREFS_CFLAGS_OTHER})
+
+
 find_program(GDBUS_CODEGEN_EXECUTABLE NAMES gdbus-codegen DOC "gdbus-codegen executable")
 if(NOT GDBUS_CODEGEN_EXECUTABLE)
 	message(FATAL_ERROR "Executable gdbus-codegen not found")
@@ -78,7 +83,7 @@ add_executable(webos-telephonyd ${SOURCE_FILES})
 target_link_libraries(webos-telephonyd
     ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${PBNJSON_C_LDFLAGS}
     ${GIO2_LDFLAGS} ${GIO-UNIX_LDFLAGS} ${GOBJECT2_LDFLAGS}
-    rt pthread)
+    ${LUNAPREFS_LDFLAGS} rt pthread)
 
 webos_build_daemon()
 webos_build_system_bus_files()
