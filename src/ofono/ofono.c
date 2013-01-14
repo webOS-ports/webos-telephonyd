@@ -35,6 +35,7 @@ struct ofono_data {
 	struct ofono_sim_manager *sim;
 	struct ofono_network_registration *netreg;
 	enum telephony_sim_status sim_status;
+	bool initializing;
 };
 
 void set_online_cb(gboolean result, gpointer user_data)
@@ -354,6 +355,17 @@ static void modem_interfaces_changed_cb(void *data)
 	}
 }
 
+static void modem_powered_changed_cb(void *data)
+{
+	struct ofono_data *od = data;
+	bool powered = ofono_modem_get_powered(od->modem);
+
+	if (od->initializing && powered) {
+		telephony_service_availability_changed_notify(od->service, true);
+		od->initializing = false;
+	}
+}
+
 static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
@@ -366,10 +378,11 @@ static void modems_changed_cb(gpointer user_data)
 		ofono_modem_ref(modems->data);
 		data->modem = modems->data;
 
+		data->initializing = true;
+
+		ofono_modem_set_powered_changed_handler(data->modem, modem_powered_changed_cb, data);
 		ofono_modem_set_online_changed_handler(data->modem, modem_online_changed_cb, data);
 		ofono_modem_set_interfaces_changed_handler(data->modem, modem_interfaces_changed_cb, data);
-
-		telephony_service_availability_changed_notify(data->service, true);
 	}
 	else {
 		if (data->sim)
@@ -397,6 +410,7 @@ int ofono_probe(struct telephony_service *service)
 	data->service = service;
 
 	data->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
+	data->initializing = false;
 
 	data->manager = ofono_manager_create();
 	ofono_manager_set_modems_changed_callback(data->manager, modems_changed_cb, data);

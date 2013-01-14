@@ -149,11 +149,16 @@ struct telephony_service* telephony_service_create(LSPalmService *palm_service)
 	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
 	service->initialized = false;
 
+	if (initialize_luna_service(service) < 0)
+		g_critical("Failed to initialize luna service. Wront service configuration?");
+
 	return service;
 }
 
 void telephony_service_free(struct telephony_service *service)
 {
+	shutdown_luna_service(service);
+
 	if (service->driver) {
 		service->driver->remove(service);
 		service->driver = NULL;
@@ -181,20 +186,12 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 
 	g_debug("Availability of the telephony service changed to: %s", available ? "available" : "not available");
 
-	/* If backend is now available but service is not yet initialized do it now */
 	if (!service->initialized && available) {
-		if (initialize_luna_service(service) < 0) {
-			g_critical("Failed to initialize luna service. Wront service configuration?");
-			return;
-		}
-
 		if (configure_service(service) < 0) {
 			g_error("Could not configure service");
 			return;
 		}
 	}
-	else if (service->initialized && !available)
-		shutdown_luna_service(service);
 
 	service->initialized = available;
 }
