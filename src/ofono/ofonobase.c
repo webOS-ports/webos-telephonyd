@@ -42,7 +42,7 @@ static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpoi
 
 	result = base->funcs->set_property_finish(base->remote, res, &error);
 	if (error) {
-		g_error("Failed to retrieve properties from base: %s", error->message);
+		g_warning("Failed to set property: %s", error->message);
 		g_error_free(error);
 	}
 
@@ -71,7 +71,7 @@ static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gp
 
 	ret = base->funcs->get_properties_finish(base->remote, &properties, res, &error);
 	if (error) {
-		g_error("Failed to retrieve properties from base: %s", error->message);
+		g_warning("Failed to retrieve properties from base: %s", error->message);
 		g_error_free(error);
 		return;
 	}
