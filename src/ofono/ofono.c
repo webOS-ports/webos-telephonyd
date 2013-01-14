@@ -36,6 +36,7 @@ struct ofono_data {
 	struct ofono_network_registration *netreg;
 	enum telephony_sim_status sim_status;
 	bool initializing;
+	guint service_watch;
 };
 
 void set_online_cb(gboolean result, gpointer user_data)
@@ -398,6 +399,42 @@ static void modems_changed_cb(gpointer user_data)
 	}
 }
 
+static void free_used_instances(struct ofono_data *od)
+{
+	if (od->sim) {
+		ofono_sim_manager_free(od->sim);
+		od->sim = NULL;
+	}
+
+	if (od->manager) {
+		ofono_manager_free(od->manager);
+		od->manager = NULL;
+	}
+}
+
+static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const gchar *name_owner,
+								gpointer user_data)
+{
+	struct ofono_data *od = user_data;
+
+	g_message("ofono dbus service available");
+
+	if (od->manager)
+		return;
+
+	od->manager = ofono_manager_create();
+	ofono_manager_set_modems_changed_callback(od->manager, modems_changed_cb, od);
+}
+
+static void service_vanished_cb(GDBusConnection *conn, const gchar *name, gpointer user_data)
+{
+	struct ofono_data *od = user_data;
+
+	g_message("ofono dbus service disappeared");
+
+	free_used_instances(od);
+}
+
 int ofono_probe(struct telephony_service *service)
 {
 	struct ofono_data *data;
@@ -412,8 +449,8 @@ int ofono_probe(struct telephony_service *service)
 	data->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 	data->initializing = false;
 
-	data->manager = ofono_manager_create();
-	ofono_manager_set_modems_changed_callback(data->manager, modems_changed_cb, data);
+	data->service_watch = g_bus_watch_name(G_BUS_TYPE_SYSTEM, "org.ofono", G_BUS_NAME_WATCHER_FLAGS_NONE,
+					 service_appeared_cb, service_vanished_cb, data, NULL);
 
 	return 0;
 }
@@ -424,12 +461,10 @@ void ofono_remove(struct telephony_service *service)
 
 	data = telephony_service_get_data(service);
 
-	if (data->sim)
-		ofono_sim_manager_free(data->sim);
-
-	ofono_manager_free(data->manager);
-
+	free_used_instances(data);
 	g_free(data);
+
+	g_bus_unwatch_name(data->service_watch);
 
 	telephony_service_set_data(service, NULL);
 }
