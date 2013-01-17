@@ -39,6 +39,7 @@ struct telephony_service {
 	LSHandle *private_service;
 	bool initialized;
 	bool initial_power_state;
+	bool power_off_pending;
 };
 
 bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -250,6 +251,9 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref network_obj = NULL;
 
+	if (service->power_off_pending)
+		return;
+
 	reply_obj = jobject_create();
 	network_obj = jobject_create();
 
@@ -273,6 +277,9 @@ void telephony_service_signal_strength_changed_notify(struct telephony_service *
 {
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref signal_obj = NULL;
+
+	if (service->power_off_pending)
+		return;
 
 	reply_obj = jobject_create();
 	signal_obj = jobject_create();
@@ -363,9 +370,12 @@ cleanup:
 int _service_power_set_finish(const struct telephony_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
+	struct telephony_service *service = req_data->user_data;
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = jobject_create();
+
+	service->power_off_pending = false;
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create((error == NULL)));
 
@@ -437,7 +447,10 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 			telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE, power ? "{\"state\":true}" : "{\"state\":false}");
 	}
 
+	service->power_off_pending = !power;
+
 	req_data = luna_service_req_data_new(handle, message);
+	req_data->user_data = service;
 
 	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
 		g_warning("Failed to process service powerSet request in our driver");
