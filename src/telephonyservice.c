@@ -257,6 +257,10 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 
 	jobject_put(network_obj, J_CSTR_TO_JVAL("state"),
 				jstring_create(telephony_network_state_to_string(net_status->state)));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("registration"),
+				jstring_create(telephony_network_registration_to_string(net_status->registration)));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventNetwork"), network_obj);
 
