@@ -221,7 +221,7 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jboolean_create(power));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jstring_create(power ? "on": "off"));
 
 	luna_service_post_subscription(service->private_service, "/", "powerQuery", reply_obj);
 
