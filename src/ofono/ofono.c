@@ -73,25 +73,24 @@ void set_powered_cb(gboolean result, gpointer user_data)
 		return;
 	}
 
-	/* When the modem was set to be unpowered we don't have to set it offline */
-	powered = ofono_modem_get_powered(od->modem);
-	if (powered) {
-		ofono_modem_set_online(od->modem, powered, set_online_cb, cbd);
-	}
-	else {
-		cb(NULL, cbd->data);
-		g_free(cbd);
-	}
+	ofono_modem_set_online(od->modem, powered, set_online_cb, cbd);
 }
 
 int ofono_power_set(struct telephony_service *service, bool power, telephony_result_cb cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct ofono_data *od = telephony_service_get_data(service);
+	bool powered = false;
 
 	cbd->user = od;
 
-	ofono_modem_set_powered(od->modem, power, set_powered_cb, cbd);
+	powered = ofono_modem_get_powered(od->modem);
+	if (!powered) {
+		ofono_modem_set_powered(od->modem, power, set_powered_cb, cbd);
+	}
+	else {
+		ofono_modem_set_online(od->modem, power, set_online_cb, cbd);
+	}
 
 	return 0;
 }
@@ -326,9 +325,8 @@ static void modem_online_changed_cb(void *data)
 	struct ofono_data *od = data;
 	bool powered = false, online = false;
 
-	powered = ofono_modem_get_powered(od->modem);
 	online = ofono_modem_get_online(od->modem);
-	telephony_service_power_status_notify(od->service, powered && online);
+	telephony_service_power_status_notify(od->service, online);
 }
 
 static void modem_interfaces_changed_cb(void *data)
