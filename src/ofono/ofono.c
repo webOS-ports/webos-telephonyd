@@ -306,7 +306,7 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 	struct telephony_network_status net_status;
 	int strength;
 
-	if (g_str_equal(name, "Status")) {
+	if (g_str_equal(name, "Status") || g_str_equal(name, "Name")) {
 		if (retrieve_network_status(od, &net_status) < 0)
 			return 0;
 
