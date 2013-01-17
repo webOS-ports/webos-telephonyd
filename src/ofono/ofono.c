@@ -150,7 +150,7 @@ static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
 	return sim_status;
 }
 
-static void sim_status_changed_cb(void *data)
+static void sim_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
@@ -300,68 +300,59 @@ int ofono_signal_strength_query(struct telephony_service *service, telephony_sig
 	return 0;
 }
 
-static void network_status_changed_cb(void *data)
+static void network_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
 	struct telephony_network_status net_status;
-
-	if (retrieve_network_status(od, &net_status) < 0)
-		return 0;
-
-	telephony_service_network_status_changed_notify(od->service, &net_status);
-}
-
-static void network_strength_changed_cb(void *data)
-{
-	struct ofono_data *od = data;
 	int strength;
 
-	strength = ofono_network_registration_get_strength(od->netreg);
-	telephony_service_signal_strength_changed_notify(od->service, convert_strength_to_bars(strength));
+	if (g_str_equal(name, "Status")) {
+		if (retrieve_network_status(od, &net_status) < 0)
+			return 0;
+
+		telephony_service_network_status_changed_notify(od->service, &net_status);
+	}
+	else if (g_str_equal(name, "Strength")) {
+		strength = ofono_network_registration_get_strength(od->netreg);
+		telephony_service_signal_strength_changed_notify(od->service, convert_strength_to_bars(strength));
+	}
 }
 
-static void modem_online_changed_cb(void *data)
+static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
 	bool powered = false, online = false;
-
-	online = ofono_modem_get_online(od->modem);
-	telephony_service_power_status_notify(od->service, online);
-}
-
-static void modem_interfaces_changed_cb(void *data)
-{
-	struct ofono_data *od = data;
 	gchar *path = ofono_modem_get_path(od->modem);
 
-	if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
-		od->sim = ofono_sim_manager_create(path);
-		ofono_sim_manager_register_status_changed_handler(od->sim, sim_status_changed_cb, od);
+	if (g_str_equal(name, "Online")) {
+		online = ofono_modem_get_online(od->modem);
+		telephony_service_power_status_notify(od->service, online);
 	}
-	else if (od->sim && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
-		ofono_sim_manager_free(od->sim);
-		od->sim = NULL;
-	}
+	else if (g_str_equal(name, "Interfaces")) {
+		if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+			od->sim = ofono_sim_manager_create(path);
+			ofono_sim_manager_register_prop_changed_handler(od->sim, sim_prop_changed_cb, od);
+		}
+		else if (od->sim && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+			ofono_sim_manager_free(od->sim);
+			od->sim = NULL;
+		}
 
-	if (!od->netreg && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
-		od->netreg = ofono_network_registration_create(path);
-		ofono_network_registration_register_status_changed_handler(od->netreg, network_status_changed_cb, od);
-		ofono_network_registration_register_strength_changed_handler(od->netreg, network_strength_changed_cb, od);
+		if (!od->netreg && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+			od->netreg = ofono_network_registration_create(path);
+			ofono_network_registration_register_prop_changed_handler(od->netreg, network_prop_changed_cb, od);
+		}
+		else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+			ofono_network_registration_free(od->netreg);
+			od->netreg = NULL;
+		}
 	}
-	else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
-		ofono_network_registration_free(od->netreg);
-		od->netreg = NULL;
-	}
-}
-
-static void modem_powered_changed_cb(void *data)
-{
-	struct ofono_data *od = data;
-	bool powered = ofono_modem_get_powered(od->modem);
-
-	if (od->initializing && powered) {
-		telephony_service_availability_changed_notify(od->service, true);
-		od->initializing = false;
+	else if (g_str_equal(name, "Powered")) {
+		powered = ofono_modem_get_powered(od->modem);
+		if (od->initializing && powered) {
+			telephony_service_availability_changed_notify(od->service, true);
+			od->initializing = false;
+		}
 	}
 }
 
@@ -379,9 +370,7 @@ static void modems_changed_cb(gpointer user_data)
 
 		data->initializing = true;
 
-		ofono_modem_set_powered_changed_handler(data->modem, modem_powered_changed_cb, data);
-		ofono_modem_set_online_changed_handler(data->modem, modem_online_changed_cb, data);
-		ofono_modem_set_interfaces_changed_handler(data->modem, modem_interfaces_changed_cb, data);
+		ofono_modem_register_prop_changed_handler(data->modem, modem_prop_changed_cb, data);
 	}
 	else {
 		if (data->sim)

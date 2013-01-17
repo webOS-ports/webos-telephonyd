@@ -42,10 +42,8 @@ struct ofono_network_registration {
 	gchar *operator_name;
 	unsigned int strength;
 	gchar *base_station;
-	ofono_property_changed_cb status_changed_cb;
-	void *status_changed_data;
-	ofono_property_changed_cb strength_changed_cb;
-	void *strength_changed_data;
+	ofono_property_changed_cb prop_changed_cb;
+	void *prop_changed_data;
 };
 
 static enum ofono_network_registration_mode parse_ofono_network_registration_mode(const gchar *mode)
@@ -102,11 +100,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 	if (g_str_equal(name, "Mode"))
 		netreg->mode = parse_ofono_network_registration_mode(g_variant_dup_string(value, NULL));
-	else if (g_str_equal(name, "Status")) {
+	else if (g_str_equal(name, "Status"))
 		netreg->status = parse_ofono_network_status(g_variant_dup_string(value, NULL));
-		if (netreg->status_changed_cb != NULL)
-			netreg->status_changed_cb(netreg->status_changed_data);
-	}
 	else if (g_str_equal(name, "LocationAreaCode"))
 		netreg->location_area_code = g_variant_get_uint16(value);
 	else if (g_str_equal(name, "CellId"))
@@ -119,13 +114,13 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		netreg->technology = parse_ofono_network_technology(g_variant_dup_string(value, NULL));
 	else if (g_str_equal(name, "Name"))
 		netreg->operator_name = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "Strength")) {
+	else if (g_str_equal(name, "Strength"))
 		netreg->strength = g_variant_get_byte(value);
-		if (netreg->strength_changed_cb != NULL)
-			netreg->strength_changed_cb(netreg->strength_changed_data);
-	}
 	else if (g_str_equal(name, "BaseStation"))
 		netreg->base_station = g_variant_dup_string(value, NULL);
+
+	if (netreg->prop_changed_cb)
+		netreg->prop_changed_cb(name, netreg->prop_changed_data);
 }
 
 struct ofono_base_funcs netreg_base_funcs = {
@@ -199,22 +194,13 @@ const gchar* ofono_network_registration_get_path(struct ofono_network_registrati
 	return netreg->path;
 }
 
-void ofono_network_registration_register_status_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data)
+void ofono_network_registration_register_prop_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data)
 {
 	if (!netreg)
 		return NULL;
 
-	netreg->status_changed_cb = cb;
-	netreg->status_changed_data = data;
-}
-
-void ofono_network_registration_register_strength_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data)
-{
-	if (!netreg)
-		return NULL;
-
-	netreg->strength_changed_cb = cb;
-	netreg->strength_changed_data = data;
+	netreg->prop_changed_cb = cb;
+	netreg->prop_changed_data = data;
 }
 
 enum ofono_network_registration_mode ofono_network_registration_get_mode(struct ofono_network_registration *netreg)

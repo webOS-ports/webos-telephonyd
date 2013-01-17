@@ -59,9 +59,7 @@ void ofono_modem_ref(struct ofono_modem *modem);
 void ofono_modem_unref(struct ofono_modem *modem);
 void ofono_modem_free(struct ofono_modem *modem);
 
-void ofono_modem_set_powered_changed_handler(struct ofono_modem *modem, ofono_property_changed_cb cb, void *data);
-void ofono_modem_set_interfaces_changed_handler(struct ofono_modem *modem, ofono_property_changed_cb cb, void *data);
-void ofono_modem_set_online_changed_handler(struct ofono_modem *modem, ofono_property_changed_cb cb, void *data);
+void ofono_modem_set_prop_changed_handler(struct ofono_modem *modem, ofono_property_changed_cb cb, void *data);
 
 const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 

@@ -53,8 +53,7 @@ void ofono_network_registration_ref(struct ofono_network_registration *sim);
 void ofono_network_registration_unref(struct ofono_network_registration *sim);
 void ofono_network_registration_free(struct ofono_network_registration *sim);
 
-void ofono_network_registration_register_status_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data);
-void ofono_network_registration_register_strength_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data);
+void ofono_network_registration_register_prop_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data);
 
 enum ofono_network_registration_mode ofono_network_registration_get_mode(struct ofono_network_registration *netreg);
 enum ofono_network_status ofono_network_registration_get_status(struct ofono_network_registration *netreg);
