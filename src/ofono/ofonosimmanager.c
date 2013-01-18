@@ -23,7 +23,6 @@
 #include <gio/gio.h>
 
 #include "utils.h"
-#include "ofonobase.h"
 #include "ofonosimmanager.h"
 #include "ofono-interface.h"
 
@@ -79,6 +78,48 @@ enum ofono_sim_pin parse_ofono_sim_pin_type(const gchar *pin)
 		return OFONO_SIM_PIN_TYPE_CORP_PUK;
 
 	return OFONO_SIM_PIN_TYPE_INVALID;
+}
+
+const gchar* ofono_sim_pin_to_string(enum ofono_sim_pin type)
+{
+	switch(type) {
+	case OFONO_SIM_PIN_TYPE_NONE:
+		return "none";
+	case OFONO_SIM_PIN_TYPE_PIN:
+		return "pin";
+	case OFONO_SIM_PIN_TYPE_PHONE:
+		return "phone";
+	case OFONO_SIM_PIN_TYPE_FIRST_PHONE:
+		return "firstphone";
+	case OFONO_SIM_PIN_TYPE_PIN2:
+		return "pin2";
+	case OFONO_SIM_PIN_TYPE_NETWORK:
+		return "network";
+	case OFONO_SIM_PIN_TYPE_NET_SUB:
+		return "netsub";
+	case OFONO_SIM_PIN_TYPE_SERVICE:
+		return "service";
+	case OFONO_SIM_PIN_TYPE_CORP:
+		return "corp";
+	case OFONO_SIM_PIN_TYPE_PUK:
+		return "puk";
+	case OFONO_SIM_PIN_TYPE_FIRST_PHONE_PUK:
+		return "phonepuk";
+	case OFONO_SIM_PIN_TYPE_PUK2:
+		return "puk2";
+	case OFONO_SIM_PIN_TYPE_NETWORK_PUK:
+		return "networkpuk";
+	case OFONO_SIM_PIN_TYPE_NET_SUB_PUK:
+		return "netsubpuk";
+	case OFONO_SIM_PIN_TYPE_SERVICE_PUK:
+		return "servicepuk";
+	case OFONO_SIM_PIN_TYPE_CORP_PUK:
+		return "corppuk";
+	default:
+		break;
+	}
+
+	return "invalid";
 }
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
@@ -206,6 +247,45 @@ void ofono_sim_manager_free(struct ofono_sim_manager *sim)
 		g_object_unref(sim->remote);
 
 	g_free(sim);
+}
+
+static void enter_pin_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_sim_manager *sim = cbd->user;
+	ofono_base_result_cb cb = cbd->cb;
+	struct ofono_error oerr;
+	bool success;
+	GError *error = NULL;
+
+	success = ofono_interface_sim_manager_call_enter_pin_finish(sim->remote, res, &error);
+	if (error) {
+		oerr.message = error->message;
+		cb(&oerr, cbd->data);
+		g_error_free(error);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+
+	if (!sim) {
+		cb(NULL, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = sim;
+
+	ofono_interface_sim_manager_call_enter_pin(sim->remote, ofono_sim_pin_to_string(type),
+											pin, NULL, enter_pin_cb, cbd);
 }
 
 const gchar* ofono_sim_manager_get_path(struct ofono_sim_manager *sim)

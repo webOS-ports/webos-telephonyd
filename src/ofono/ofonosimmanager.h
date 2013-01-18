@@ -19,7 +19,7 @@
 #ifndef OFONO_SIM_MANAGER_H_
 #define OFONO_SIM_MANAGER_H_
 
-#include <glib.h>
+#include "ofonobase.h"
 
 struct ofono_sim_manager;
 
@@ -44,14 +44,15 @@ enum ofono_sim_pin {
 	OFONO_SIM_PIN_TYPE_MAX
 };
 
-typedef void (*ofono_sim_manager_result_cb)(gboolean success, void *data);
-
 struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path);
 void ofono_sim_manager_ref(struct ofono_sim_manager *sim);
 void ofono_sim_manager_unref(struct ofono_sim_manager *sim);
 void ofono_sim_manager_free(struct ofono_sim_manager *sim);
 
 void ofono_sim_manager_register_prop_changed_handler(struct ofono_sim_manager *sim, ofono_property_changed_cb cb, void *data);
+
+void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data);
 
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);
 enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *sim);

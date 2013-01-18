@@ -218,6 +218,42 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	return 0;
 }
 
+void pin1_verify_cb(struct ofono_error *error, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = 1;
+		cb(&terr, cbd->data);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+int ofono_pin1_verify(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error err;
+	struct cb_data *cbd;
+
+	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&err, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+
+	ofono_sim_manager_enter_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, pin, pin1_verify_cb, cbd);
+
+	return 0;
+}
+
 static int retrieve_network_status(struct ofono_data *od, struct telephony_network_status *status)
 {
 	enum ofono_network_status net_status;
@@ -461,6 +497,7 @@ struct telephony_driver driver = {
 	.power_query =	ofono_power_query,
 	.sim_status_query = ofono_sim_status_query,
 	.pin1_status_query = ofono_pin1_status_query,
+	.pin1_verify = ofono_pin1_verify,
 	.network_status_query = ofono_network_status_query,
 	.signal_strength_query = ofono_signal_strength_query,
 };
