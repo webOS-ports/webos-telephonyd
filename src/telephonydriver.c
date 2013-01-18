@@ -83,6 +83,8 @@ const char* telephony_network_registration_to_string(enum telephony_network_regi
 			return "searching";
 		case TELEPHONY_NETWORK_REGISTRATION_DENIED:
 			return "denied";
+		case TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE:
+			return "noservice";
 		default:
 			break;
 	}

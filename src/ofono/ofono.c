@@ -258,18 +258,19 @@ int ofono_network_status_query(struct telephony_service *service, telephony_netw
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_network_status status;
 	struct telephony_error err;
-	enum ofono_network_status net_status;
 
-	if (!od->netreg) {
-		err.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
-		cb(&err, NULL, data);
-		return 0;
+	if (od->netreg) {
+		if (retrieve_network_status(od, &status) < 0) {
+			err.code = TELEPHONY_ERROR_INTERNAL;
+			cb(&err, NULL, data);
+			return 0;
+		}
 	}
-
-	if (retrieve_network_status(od, &status) < 0) {
-		err.code = TELEPHONY_ERROR_INTERNAL;
-		cb(&err, NULL, data);
-		return 0;
+	else {
+		status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
+		status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
+		status.name = NULL;
+		status.data_registered = false;
 	}
 
 	cb(NULL, &status, data);
@@ -286,16 +287,12 @@ int ofono_signal_strength_query(struct telephony_service *service, telephony_sig
 {
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_error err;
-	unsigned int rssi = 0;
+	unsigned int strength = 0;
 
-	if (!od->netreg) {
-		err.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
-		cb(&err, 0, data);
-		return;
-	}
+	if (od->netreg)
+		strength = convert_strength_to_bars(ofono_network_registration_get_strength(od->netreg));
 
-	rssi = ofono_network_registration_get_strength(od->netreg);
-	cb(NULL, convert_strength_to_bars(rssi), data);
+	cb(NULL, strength, data);
 
 	return 0;
 }
