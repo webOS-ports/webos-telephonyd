@@ -24,7 +24,20 @@
 
 struct ofono_base;
 
-typedef void (*ofono_base_result_cb)(gboolean success, void *data);
+enum ofono_error_type {
+	OFONO_ERROR_TYPE_NOT_IMPLEMENTED = 0,
+	OFONO_ERROR_TYPE_IN_PROGRESS,
+	OFONO_ERROR_TYPE_INVALID_ARGUMENTS,
+	OFONO_ERROR_TYPE_INVALID_FORMAT,
+	OFONO_ERROR_TYPE_FAILED
+};
+
+struct ofono_error {
+	enum ofono_error_type type;
+	const gchar *message;
+};
+
+typedef void (*ofono_base_result_cb)(struct ofono_error *error, void *data);
 typedef void (*ofono_property_changed_cb)(const gchar *name, void *data);
 
 struct ofono_base_funcs {

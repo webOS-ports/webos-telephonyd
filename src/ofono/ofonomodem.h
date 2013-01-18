@@ -23,11 +23,6 @@
 
 struct ofono_modem;
 
-typedef void (*ofono_modem_result_cb)(gboolean success, void *data);
-typedef void (*ofono_modem_powered_changed_cb)(bool powered, void *data);
-typedef void (*ofono_modem_property_changed_cb)(void *data);
-typedef void (*ofono_modem_online_changed_cb)(bool online, void *data);
-
 enum ofono_modem_interface {
 	OFONO_MODEM_INTERFACE_ASSISTET_SATELLITE_NAVIGATION = 0,
 	OFONO_MODEM_INTERFACE_AUDIO_SETTINGS,
@@ -63,9 +58,9 @@ void ofono_modem_set_prop_changed_handler(struct ofono_modem *modem, ofono_prope
 
 const gchar* ofono_modem_get_path(struct ofono_modem *modem);
 
-int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, void *data);
+int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_base_result_cb cb, void *data);
 bool ofono_modem_get_powered(struct ofono_modem *modem);
-int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_modem_result_cb cb, void *data);
+int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_base_result_cb cb, void *data);
 bool ofono_modem_get_online(struct ofono_modem *modem);
 const gchar* ofono_modem_get_serial(struct ofono_modem *modem);
 const gchar* ofono_modem_get_revision(struct ofono_modem *modem);

@@ -204,7 +204,7 @@ const gchar* ofono_modem_get_path(struct ofono_modem *modem)
 	return modem->path;
 }
 
-int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_modem_result_cb cb, gpointer user_data)
+int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_base_result_cb cb, gpointer user_data)
 {
 	GVariant *value = NULL;
 
@@ -223,7 +223,7 @@ int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_m
 	return -EINPROGRESS;
 }
 
-int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_modem_result_cb cb, gpointer user_data)
+int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_base_result_cb cb, gpointer user_data)
 {
 	GVariant *value = NULL;
 

@@ -39,14 +39,18 @@ static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpoi
 	struct ofono_base *base = cbd->user;
 	gboolean result = FALSE;
 	GError *error = NULL;
+	struct ofono_error oerr;
 
 	result = base->funcs->set_property_finish(base->remote, res, &error);
 	if (error) {
-		g_warning("Failed to set property: %s", error->message);
+		oerr.message = error->message;
+		cb(&oerr, cbd->data);
 		g_error_free(error);
 	}
+	else {
+		cb(NULL, cbd->data);
+	}
 
-	cb(result, cbd->data);
 	g_free(cbd);
 }
 

@@ -39,16 +39,16 @@ struct ofono_data {
 	guint service_watch;
 };
 
-void set_online_cb(gboolean result, gpointer user_data)
+void set_online_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
-	struct telephony_error error;
+	struct telephony_error terr;
 
-	if (!result) {
-		error.code = 1; /* FIXME */
-		cb(&error, cbd->data);
+	if (error) {
+		terr.code = 1; /* FIXME */
+		cb(&terr, cbd->data);
 		goto cleanup;
 	}
 
@@ -58,17 +58,17 @@ cleanup:
 	g_free(cbd);
 }
 
-void set_powered_cb(gboolean result, gpointer user_data)
+void set_powered_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
-	struct telephony_error error;
+	struct telephony_error terr;
 	bool powered;
 
-	if (!result) {
-		error.code = 1; /* FIXME */
-		cb(&error, cbd->data);
+	if (error) {
+		terr.code = 1; /* FIXME */
+		cb(&terr, cbd->data);
 		g_free(cbd);
 		return;
 	}
