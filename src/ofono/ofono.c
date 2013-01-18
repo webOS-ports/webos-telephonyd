@@ -202,6 +202,8 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 		else if (pin_required == OFONO_SIM_PIN_TYPE_PUK)
 			pin_status.puk_required = true;
 
+		pin_status.enabled = ofono_sim_manager_is_pin_locked(od->sim, OFONO_SIM_PIN_TYPE_PIN);
+
 		/* FIXME how can we map device_locked and perm_blocked to the ofono bits ? */
 
 		pin_status.pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PIN);

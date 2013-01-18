@@ -102,8 +102,8 @@ struct telephony_pin_status {
 	bool puk_required;
 	bool perm_blocked;
 	bool device_locked;
-	bool pin_attempts_remaining;
-	bool puk_attempts_remaining;
+	int pin_attempts_remaining;
+	int puk_attempts_remaining;
 };
 
 struct telephony_network {

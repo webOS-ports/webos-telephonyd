@@ -204,8 +204,9 @@ struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path)
 	}
 
 	sim->path = g_strdup(path);
-
 	sim->base = ofono_base_create(&sim_base_funcs, sim->remote, sim);
+	memset(sim->pin_retries, 0, sizeof(sim->pin_retries));
+	memset(sim->locked_pins, 0, sizeof(sim->locked_pins));
 
 	return sim;
 }
@@ -312,12 +313,20 @@ enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *
 	return sim->pin_required;
 }
 
-int ofono_sim_manager_get_pin_retries(struct ofono_sim_manager *sim, enum ofono_sim_pin pin)
+int ofono_sim_manager_get_pin_retries(struct ofono_sim_manager *sim, enum ofono_sim_pin pin_type)
 {
 	if (!sim)
 		return -1;
 
-	return sim->pin_retries[pin];
+	return sim->pin_retries[pin_type];
+}
+
+bool ofono_sim_manager_is_pin_locked(struct ofono_sim_manager *sim, enum ofono_sim_pin pin_type)
+{
+	if (!sim)
+		return false;
+
+	return sim->locked_pins[pin_type];
 }
 
 // vim:ts=4:sw=4:noexpandtab

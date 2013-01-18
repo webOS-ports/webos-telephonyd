@@ -57,6 +57,7 @@ void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_p
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);
 enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *sim);
 int ofono_sim_manager_get_pin_retries(struct ofono_sim_manager *sim, enum ofono_sim_pin pin_type);
+bool ofono_sim_manager_is_pin_locked(struct ofono_sim_manager *sim, enum ofono_sim_pin pin_type);
 
 #endif
 
