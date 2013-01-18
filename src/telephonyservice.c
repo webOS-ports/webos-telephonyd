@@ -40,6 +40,7 @@ bool _service_power_query_cb(LSHandle *lshandle, LSMessage *message, void *user_
 bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
@@ -51,6 +52,7 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "platformQuery", _service_platform_query_cb },
 	{ "simStatusQuery", _service_sim_status_query_cb },
 	{ "pin1StatusQuery", _service_pin1_status_query_cb },
+	{ "pin1Verify", _service_pin1_verify_cb },
 	{ "signalStrengthQuery", _service_signal_strength_query_cb },
 	{ "networkStatusQuery", _service_network_status_query_cb },
 	{ 0, 0 }

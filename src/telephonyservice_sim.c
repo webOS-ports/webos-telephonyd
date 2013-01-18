@@ -207,4 +207,80 @@ cleanup:
 	return true;
 }
 
+static int _service_pin1_verify_finish(const struct telephony_error *error, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Send the PIN1 to the SIM card for verification
+ **/
+bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref pin_obj = NULL;
+	const char *payload;
+	raw_buffer pin_buf;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->pin1_verify) {
+		g_warning("No implementation available for service pin1Verify API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("pin"), &pin_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	pin_buf = jstring_get(pin_obj);
+
+	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+
+	if (service->driver->pin1_verify(service, pin_buf.m_str, _service_pin1_verify_finish, req_data) < 0) {
+		g_warning("Failed to process service pin1Verify request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed send PIN1 for verification to the SIM card");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
 // vim:ts=4:sw=4:noexpandtab
