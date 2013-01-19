@@ -48,6 +48,35 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 	j_release(&reply_obj);
 }
 
+static void create_pin1_status_response(jvalue_ref reply_obj, struct telephony_pin_status *pin_status)
+{
+	jvalue_ref extended_obj;
+
+	extended_obj = jobject_create();
+
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(pin_status->enabled));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("pinrequired"), jboolean_create(pin_status->required));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("pukrequired"), jboolean_create(pin_status->puk_required));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("pinpermblocked"), jboolean_create(pin_status->perm_blocked));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("devicelocked"), jboolean_create(pin_status->device_locked));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("pinAttemptsRemaining"), jnumber_create_i32(pin_status->pin_attempts_remaining));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("pukAttemptsRemaining"), jnumber_create_i32(pin_status->puk_attempts_remaining));
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+}
+
+void telephony_service_pin1_status_changed_notify(struct telephony_service *service, struct telephony_pin_status *pin_status)
+{
+	jvalue_ref reply_obj = NULL;
+
+	reply_obj = jobject_create();
+	create_pin1_status_response(reply_obj, pin_status);
+
+	luna_service_post_subscription(service->private_service, "/", "pin1StatusQuery", reply_obj);
+
+	j_release(&reply_obj);
+}
+
 static int _service_sim_status_query_finish(const struct telephony_error *error, enum telephony_sim_status sim_status, void *data)
 {
 	struct luna_service_req_data *req_data = data;
@@ -143,25 +172,14 @@ static int _service_pin1_status_query_finish(const struct telephony_error *error
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(pin_status->enabled));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("pinrequired"), jboolean_create(pin_status->required));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("pukrequired"), jboolean_create(pin_status->puk_required));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("pinpermblocked"), jboolean_create(pin_status->perm_blocked));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("devicelocked"), jboolean_create(pin_status->device_locked));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("pinAttemptsRemaining"), jnumber_create_i32(pin_status->pin_attempts_remaining));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("pukAttemptsRemaining"), jnumber_create_i32(pin_status->puk_attempts_remaining));
-
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+		create_pin1_status_response(reply_obj, pin_status);
+		if (!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+			luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		}
 	}
 	else {
 		/* FIXME better error message */
 		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
-		goto cleanup;
-	}
-
-	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
-		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
-		goto cleanup;
 	}
 
 cleanup:

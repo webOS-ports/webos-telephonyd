@@ -150,16 +150,38 @@ static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
 	return sim_status;
 }
 
+static void determine_pin1_status(struct ofono_data *od, struct telephony_pin_status *pin_status)
+{
+	enum ofono_sim_pin pin_required;
+
+	pin_required = ofono_sim_manager_get_pin_required(od->sim);
+	if (pin_required == OFONO_SIM_PIN_TYPE_PIN)
+		pin_status->required = true;
+	else if (pin_required == OFONO_SIM_PIN_TYPE_PUK)
+		pin_status->puk_required = true;
+
+	pin_status->enabled = ofono_sim_manager_is_pin_locked(od->sim, OFONO_SIM_PIN_TYPE_PIN);
+
+	/* FIXME how can we map device_locked and perm_blocked to the ofono bits ? */
+
+	pin_status->pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PIN);
+	pin_status->puk_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PUK);
+}
+
 static void sim_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
+	struct telephony_pin_status pin_status;
 
 	sim_status = determine_sim_status(od);
 
 	if (sim_status != od->sim_status) {
 		od->sim_status = sim_status;
 		telephony_service_sim_status_notify(od->service, sim_status);
+
+		determine_pin1_status(od, &pin_status);
+		telephony_service_pin1_status_changed_notify(od->service, &pin_status);
 	}
 }
 
@@ -196,19 +218,7 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	memset(&pin_status, 0, sizeof(pin_status));
 
 	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
-		pin_required = ofono_sim_manager_get_pin_required(od->sim);
-		if (pin_required == OFONO_SIM_PIN_TYPE_PIN)
-			pin_status.required = true;
-		else if (pin_required == OFONO_SIM_PIN_TYPE_PUK)
-			pin_status.puk_required = true;
-
-		pin_status.enabled = ofono_sim_manager_is_pin_locked(od->sim, OFONO_SIM_PIN_TYPE_PIN);
-
-		/* FIXME how can we map device_locked and perm_blocked to the ofono bits ? */
-
-		pin_status.pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PIN);
-		pin_status.puk_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PUK);
-
+		determine_pin1_status(od, &pin_status);
 		cb(NULL, &pin_status, data);
 	}
 	else {
