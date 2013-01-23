@@ -136,15 +136,11 @@ struct telephony_driver {
 	/* SIM */
 	int (*sim_status_query)(struct telephony_service *service, telephony_sim_status_query_cb, void *data);
 	int (*pin1_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
-	int (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
 	int (*pin1_verify)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
 	int (*pin1_change)(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
 	int (*pin1_enable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
 	int (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	int (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *pin, void *data);
-	int (*pin2_verify)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	int (*pin2_change)(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
-	int (*pin2_unblock)(struct telephony_service *service, const gchar *puk, const gchar *pin, void *data);
+	int (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
 
 	/* network */
 	int (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);

@@ -29,6 +29,8 @@ struct telephony_service {
 	bool power_off_pending;
 };
 
+int telephonyservice_common_finish(const struct telephony_error *error, void *data);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab

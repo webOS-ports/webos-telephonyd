@@ -43,6 +43,10 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -53,6 +57,10 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "simStatusQuery", _service_sim_status_query_cb },
 	{ "pin1StatusQuery", _service_pin1_status_query_cb },
 	{ "pin1Verify", _service_pin1_verify_cb },
+	{ "pin1Enable", _service_pin1_enable_cb },
+	{ "pin1Disable", _service_pin1_disable_cb },
+	{ "pin1Change", _service_pin1_change_cb },
+	{ "pin1Unblock", _service_pin1_unblock_cb },
 	{ "signalStrengthQuery", _service_signal_strength_query_cb },
 	{ "networkStatusQuery", _service_network_status_query_cb },
 	{ 0, 0 }
@@ -207,6 +215,27 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 		g_warning("Telephony driver failed to initialize");
 		service->driver = NULL;
 	}
+}
+
+int telephonyservice_common_finish(const struct telephony_error *error, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
 }
 
 /**
