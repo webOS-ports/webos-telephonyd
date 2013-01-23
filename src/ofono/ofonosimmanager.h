@@ -53,6 +53,14 @@ void ofono_sim_manager_register_prop_changed_handler(struct ofono_sim_manager *s
 
 void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
 						ofono_base_result_cb cb, void *data);
+void ofono_sim_manager_lock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data);
+void ofono_sim_manager_unlock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data);
+void ofono_sim_manager_change_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *old_pin,
+						const gchar *new_pin, ofono_base_result_cb cb, void *data);
+void ofono_sim_manager_unblock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *puk,
+						const gchar *new_pin, ofono_base_result_cb cb, void *data);
 
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);
 enum ofono_sim_pin ofono_sim_manager_get_pin_required(struct ofono_sim_manager *sim);

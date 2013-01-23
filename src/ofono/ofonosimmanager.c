@@ -42,6 +42,8 @@ struct ofono_sim_manager {
 	void *prop_changed_data;
 };
 
+typedef gboolean (*_common_async_finish_cb)(void *proxy, GAsyncResult *res, GError **error);
+
 enum ofono_sim_pin parse_ofono_sim_pin_type(const gchar *pin)
 {
 	if (g_str_equal(pin, "none"))
@@ -250,16 +252,18 @@ void ofono_sim_manager_free(struct ofono_sim_manager *sim)
 	g_free(sim);
 }
 
-static void enter_pin_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+static void common_pin_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_sim_manager *sim = cbd->user;
+	struct cb_data *cbd2 = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
+	struct ofono_sim_manager *sim = cbd2->data;
+	_common_async_finish_cb finish_cb = cbd2->cb;
 	struct ofono_error oerr;
-	bool success;
+	gboolean success;
 	GError *error = NULL;
 
-	success = ofono_interface_sim_manager_call_enter_pin_finish(sim->remote, res, &error);
+	success = finish_cb(sim->remote, res, &error);
 	if (error) {
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
@@ -270,9 +274,27 @@ static void enter_pin_cb(GDBusConnection *connection, GAsyncResult *res, gpointe
 	}
 
 	g_free(cbd);
+	g_free(cbd2);
 }
 
 void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd, *cbd2;
+
+	if (!sim) {
+		cb(NULL, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = cb_data_new(ofono_interface_sim_manager_call_enter_pin_finish, sim);
+
+	ofono_interface_sim_manager_call_enter_pin(sim->remote, ofono_sim_pin_to_string(type),
+											pin, NULL, common_pin_cb, cbd);
+}
+
+void ofono_sim_manager_lock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
 						ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
@@ -283,10 +305,62 @@ void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_p
 	}
 
 	cbd = cb_data_new(cb, data);
-	cbd->user = sim;
+	cbd->user = cb_data_new(ofono_interface_sim_manager_call_lock_pin_finish, sim);
 
-	ofono_interface_sim_manager_call_enter_pin(sim->remote, ofono_sim_pin_to_string(type),
-											pin, NULL, enter_pin_cb, cbd);
+	ofono_interface_sim_manager_call_lock_pin(sim->remote, ofono_sim_pin_to_string(type),
+											  pin, NULL, common_pin_cb, cbd);
+}
+
+void ofono_sim_manager_unlock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
+						ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+
+	if (!sim) {
+		cb(NULL, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = cb_data_new(ofono_interface_sim_manager_call_unlock_pin_finish, sim);
+
+	ofono_interface_sim_manager_call_unlock_pin(sim->remote, ofono_sim_pin_to_string(type),
+											  pin, NULL, common_pin_cb, cbd);
+
+}
+
+void ofono_sim_manager_change_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *old_pin,
+						const gchar *new_pin, ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+
+	if (!sim) {
+		cb(NULL, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = cb_data_new(ofono_interface_sim_manager_call_change_pin_finish, sim);
+
+	ofono_interface_sim_manager_call_change_pin(sim->remote, ofono_sim_pin_to_string(type),
+											old_pin, new_pin, NULL, common_pin_cb, cbd);
+}
+
+void ofono_sim_manager_reset_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *puk,
+						const gchar *new_pin, ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+
+	if (!sim) {
+		cb(NULL, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = cb_data_new(ofono_interface_sim_manager_call_reset_pin_finish, sim);
+
+	ofono_interface_sim_manager_call_reset_pin(sim->remote, ofono_sim_pin_to_string(type),
+											puk, new_pin, NULL, common_pin_cb, cbd);
 }
 
 const gchar* ofono_sim_manager_get_path(struct ofono_sim_manager *sim)
