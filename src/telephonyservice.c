@@ -41,12 +41,17 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_data);
-bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
-bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -63,6 +68,11 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "pin1Unblock", _service_pin1_unblock_cb },
 	{ "signalStrengthQuery", _service_signal_strength_query_cb },
 	{ "networkStatusQuery", _service_network_status_query_cb },
+	{ "networkListQuery", _service_network_list_query_cb },
+	{ "networkListQueryCancel", _service_network_list_query_cancel_cb },
+	{ "netorkIdQuery", _service_network_id_query_cb },
+	{ "networkSelectionModeQuery", _service_network_selection_mode_query_cb },
+	{ "networkSet", _service_network_set_cb },
 	{ 0, 0 }
 };
 
@@ -152,6 +162,8 @@ struct telephony_service* telephony_service_create(LSPalmService *palm_service)
 	service->palm_service = palm_service;
 	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
 	service->initialized = false;
+	service->power_off_pending = false;
+	service->network_status_query_pending = false;
 
 	if (initialize_luna_service(service) < 0)
 		g_critical("Failed to initialize luna service. Wront service configuration?");

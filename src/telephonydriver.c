@@ -92,4 +92,22 @@ const char* telephony_network_registration_to_string(enum telephony_network_regi
 	return "unknown";
 }
 
+const char* telephony_radio_access_mode_to_string(enum telephony_radio_access_mode mode)
+{
+	switch (mode) {
+		case TELEPHONY_RADIO_ACCESS_MODE_ANY:
+			return "any";
+		case TELEPHONY_RADIO_ACCESS_MODE_GSM:
+			return "gsm";
+		case TELEPHONY_RADIO_ACCESS_MODE_UMTS:
+			return "umts";
+		case TELEPHONY_RADIO_ACCESS_MODE_LTE:
+			return "lte";
+		default:
+			break;
+	}
+
+	return "unknown";
+}
+
 // vim:ts=4:sw=4:noexpandtab

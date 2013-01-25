@@ -21,7 +21,7 @@
 
 struct telephony_service;
 
-const struct telephony_error {
+struct telephony_error {
 	int code;
 };
 
@@ -76,6 +76,7 @@ const char* telephony_platform_type_to_string(enum telephony_platform_type type)
 const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status);
 const char* telephony_network_state_to_string(enum telephony_network_state state);
 const char* telephony_network_registration_to_string(enum telephony_network_registration netreg);
+const char* telephony_radio_access_mode_to_string(enum telephony_radio_access_mode mode);
 
 struct telephony_network_status {
 	enum telephony_network_state state;
@@ -122,6 +123,8 @@ typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* 
 typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status *status, void *data);
 typedef int (*telephony_network_list_query_cb)(const struct telephony_error* error, GList *networks, void *data);
 typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);
+typedef int (*telephony_network_id_query_cb)(const struct telephony_error *error, const char *id, void *data);
+typedef int (*telephony_network_selection_mode_query_cb)(const struct telephony_error *error, bool automatic, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
@@ -146,6 +149,10 @@ struct telephony_driver {
 	int (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
 	int (*signal_strength_query)(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data);
 	int (*network_list_query)(struct telephony_service *service, telephony_network_list_query_cb cb, void *data);
+	int (*network_list_query_cancel)(struct telephony_service *service, telephony_result_cb cb, void *data);
+	int (*network_set)(struct telephony_service *service, bool automatic, const char *id, telephony_result_cb cb, void *data);
+	int (*network_id_query)(struct telephony_service *service, telephony_network_id_query_cb cb, void *data);
+	int (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
 };
 
 #endif

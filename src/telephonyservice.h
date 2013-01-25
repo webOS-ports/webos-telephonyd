@@ -20,8 +20,7 @@
 #define TELEPHONY_SERVICE_H_
 
 #include <luna-service2/lunaservice.h>
-
-struct telephony_driver;
+#include "telephonydriver.h"
 
 struct telephony_service* telephony_service_create(LSPalmService *palm_service);
 void telephony_service_free(struct telephony_service *service);

@@ -27,6 +27,7 @@ struct telephony_service {
 	bool initialized;
 	bool initial_power_state;
 	bool power_off_pending;
+	bool network_status_query_pending;
 };
 
 int telephonyservice_common_finish(const struct telephony_error *error, void *data);
