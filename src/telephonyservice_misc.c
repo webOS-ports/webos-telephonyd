@@ -35,6 +35,8 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 {
 	jvalue_ref reply_obj = NULL;
 
+	service->powered = power;
+
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jstring_create(power ? "on": "off"));

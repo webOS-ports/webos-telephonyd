@@ -163,7 +163,9 @@ struct telephony_service* telephony_service_create(LSPalmService *palm_service)
 	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
 	service->initialized = false;
 	service->power_off_pending = false;
+	service->powered = false;
 	service->network_status_query_pending = false;
+	service->network_registered = false;
 
 	if (initialize_luna_service(service) < 0)
 		g_critical("Failed to initialize luna service. Wront service configuration?");
@@ -259,13 +261,29 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
 	struct telephony_service *service = user_data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
 
+	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("radioConnected"), jboolean_create(service->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("power"), jboolean_create(service->powered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("ready"), jboolean_create(service->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("networkRegistered"), jboolean_create(service->network_registered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(service->data_registered));
+
+	/* FIXME check in which situations the three fields below are set and updated */
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("emergency"), jboolean_create(false));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("security"), jboolean_create(false));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("securityLocked"), jboolean_create(false));
+
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
 
 	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
 		luna_service_message_reply_error_internal(handle, message);

@@ -69,6 +69,8 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
 
+	service->network_registered = (net_status->state == TELEPHONY_NETWORK_STATE_SERVICE);
+
 	jobject_put(network_obj, J_CSTR_TO_JVAL("state"),
 				jstring_create(telephony_network_state_to_string(net_status->state)));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("registration"),
