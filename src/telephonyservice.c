@@ -395,36 +395,61 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 	struct telephony_service *service = user_data;
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref events_obj = NULL;
+	jvalue_ref reply_obj = NULL;
 	bool result = false;
 	LSError lserror;
 	char *payload;
+	bool subscribed = false;
 
 	if (!service->initialized)
 		goto cleanup;
 
 	payload = LSMessageGetPayload(message);
 	parsed_obj = luna_service_message_parse_and_validate(payload);
-	if (jis_null(parsed_obj))
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
+	}
 
-	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("events"), &events_obj))
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("events"), &events_obj)) {
+		luna_service_message_reply_error_invalid_params(handle, message);
 		goto cleanup;
+	}
 
 	if (jstring_equal2(events_obj, J_CSTR_TO_BUF("network"))) {
 		result = LSSubscriptionAdd(handle, "/networkStatusQuery", message, &lserror);
 		if (!result) {
 			LSErrorPrint(&lserror, stderr);
 			LSErrorFree(&lserror);
+
+			luna_service_message_reply_error_internal(handle, message);
 			goto cleanup;
 		}
+
+		subscribed = true;
 	}
 	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signal"))) {
 		result = LSSubscriptionAdd(handle, "/signalStrengthQuery", message, &lserror);
 		if (!result) {
 			LSErrorPrint(&lserror, stderr);
 			LSErrorFree(&lserror);
+
+			luna_service_message_reply_error_internal(handle, message);
 			goto cleanup;
 		}
+
+		subscribed = true;
+	}
+
+	reply_obj = jobject_create();
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if (!luna_service_message_validate_and_send(handle, message, reply_obj)) {
+		luna_service_message_reply_error_internal(handle, message);
+		goto cleanup;
 	}
 
 cleanup:
