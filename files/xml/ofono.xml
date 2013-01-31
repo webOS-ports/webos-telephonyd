@@ -73,11 +73,21 @@
 			<arg type="s" name="property" direction="in"/>
 			<arg type="v" name="value" direction="in"/>
 		</method>
-		<method name="GetOperator">
+		<method name="GetOperators">
 			<arg type="a(oa{sv})" direction="out"/>
 		</method>
 		<method name="Scan">
 			<arg type="a(oa{sv})" direction="out"/>
+		</method>
+		<method name="Register"/>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
+	<interface name="org.ofono.NetworkOperator">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
 		</method>
 		<method name="Register"/>
 		<signal name="PropertyChanged">

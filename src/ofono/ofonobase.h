@@ -51,6 +51,9 @@ struct ofono_base_funcs {
 		GAsyncReadyCallback callback, gpointer user_data);
 	gboolean (*get_properties_finish)(void *proxy, GVariant **out_unnamed_arg0,
 		GAsyncResult *res, GError **error);
+
+	void (*get_properties_sync)(void *proxy, GVariant **result,
+								GCancellable *cancellable, GError **error);
 };
 
 struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remote, void *user_data);

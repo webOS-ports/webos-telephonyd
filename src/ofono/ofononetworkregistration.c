@@ -25,6 +25,7 @@
 #include "utils.h"
 #include "ofonobase.h"
 #include "ofononetworkregistration.h"
+#include "ofononetworkoperator.h"
 #include "ofono-interface.h"
 
 struct ofono_network_registration {
@@ -45,6 +46,8 @@ struct ofono_network_registration {
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
+
+typedef gboolean (*_common_operators_finish_cb)(void *proxy, GVariant *result, GAsyncResult *res, GError **error);
 
 static enum ofono_network_registration_mode parse_ofono_network_registration_mode(const gchar *mode)
 {
@@ -197,10 +200,119 @@ const gchar* ofono_network_registration_get_path(struct ofono_network_registrati
 void ofono_network_registration_register_prop_changed_handler(struct ofono_network_registration *netreg, ofono_property_changed_cb cb, void *data)
 {
 	if (!netreg)
-		return NULL;
+		return;
 
 	netreg->prop_changed_cb = cb;
 	netreg->prop_changed_data = data;
+}
+
+static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_network_registration *netreg = cbd->user;
+	ofono_base_result_cb cb = cbd->cb;
+	struct ofono_error oerr;
+	gboolean success;
+	GError *error = NULL;
+
+	success = ofono_interface_network_registration_call_register_finish(netreg->remote, res, &error);
+	if (error) {
+		oerr.message = error->message;
+		cb(&oerr, cbd->data);
+		g_error_free(error);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+void ofono_network_registration_register(struct ofono_network_registration *netreg, ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+
+	if (!netreg)
+		return;
+
+	cbd = cb_data_new(cb, data);
+	cbd->user = netreg;
+
+	ofono_interface_network_registration_call_register(netreg->remote, NULL, register_cb, cbd);
+}
+
+static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct cb_data *cbd2 = cbd->user;
+	struct ofono_network_registration *netreg = cbd2->user;
+	ofono_network_registration_operator_list_cb cb = cbd->cb;
+	_common_operators_finish_cb finish_cb = cbd2->cb;
+	struct ofono_error oerr;
+	gboolean success;
+	GError *error = NULL;
+	GVariant *result, *iter;
+	int n;
+	const char *path = NULL;
+	struct ofono_network_operator *network_operator;
+	GList *operators;
+
+	success = finish_cb(netreg->remote, &result, res, &error);
+	if (error) {
+		oerr.message = error->message;
+		cb(&oerr, NULL, cbd->data);
+		g_error_free(error);
+	}
+	else {
+		for (n = 0; n < g_variant_n_children(result); n++) {
+			iter = g_variant_get_child_value(result, n);
+			path = g_variant_dup_string(g_variant_get_child_value(iter, 0), NULL);
+
+			network_operator = ofono_network_operator_create(path);
+
+			operators = g_list_append(operators, network_operator);
+		}
+
+		cb(NULL, operators, cbd->data);
+		g_list_free_full(operators, ofono_network_operator_free);
+	}
+
+	g_free(cbd);
+	g_free(cbd2);
+}
+
+void ofono_network_registration_scan(struct ofono_network_registration *netreg,
+			ofono_network_registration_operator_list_cb cb, void *data)
+{
+	struct cb_data *cbd;
+	struct cb_data *cbd2;
+
+	if (!netreg)
+		return;
+
+	cbd = cb_data_new(cb, data);
+	cbd2 = cb_data_new(ofono_interface_network_registration_call_scan_finish, NULL);
+	cbd2->user = netreg;
+	cbd->user = cbd2;
+
+	ofono_interface_network_registration_call_scan(netreg->remote, NULL, get_operators_cb, cbd);
+}
+
+void ofono_network_registration_get_operators(struct ofono_network_registration *netreg,
+			ofono_network_registration_operator_list_cb cb, void *data)
+{
+	struct cb_data *cbd;
+	struct cb_data *cbd2;
+
+	if (!netreg)
+		return;
+
+	cbd = cb_data_new(cb, data);
+	cbd2 = cb_data_new(ofono_interface_network_registration_call_get_operators_finish, NULL);
+	cbd2->user = netreg;
+	cbd->user = cbd2;
+
+	ofono_interface_network_registration_call_get_operators(netreg->remote, NULL, get_operators_cb, cbd);
 }
 
 enum ofono_network_registration_mode ofono_network_registration_get_mode(struct ofono_network_registration *netreg)

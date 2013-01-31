@@ -63,15 +63,24 @@ void ofono_base_set_property(struct ofono_base *base, const gchar *name, const G
 	base->funcs->set_property(base->remote, name, value, NULL, set_property_cb, cbd);
 }
 
+static void handle_get_properties_result(struct ofono_base *base, GVariant *properties)
+{
+	gchar *property_name = NULL;
+	GVariant *property_value = NULL;
+	GVariantIter iter;
+
+	g_variant_iter_init(&iter, properties);
+	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
+		base->funcs->update_property(property_name, property_value, base->user_data);
+	}
+}
+
 static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
 {
 	struct ofono_base *base = user_data;
 	GError *error = NULL;
 	gboolean ret = FALSE;
 	GVariant *properties = NULL;
-	gchar *property_name = NULL;
-	GVariant *property_value = NULL;
-	GVariantIter iter;
 
 	ret = base->funcs->get_properties_finish(base->remote, &properties, res, &error);
 	if (error) {
@@ -80,10 +89,7 @@ static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gp
 		return;
 	}
 
-	g_variant_iter_init(&iter, properties);
-	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
-		base->funcs->update_property(property_name, property_value, base->user_data);
-	}
+	handle_get_properties_result(base, properties);
 }
 
 static void property_changed_cb(void *object, const gchar *name, GVariant *value, gpointer *user_data)
@@ -97,6 +103,7 @@ struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remot
 {
 	struct ofono_base *base;
 	GError *error = NULL;
+	GVariant *properties;
 
 	base = g_try_new0(struct ofono_base, 1);
 	if (!base)
@@ -109,7 +116,19 @@ struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remot
 	g_signal_connect(G_OBJECT(base->remote), "property-changed",
 		G_CALLBACK(property_changed_cb), base);
 
-	base->funcs->get_properties(base->remote, NULL, get_properties_cb, base);
+	if (base->funcs->get_properties) {
+		base->funcs->get_properties(base->remote, NULL, get_properties_cb, base);
+	}
+	else {
+		base->funcs->get_properties_sync(base->remote, &properties, NULL, &error);
+		if (error) {
+			g_warning("Failed to retrieve properties from base: %s", error->message);
+			g_error_free(error);
+		}
+		else {
+			handle_get_properties_result(base, properties);
+		}
+	}
 
 	return base;
 }
