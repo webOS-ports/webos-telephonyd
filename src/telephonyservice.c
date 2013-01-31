@@ -52,6 +52,8 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -73,6 +75,8 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "netorkIdQuery", _service_network_id_query_cb },
 	{ "networkSelectionModeQuery", _service_network_selection_mode_query_cb },
 	{ "networkSet", _service_network_set_cb },
+	{ "deviceLockQuery", _service_device_lock_query_cb },
+	{ "chargeSourceQuery", _service_charge_source_query_cb },
 	{ 0, 0 }
 };
 
@@ -284,6 +288,93 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
+		luna_service_message_reply_error_internal(handle, message);
+
+	j_release(reply_obj);
+
+	return true;
+}
+
+/**
+ * @brief Query the lock status of the device
+ *
+ * JSON format:
+ *  request:
+ *    { }
+ *  response:
+ *    {
+ *      "returnValue": <boolean>,
+ *      "errorCode": <integer>,
+ *      "errorString": <string>,
+ *      "extended": <object>,
+ *      "subscribed": <boolean>
+ *    }
+ */
+
+bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+
+	if (!service->powered) {
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(1));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("Phone Radio is off"));
+	}
+	else {
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+	}
+
+	/* FIXME we don't really now which properties are part of the extended object */
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
+		luna_service_message_reply_error_internal(handle, message);
+
+	j_release(reply_obj);
+
+	return true;
+}
+
+/**
+ * @brief Query the charge source of the device
+ *
+ * JSON format:
+ *  request:
+ *    { }
+ *  response:
+ *    {
+ *      "returnValue": <boolean>,
+ *      "errorCode": <integer>,
+ *      "errorString": <string>
+ *    }
+ */
+
+bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref reply_obj = NULL;
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+
+	/* FIXME tested implementation in legacy webOS always returns the following error message */
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(103));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("Not supported by this network type"));
 
 	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
 		luna_service_message_reply_error_internal(handle, message);
