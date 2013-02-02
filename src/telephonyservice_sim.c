@@ -48,7 +48,7 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 	j_release(&reply_obj);
 }
 
-static void create_pin1_status_response(jvalue_ref reply_obj, struct telephony_pin_status *pin_status)
+static void create_pin_status_response(jvalue_ref reply_obj, struct telephony_pin_status *pin_status)
 {
 	jvalue_ref extended_obj;
 
@@ -70,7 +70,7 @@ void telephony_service_pin1_status_changed_notify(struct telephony_service *serv
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = jobject_create();
-	create_pin1_status_response(reply_obj, pin_status);
+	create_pin_status_response(reply_obj, pin_status);
 
 	luna_service_post_subscription(service->private_service, "/", "pin1StatusQuery", reply_obj);
 
@@ -154,7 +154,7 @@ cleanup:
 	return true;
 }
 
-static int _service_pin1_status_query_finish(const struct telephony_error *error, struct telephony_pin_status* pin_status, void *data)
+static int _service_pin_status_query_finish(const struct telephony_error *error, struct telephony_pin_status* pin_status, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
@@ -172,7 +172,7 @@ static int _service_pin1_status_query_finish(const struct telephony_error *error
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
-		create_pin1_status_response(reply_obj, pin_status);
+		create_pin_status_response(reply_obj, pin_status);
 		if (!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 			luna_service_message_reply_error_internal(req_data->handle, req_data->message);
 		}
@@ -202,7 +202,7 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
-		g_warning("No implementation available for service simStatusQuery API method");
+		g_warning("No implementation available for service pin1StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
 	}
@@ -210,9 +210,9 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->pin1_status_query(service, _service_pin1_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service simStatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query sim card status");
+	if (service->driver->pin1_status_query(service, _service_pin_status_query_finish, req_data) < 0) {
+		g_warning("Failed to process service pin1StatusQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query PIN1 status");
 		goto cleanup;
 	}
 
@@ -224,6 +224,44 @@ cleanup:
 
 	return true;
 }
+
+/**
+ * @brief Query the status of the second SIM pin
+ **/
+bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->pin1_status_query) {
+		g_warning("No implementation available for service pin2StatusQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+
+	if (service->driver->pin2_status_query(service, _service_pin_status_query_finish, req_data) < 0) {
+		g_warning("Failed to process service pin2StatusQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query PIN1 status");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
 
 /**
  * @brief Send the PIN1 to the SIM card for verification

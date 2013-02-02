@@ -144,6 +144,7 @@ struct telephony_driver {
 	int (*pin1_enable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
 	int (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
 	int (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
+	int (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
 
 	/* network */
 	int (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
