@@ -18,6 +18,7 @@
 
 #include <glib.h>
 #include <errno.h>
+#include <string.h>
 
 #include "telephonyservice.h"
 #include "telephonydriver.h"
@@ -150,22 +151,23 @@ static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
 	return sim_status;
 }
 
-static void determine_pin1_status(struct ofono_data *od, struct telephony_pin_status *pin_status)
+static void determine_pin_status(struct ofono_data *od, struct telephony_pin_status *pin_status,
+								  enum ofono_sim_pin pin_type, enum ofono_sim_pin puk_type)
 {
 	enum ofono_sim_pin pin_required;
 
 	pin_required = ofono_sim_manager_get_pin_required(od->sim);
-	if (pin_required == OFONO_SIM_PIN_TYPE_PIN)
+	if (pin_required == pin_type)
 		pin_status->required = true;
-	else if (pin_required == OFONO_SIM_PIN_TYPE_PUK)
+	else if (pin_required == puk_type)
 		pin_status->puk_required = true;
 
-	pin_status->enabled = ofono_sim_manager_is_pin_locked(od->sim, OFONO_SIM_PIN_TYPE_PIN);
+	pin_status->enabled = ofono_sim_manager_is_pin_locked(od->sim, pin_type);
 
 	/* FIXME how can we map device_locked and perm_blocked to the ofono bits ? */
 
-	pin_status->pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PIN);
-	pin_status->puk_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, OFONO_SIM_PIN_TYPE_PUK);
+	pin_status->pin_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, pin_type);
+	pin_status->puk_attempts_remaining = ofono_sim_manager_get_pin_retries(od->sim, puk_type);
 }
 
 static void sim_prop_changed_cb(const gchar *name, void *data)
@@ -180,7 +182,7 @@ static void sim_prop_changed_cb(const gchar *name, void *data)
 		od->sim_status = sim_status;
 		telephony_service_sim_status_notify(od->service, sim_status);
 
-		determine_pin1_status(od, &pin_status);
+		determine_pin_status(od, &pin_status, OFONO_SIM_PIN_TYPE_PIN, OFONO_SIM_PIN_TYPE_PUK);
 		telephony_service_pin1_status_changed_notify(od->service, &pin_status);
 	}
 }
@@ -207,18 +209,44 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_pin_status pin_status;
 	struct telephony_error err;
-	enum ofono_sim_pin pin_required;
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
-		cb(&err, TELEPHONY_SIM_STATUS_SIM_INVALID, data);
-		return;
+		cb(&err, NULL, data);
+		return -1;
 	}
 
 	memset(&pin_status, 0, sizeof(pin_status));
 
 	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
-		determine_pin1_status(od, &pin_status);
+		determine_pin_status(od, &pin_status, OFONO_SIM_PIN_TYPE_PIN, OFONO_SIM_PIN_TYPE_PUK);
+		cb(NULL, &pin_status, data);
+	}
+	else {
+		/* No SIM available return error */
+		err.code = 1;
+		cb(&err, NULL, data);
+	}
+
+	return 0;
+}
+
+int ofono_pin2_status_query(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_pin_status pin_status;
+	struct telephony_error err;
+
+	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
+		cb(&err, NULL, data);
+		return -1;
+	}
+
+	memset(&pin_status, 0, sizeof(pin_status));
+
+	if (od->sim && ofono_sim_manager_get_present(od->sim)) {
+		determine_pin_status(od, &pin_status, OFONO_SIM_PIN_TYPE_PIN2, OFONO_SIM_PIN_TYPE_PUK2);
 		cb(NULL, &pin_status, data);
 	}
 	else {
@@ -585,6 +613,7 @@ struct telephony_driver driver = {
 	.power_query =	ofono_power_query,
 	.sim_status_query = ofono_sim_status_query,
 	.pin1_status_query = ofono_pin1_status_query,
+	.pin2_status_query = ofono_pin2_status_query,
 	.pin1_verify = ofono_pin1_verify,
 	.pin1_enable = ofono_pin1_enable,
 	.pin1_disable = ofono_pin1_disable,
