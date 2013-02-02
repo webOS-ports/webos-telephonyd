@@ -103,14 +103,8 @@ static bool retrieve_power_state_from_settings(void)
 		return true;
 
 	jboolean_get(state_obj, &power_state);
-	j_release(parsed_obj);
+	j_release(&parsed_obj);
 	return power_state;
-}
-
-static void store_power_state_setting(bool power_state)
-{
-	telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
-						power_state ? "{\"state\":true}" : "{\"state\":false}");
 }
 
 static int initialize_luna_service(struct telephony_service *service)
@@ -224,8 +218,6 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 
 void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver)
 {
-	int err;
-
 	if (service->driver) {
 		g_warning("Can not register a second telephony driver");
 		return;
@@ -296,7 +288,7 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
 	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
 		luna_service_message_reply_error_internal(handle, message);
 
-	j_release(reply_obj);
+	j_release(&reply_obj);
 
 	return true;
 }
@@ -348,7 +340,7 @@ bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *u
 	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
 		luna_service_message_reply_error_internal(handle, message);
 
-	j_release(reply_obj);
+	j_release(&reply_obj);
 
 	return true;
 }
@@ -369,7 +361,6 @@ bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *u
 
 bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
-	struct telephony_service *service = user_data;
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = jobject_create();
@@ -383,7 +374,7 @@ bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void 
 	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
 		luna_service_message_reply_error_internal(handle, message);
 
-	j_release(reply_obj);
+	j_release(&reply_obj);
 
 	return true;
 }
@@ -402,7 +393,7 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 	jvalue_ref reply_obj = NULL;
 	bool result = false;
 	LSError lserror;
-	char *payload;
+	const char *payload;
 	bool subscribed = false;
 
 	if (!service->initialized)

@@ -25,6 +25,7 @@
 
 #include <luna-service2/lunaservice.h>
 #include <glib.h>
+#include <glib-object.h>
 
 #include "telephonyservice.h"
 

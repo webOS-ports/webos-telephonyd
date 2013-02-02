@@ -82,7 +82,6 @@ static int _service_sim_status_query_finish(const struct telephony_error *error,
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
-	bool subscribed = false;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
@@ -158,12 +157,9 @@ static int _service_pin_status_query_finish(const struct telephony_error *error,
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
-	jvalue_ref extended_obj = NULL;
-	bool subscribed = false;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
@@ -182,7 +178,6 @@ static int _service_pin_status_query_finish(const struct telephony_error *error,
 		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
 	}
 
-cleanup:
 	j_release(&reply_obj);
 	luna_service_req_data_free(req_data);
 	return 0;
@@ -444,7 +439,7 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer oldpin_buf, newpin_buf, newpinconfirm_buf;
+	raw_buffer oldpin_buf, newpin_buf;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");

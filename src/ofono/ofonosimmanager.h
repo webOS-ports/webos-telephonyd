@@ -59,7 +59,7 @@ void ofono_sim_manager_unlock_pin(struct ofono_sim_manager *sim, enum ofono_sim_
 						ofono_base_result_cb cb, void *data);
 void ofono_sim_manager_change_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *old_pin,
 						const gchar *new_pin, ofono_base_result_cb cb, void *data);
-void ofono_sim_manager_unblock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *puk,
+void ofono_sim_manager_reset_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *puk,
 						const gchar *new_pin, ofono_base_result_cb cb, void *data);
 
 bool ofono_sim_manager_get_present(struct ofono_sim_manager *sim);

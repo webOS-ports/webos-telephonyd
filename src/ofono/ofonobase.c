@@ -32,17 +32,17 @@ struct ofono_base {
 	struct ofono_base_funcs *funcs;
 };
 
-static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	ofono_base_result_cb cb = cbd->cb;
 	struct ofono_base *base = cbd->user;
-	gboolean result = FALSE;
+	gboolean success = FALSE;
 	GError *error = NULL;
 	struct ofono_error oerr;
 
-	result = base->funcs->set_property_finish(base->remote, res, &error);
-	if (error) {
+	success = base->funcs->set_property_finish(base->remote, res, &error);
+	if (!success) {
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -54,7 +54,7 @@ static void set_property_cb(GDBusConnection *connection, GAsyncResult *res, gpoi
 	g_free(cbd);
 }
 
-void ofono_base_set_property(struct ofono_base *base, const gchar *name, const GVariant *value,
+void ofono_base_set_property(struct ofono_base *base, const gchar *name, GVariant *value,
 						 ofono_base_result_cb cb, gpointer user_data)
 {
 	struct cb_data *cbd = cb_data_new(cb, user_data);
@@ -75,15 +75,15 @@ static void handle_get_properties_result(struct ofono_base *base, GVariant *prop
 	}
 }
 
-static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+static void get_properties_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct ofono_base *base = user_data;
 	GError *error = NULL;
-	gboolean ret = FALSE;
+	gboolean success = FALSE;
 	GVariant *properties = NULL;
 
-	ret = base->funcs->get_properties_finish(base->remote, &properties, res, &error);
-	if (error) {
+	success = base->funcs->get_properties_finish(base->remote, &properties, res, &error);
+	if (!success) {
 		g_warning("Failed to retrieve properties from base: %s", error->message);
 		g_error_free(error);
 		return;
@@ -92,7 +92,7 @@ static void get_properties_cb(GDBusConnection *connection, GAsyncResult *res, gp
 	handle_get_properties_result(base, properties);
 }
 
-static void property_changed_cb(void *object, const gchar *name, GVariant *value, gpointer *user_data)
+static void property_changed_cb(void *object, const gchar *name, GVariant *value, gpointer user_data)
 {
 	struct ofono_base *base = user_data;
 

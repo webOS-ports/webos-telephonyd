@@ -41,7 +41,7 @@ typedef void (*ofono_base_result_cb)(struct ofono_error *error, void *data);
 typedef void (*ofono_property_changed_cb)(const gchar *name, void *data);
 
 struct ofono_base_funcs {
-	void (*update_property)(const gchar *name, const GVariant *value, void *user_data);
+	void (*update_property)(const gchar *name, GVariant *value, void *user_data);
 
 	gboolean (*set_property_finish)(void *proxy, GAsyncResult *res, GError **error);
 	void (*set_property)(void *proxy, const gchar *arg_property, GVariant *arg_value,
@@ -59,7 +59,7 @@ struct ofono_base_funcs {
 struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remote, void *user_data);
 void ofono_base_free(struct ofono_base *base);
 
-void ofono_base_set_property(struct ofono_base *base, const gchar *name, const GVariant *value,
+void ofono_base_set_property(struct ofono_base *base, const gchar *name, GVariant *value,
 						 ofono_base_result_cb cb, gpointer user_data);
 
 #endif

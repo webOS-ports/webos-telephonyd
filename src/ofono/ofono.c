@@ -43,7 +43,6 @@ struct ofono_data {
 void set_online_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
 
@@ -199,7 +198,7 @@ int ofono_sim_status_query(struct telephony_service *service, telephony_sim_stat
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
 		cb(&err, TELEPHONY_SIM_STATUS_SIM_INVALID, data);
-		return;
+		return -ENODEV;
 	}
 
 	od->sim_status = determine_sim_status(od);
@@ -217,7 +216,7 @@ int ofono_pin1_status_query(struct telephony_service *service, telephony_pin_sta
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
 		cb(&err, NULL, data);
-		return -1;
+		return -ENODEV;
 	}
 
 	memset(&pin_status, 0, sizeof(pin_status));
@@ -244,7 +243,7 @@ int ofono_pin2_status_query(struct telephony_service *service, telephony_pin_sta
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
 		cb(&err, NULL, data);
-		return -1;
+		return -ENODEV;
 	}
 
 	memset(&pin_status, 0, sizeof(pin_status));
@@ -288,7 +287,7 @@ int ofono_pin1_verify(struct telephony_service *service, const gchar *pin, telep
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, data);
-		return;
+		return -ENODEV;
 	}
 
 	cbd = cb_data_new(cb, data);
@@ -307,7 +306,7 @@ int ofono_pin1_enable(struct telephony_service *service, const gchar *pin, telep
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, data);
-		return;
+		return -ENODEV;
 	}
 
 	cbd = cb_data_new(cb, data);
@@ -326,7 +325,7 @@ int ofono_pin1_disable(struct telephony_service *service, const gchar *pin, tele
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, data);
-		return;
+		return -ENODEV;
 	}
 
 	cbd = cb_data_new(cb, data);
@@ -345,7 +344,7 @@ int ofono_pin1_change(struct telephony_service *service, const gchar *old_pin, c
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, data);
-		return;
+		return -ENODEV;
 	}
 
 	cbd = cb_data_new(cb, data);
@@ -364,7 +363,7 @@ int ofono_pin1_unblock(struct telephony_service *service, const gchar *puk, cons
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, data);
-		return;
+		return -ENODEV;
 	}
 
 	cbd = cb_data_new(cb, data);
@@ -383,7 +382,7 @@ int ofono_fdn_status_query(struct telephony_service *service, telephony_fdn_stat
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&err, NULL, data);
-		return;
+		return -ENODEV;
 	}
 
 	fdn_status.enabled = ofono_sim_manager_get_fixed_dialing(od->sim);
@@ -462,7 +461,6 @@ static int convert_strength_to_bars(int rssi)
 int ofono_signal_strength_query(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data)
 {
 	struct ofono_data *od = telephony_service_get_data(service);
-	struct telephony_error err;
 	unsigned int strength = 0;
 
 	if (od->netreg)
@@ -481,7 +479,7 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 
 	if (g_str_equal(name, "Status") || g_str_equal(name, "Name")) {
 		if (retrieve_network_status(od, &net_status) < 0)
-			return 0;
+			return;
 
 		telephony_service_network_status_changed_notify(od->service, &net_status);
 	}
@@ -495,7 +493,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
 	bool powered = false, online = false;
-	gchar *path = ofono_modem_get_path(od->modem);
+	const char *path = ofono_modem_get_path(od->modem);
 
 	if (g_str_equal(name, "Online")) {
 		online = ofono_modem_get_online(od->modem);
@@ -529,7 +527,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 	}
 }
 
-static void modems_changed_cb(gpointer user_data)
+void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
 	const GList *modems = NULL;

@@ -31,8 +31,8 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 
 void telephony_service_availability_changed_notify(struct telephony_service *service, bool available);
 void telephony_service_power_status_notify(struct telephony_service *service, bool power);
-void telephony_service_sim_status_changed_notify(struct telephony_service *service, enum telephony_sim_status sim_status);
 void telephony_service_pin1_status_changed_notify(struct telephony_service *service, struct telephony_pin_status *pin_status);
+void telephony_service_sim_status_notify(struct telephony_service *service, enum telephony_sim_status sim_status);
 
 void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status);
 void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars);

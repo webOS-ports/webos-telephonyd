@@ -74,7 +74,6 @@ static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, g
 	struct ofono_modem *modem = NULL;
 	GList *iter = NULL;
 	const gchar *modem_path = NULL;
-	gboolean found_modem = FALSE;
 
 	for (iter = manager->modems; iter != NULL; iter = iter->next) {
 		modem = (struct ofono_modem*)(iter->data);
@@ -91,20 +90,19 @@ static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, g
 	}
 }
 
-static void get_modems_cb(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
+static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct ofono_manager *manager = user_data;
 	GError *error = NULL;
-	gboolean ret = FALSE;
 	GVariant *modems = NULL;
-	GVariant *properties = NULL;
 	GVariant *child = NULL;
 	gchar *path;
 	int n = 0;
 	struct ofono_modem *modem = NULL;
+	gboolean success;
 
-	ret = ofono_interface_manager_call_get_modems_finish(manager->remote, &modems, res, &error);
-	if (error) {
+	success = ofono_interface_manager_call_get_modems_finish(manager->remote, &modems, res, &error);
+	if (!success) {
 		g_error("Failed to retrieve list of available modems from manager: %s", error->message);
 		g_error_free(error);
 		return;
@@ -163,7 +161,7 @@ void ofono_manager_free(struct ofono_manager *manager)
 	if (manager->remote)
 		g_object_unref(manager->remote);
 
-	g_list_free_full(manager->modems, ofono_modem_free);
+	g_list_free_full(manager->modems, (GDestroyNotify) ofono_modem_free);
 
 	g_free(manager);
 }

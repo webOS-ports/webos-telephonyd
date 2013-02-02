@@ -31,9 +31,9 @@ struct ofono_network_operator {
 	gchar *path;
 	OfonoInterfaceNetworkOperator *remote;
 	struct ofono_base *base;
-	const char *name;
-	const char *mcc;
-	const char *mnc;
+	char *name;
+	char *mcc;
+	char *mnc;
 	enum ofono_network_operator_status status;
 };
 
@@ -112,7 +112,7 @@ static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user
 	GError *error = NULL;
 
 	success = ofono_interface_network_operator_call_register_finish(netop->remote, res, &error);
-	if (error) {
+	if (!success) {
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);

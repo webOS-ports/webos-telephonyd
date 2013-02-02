@@ -47,7 +47,7 @@ struct ofono_network_registration {
 	void *prop_changed_data;
 };
 
-typedef gboolean (*_common_operators_finish_cb)(void *proxy, GVariant *result, GAsyncResult *res, GError **error);
+typedef gboolean (*_common_operators_finish_cb)(void *proxy, GVariant **result, GAsyncResult *res, GError **error);
 
 static enum ofono_network_registration_mode parse_ofono_network_registration_mode(const gchar *mode)
 {
@@ -216,7 +216,7 @@ static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user
 	GError *error = NULL;
 
 	success = ofono_interface_network_registration_call_register_finish(netreg->remote, res, &error);
-	if (error) {
+	if (!success) {
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -258,12 +258,13 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 	GList *operators;
 
 	success = finish_cb(netreg->remote, &result, res, &error);
-	if (error) {
+	if (!success) {
 		oerr.message = error->message;
 		cb(&oerr, NULL, cbd->data);
 		g_error_free(error);
 	}
 	else {
+		operators = g_list_alloc();
 		for (n = 0; n < g_variant_n_children(result); n++) {
 			iter = g_variant_get_child_value(result, n);
 			path = g_variant_dup_string(g_variant_get_child_value(iter, 0), NULL);
@@ -274,7 +275,7 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 		}
 
 		cb(NULL, operators, cbd->data);
-		g_list_free_full(operators, ofono_network_operator_free);
+		g_list_free_full(operators, (GDestroyNotify) ofono_network_operator_free);
 	}
 
 	g_free(cbd);

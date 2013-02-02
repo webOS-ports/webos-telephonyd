@@ -82,7 +82,6 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	jvalue_ref state_obj = NULL;
 	jvalue_ref save_obj = NULL;
 	const char *payload;
-	const char *state_value;
 	bool should_save = false;
 
 	if (!service->initialized) {
@@ -123,7 +122,8 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("save"), &save_obj)) {
 		jboolean_get(save_obj, &should_save);
 		if (should_save)
-			telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE, power ? "{\"state\":true}" : "{\"state\":false}");
+			telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
+									 power ? "{\"state\":true}" : "{\"state\":false}");
 	}
 
 	service->power_off_pending = !power;
@@ -154,7 +154,6 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
-	bool subscribed = false;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
@@ -246,7 +245,6 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
-	bool subscribed = false;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();

@@ -23,7 +23,7 @@
 
 struct ofono_manager;
 
-typedef void (*ofono_manager_modems_chanaged_cb)(gpointer *user_data);
+typedef void (*ofono_manager_modems_chanaged_cb)(gpointer user_data);
 
 struct ofono_manager* ofono_manager_create(void);
 void ofono_manager_free(struct ofono_manager *manager);

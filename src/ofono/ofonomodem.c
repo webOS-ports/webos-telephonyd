@@ -213,7 +213,7 @@ int ofono_modem_set_powered(struct ofono_modem *modem, gboolean powered, ofono_b
 
 	/* check wether we're already in the desired powered state */
 	if (powered == modem->powered) {
-		cb(TRUE, user_data);
+		cb(NULL, user_data);
 		return 0;
 	}
 
@@ -232,7 +232,7 @@ int ofono_modem_set_online(struct ofono_modem *modem, gboolean online, ofono_bas
 
 	/* check wether we're already in the desired state */
 	if (online == modem->online) {
-		cb(TRUE, user_data);
+		cb(NULL, user_data);
 		return 0;
 	}
 

@@ -279,7 +279,7 @@ static void common_pin_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	GError *error = NULL;
 
 	success = finish_cb(sim->remote, res, &error);
-	if (error) {
+	if (!success) {
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -295,7 +295,7 @@ static void common_pin_cb(GObject *source_object, GAsyncResult *res, gpointer us
 void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_pin type, const gchar *pin,
 						ofono_base_result_cb cb, void *data)
 {
-	struct cb_data *cbd, *cbd2;
+	struct cb_data *cbd;
 
 	if (!sim) {
 		cb(NULL, data);
