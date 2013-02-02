@@ -27,6 +27,7 @@
 #include "ofonomodem.h"
 #include "ofonosimmanager.h"
 #include "ofononetworkregistration.h"
+#include "ofononetworkoperator.h"
 #include "utils.h"
 
 struct ofono_data {
@@ -115,6 +116,8 @@ int ofono_platform_query(struct telephony_service *service, telephony_platform_q
 {
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_platform_info pinfo;
+	const char *mnc = NULL;
+	const char *mcc = NULL;
 
 	if (!od->modem)
 		return -EINVAL;
@@ -125,8 +128,13 @@ int ofono_platform_query(struct telephony_service *service, telephony_platform_q
 	pinfo.version = ofono_modem_get_revision(od->modem);
 
 	if (ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
-		pinfo.mcc = g_ascii_strtoll(ofono_sim_manager_get_mcc(od->sim), NULL, 0);
-		pinfo.mnc = g_ascii_strtoll(ofono_sim_manager_get_mnc(od->sim), NULL, 0);
+		mcc = ofono_sim_manager_get_mcc(od->sim);
+		mnc = ofono_sim_manager_get_mnc(od->sim);
+
+		if (mcc && mnc) {
+			pinfo.mcc = g_ascii_strtoll(mcc, NULL, 0);
+			pinfo.mnc = g_ascii_strtoll(mnc, NULL, 0);
+		}
 	}
 
 	cb(NULL, &pinfo, data);
@@ -489,6 +497,70 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 	}
 }
 
+enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_network_operator *netop)
+{
+	if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_LTE))
+		return TELEPHONY_RADIO_ACCESS_MODE_LTE;
+	else if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_HSPA) ||
+			 ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_UMTS))
+		return TELEPHONY_RADIO_ACCESS_MODE_UMTS;
+
+	return TELEPHONY_RADIO_ACCESS_MODE_GSM;
+}
+
+int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
+{
+	struct cb_data *cbd = data;
+	struct telephony_error terr;
+	telephony_network_list_query_cb cb = cbd->cb;
+	GList *networks = NULL;
+	int n, mcc, mnc;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, NULL, cbd->data);
+	}
+	else {
+		for(n = 0; n < g_list_length(operators); n++) {
+			struct ofono_network_operator *netop = g_list_nth_data(operators, n);
+			struct telephony_network *network = g_new0(struct telephony_network, 1);
+
+			mcc = g_ascii_strtoll(ofono_network_operator_get_mcc(netop), NULL, 0);
+			mnc = g_ascii_strtoll(ofono_network_operator_get_mnc(netop), NULL, 0);
+
+			network->id = (mcc * 100) + mnc;
+			network->name = ofono_network_operator_get_name(netop);
+			network->radio_access_mode = select_best_radio_access_mode(netop);
+
+			networks = g_list_append(networks, network);
+		}
+
+		cb(NULL, networks, cbd->data);
+		g_list_free_full(networks, g_free);
+	}
+
+	return 0;
+}
+
+int ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
+							 void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct cb_data *cbd;
+	struct telephony_error error;
+
+	if (od->netreg) {
+		cbd = cb_data_new(cb, data);
+		ofono_network_registration_scan(od->netreg, scan_operators_cb, cbd);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, NULL, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -644,6 +716,7 @@ struct telephony_driver driver = {
 	.fdn_status_query = ofono_fdn_status_query,
 	.network_status_query = ofono_network_status_query,
 	.signal_strength_query = ofono_signal_strength_query,
+	.network_list_query = ofono_network_list_query,
 };
 
 void ofono_init(struct telephony_service *service)

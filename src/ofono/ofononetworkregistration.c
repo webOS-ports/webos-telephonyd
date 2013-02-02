@@ -79,7 +79,7 @@ static enum ofono_network_status parse_ofono_network_status(const gchar *status)
 	return OFONO_NETWORK_REGISTRATION_STATUS_UNKNOWN;
 }
 
-static enum ofono_network_technology parse_ofono_network_technology(const gchar *technology)
+enum ofono_network_technology parse_ofono_network_technology(char *technology)
 {
 	if (g_str_equal(technology, "gsm"))
 		return OFONO_NETWORK_TECHNOLOGOY_GSM;
@@ -255,7 +255,7 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 	int n;
 	const char *path = NULL;
 	struct ofono_network_operator *network_operator;
-	GList *operators;
+	GList *operators = NULL;
 
 	success = finish_cb(netreg->remote, &result, res, &error);
 	if (!success) {
@@ -264,13 +264,11 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 		g_error_free(error);
 	}
 	else {
-		operators = g_list_alloc();
 		for (n = 0; n < g_variant_n_children(result); n++) {
 			iter = g_variant_get_child_value(result, n);
 			path = g_variant_dup_string(g_variant_get_child_value(iter, 0), NULL);
 
 			network_operator = ofono_network_operator_create(path);
-
 			operators = g_list_append(operators, network_operator);
 		}
 
@@ -296,7 +294,10 @@ void ofono_network_registration_scan(struct ofono_network_registration *netreg,
 	cbd2->user = netreg;
 	cbd->user = cbd2;
 
-	ofono_interface_network_registration_call_scan(netreg->remote, NULL, get_operators_cb, cbd);
+	// NOTE: We need to do the scan-operation through the direct call of g_dbus_proxy_call
+	// because we have to specify a higher timeout and don't want to touch the default one
+	g_dbus_proxy_call (G_DBUS_PROXY (netreg->remote), "Scan", g_variant_new ("()"),
+		G_DBUS_CALL_FLAGS_NONE, 40000, NULL, get_operators_cb, cbd);
 }
 
 void ofono_network_registration_get_operators(struct ofono_network_registration *netreg,

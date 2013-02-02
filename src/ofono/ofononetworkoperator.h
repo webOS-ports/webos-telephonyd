@@ -20,6 +20,7 @@
 #define OFONO_NETWORK_OPERATOR_H_
 
 #include <glib.h>
+#include "ofononetworkregistration.h"
 
 struct ofono_network_operator;
 
@@ -39,6 +40,7 @@ const char* ofono_network_operator_get_name(struct ofono_network_operator *netop
 enum ofono_network_operator_status ofono_network_operator_get_status(struct ofono_network_operator *netop);
 const char* ofono_network_operator_get_mcc(struct ofono_network_operator *netop);
 const char* ofono_network_operator_get_mnc(struct ofono_network_operator *netop);
+bool ofono_network_operator_supports_technology(struct ofono_network_operator *netop, enum ofono_network_technology tech);
 
 #endif
 

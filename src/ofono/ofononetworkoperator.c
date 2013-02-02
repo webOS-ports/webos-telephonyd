@@ -27,6 +27,8 @@
 #include "ofononetworkoperator.h"
 #include "ofono-interface.h"
 
+extern enum ofono_network_technology parse_ofono_network_technology(char *technology);
+
 struct ofono_network_operator {
 	gchar *path;
 	OfonoInterfaceNetworkOperator *remote;
@@ -35,13 +37,67 @@ struct ofono_network_operator {
 	char *mcc;
 	char *mnc;
 	enum ofono_network_operator_status status;
+	bool available_technologies[OFONO_NETWORK_TECHNOLOGOY_MAX];
 };
+
+static enum ofono_network_operator_status parse_ofono_network_operator_status(const char *status)
+{
+	enum ofono_network_operator_status parsed_status = OFONO_NETWORK_OPERATOR_STATUS_UNKNOWN;
+
+	if (g_str_equal(status, "unknown"))
+		parsed_status = OFONO_NETWORK_OPERATOR_STATUS_UNKNOWN;
+	else if (g_str_equal(status, "available"))
+		parsed_status = OFONO_NETWORK_OPERATOR_STATUS_AVAILABLE;
+	else if (g_str_equal(status, "current"))
+		parsed_status = OFONO_NETWORK_OPERATOR_STATUS_CURRENT;
+	else if (g_str_equal(status, "forbidden"))
+		parsed_status = OFONO_NETWORK_OPERATOR_STATUS_FORBIDDEN;
+
+	return parsed_status;
+}
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_network_operator *netop = user_data;
+	char *status = NULL;
+	char *tech_str = NULL;
+	GVariant *child = NULL;
+	int n;
+	enum ofono_network_technology tech;
 
 	g_message("[NetworkOperator:%s] property %s changed", netop->path, name);
+
+	if (g_str_equal(name, "Name")) {
+		if (netop->name)
+			g_free(netop->name);
+		netop->name = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "Status")) {
+		status = g_variant_dup_string(value, NULL);
+		netop->status = parse_ofono_network_operator_status(status);
+		g_free(status);
+	}
+	else if (g_str_equal(name, "MobileCountryCode")) {
+		if (netop->mcc)
+			g_free(netop->mcc);
+		netop->mcc = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "MobileNetworkCode")) {
+		if (netop->mnc)
+			g_free(netop->mnc);
+		netop->mnc = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "Technologies")) {
+		for (n = 0; n < g_variant_n_children(value); n++) {
+			child = g_variant_get_child_value(value, n);
+
+			tech_str = g_variant_dup_string(child, NULL);
+			tech = parse_ofono_network_technology(tech_str);
+			g_free(tech_str);
+
+			netop->available_technologies[tech] = (tech != OFONO_NETWORK_TECHNOLOGOY_UNKNOWN);
+		}
+	}
 }
 
 /* NOTE: We can't use async fetch of the operator properties here so setting all
@@ -57,17 +113,19 @@ struct ofono_base_funcs netop_base_funcs = {
 
 struct ofono_network_operator* ofono_network_operator_create(const char *path)
 {
-	struct ofono_network_operator *netop;
+	struct ofono_network_operator *netop = NULL;
 	GError *error = NULL;
 
 	netop = g_try_new0(struct ofono_network_operator, 1);
-	if (!netop)
+	if (!netop) {
+		g_warning("Failed to allocate memory for network operator object");
 		return NULL;
+	}
 
 	netop->remote = ofono_interface_network_operator_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.network interface");
+		g_warning("Unable to initialize proxy for the org.ofono.network interface");
 		g_error_free(error);
 		g_free(netop);
 		return NULL;
@@ -170,6 +228,14 @@ const char* ofono_network_operator_get_mnc(struct ofono_network_operator *netop)
 		return NULL;
 
 	return netop->mnc;
+}
+
+bool ofono_network_operator_supports_technology(struct ofono_network_operator *netop, enum ofono_network_technology tech)
+{
+	if (!netop)
+		return false;
+
+	return netop->available_technologies[tech];
 }
 
 // vim:ts=4:sw=4:noexpandtab

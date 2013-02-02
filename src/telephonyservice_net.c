@@ -277,7 +277,7 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 	jvalue_ref networks_obj = NULL;
 	jvalue_ref network_obj = NULL;
 	bool success = (error == NULL);
-	struct telephony_network *current_network;
+	struct telephony_network *current_network = NULL;
 	int n;
 
 	reply_obj = jobject_create();
@@ -294,11 +294,13 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 
 			network_obj = jobject_create();
 			jobject_put(network_obj, J_CSTR_TO_JVAL("id"), jnumber_create_i32(current_network->id));
-			jobject_put(network_obj, J_CSTR_TO_JVAL("name"), jstring_create(current_network->name));
-
+			jobject_put(network_obj, J_CSTR_TO_JVAL("name"),
+						jstring_create(current_network->name ? current_network->name : ""));
 			const char *rat_str = telephony_radio_access_mode_to_string(current_network->radio_access_mode);
 			jobject_put(network_obj, J_CSTR_TO_JVAL("rat"), jstring_create(rat_str));
+			jarray_append(networks_obj, network_obj);
 		}
+
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("networks"), networks_obj);
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
