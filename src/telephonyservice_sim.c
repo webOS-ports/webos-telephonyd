@@ -262,7 +262,6 @@ cleanup:
 	return true;
 }
 
-
 /**
  * @brief Send the PIN1 to the SIM card for verification
  **/
@@ -551,6 +550,90 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 									  telephonyservice_common_finish, req_data) < 0) {
 		g_warning("Failed to process service pin1Unblock request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed unblock PIN1 on the SIM card");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
+static int _service_fdn_status_query_finish(const struct telephony_error *error, struct telephony_fdn_status *status, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	if (success) {
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(status->enabled));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("permanentblock"), jboolean_create(status->permanent_block));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+
+		if (!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+			luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		}
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+	}
+
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Query the status of the FDN
+ *
+ * JSON format:
+ *  request:
+ *    { }
+ *  response:
+ *    {
+ *       "returnValue": <boolean>,
+ *       "errorCode": <integer>,
+ *       "errorString": <string>,
+ *       "extended": {
+ *           "enabled": <boolean>,
+ *           "permanentblock": <boolean>,
+ *       },
+ *    }
+ **/
+bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->pin1_status_query) {
+		g_warning("No implementation available for service fdnStatusQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->fdn_status_query(service, _service_fdn_status_query_finish, req_data) < 0) {
+		g_warning("Failed to process service fdnStatusQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query FDN status");
 		goto cleanup;
 	}
 

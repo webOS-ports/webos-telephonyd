@@ -46,6 +46,7 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -70,6 +71,7 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "pin1Disable", _service_pin1_disable_cb },
 	{ "pin1Change", _service_pin1_change_cb },
 	{ "pin1Unblock", _service_pin1_unblock_cb },
+	{ "fdnStatusQuery", _service_fdn_status_query_cb },
 	{ "signalStrengthQuery", _service_signal_strength_query_cb },
 	{ "networkStatusQuery", _service_network_status_query_cb },
 	{ "networkListQuery", _service_network_list_query_cb },

@@ -107,6 +107,11 @@ struct telephony_pin_status {
 	int puk_attempts_remaining;
 };
 
+struct telephony_fdn_status {
+	bool enabled;
+	bool permanent_block;
+};
+
 struct telephony_network {
 	int id;
 	const gchar *name;
@@ -125,6 +130,7 @@ typedef int (*telephony_network_list_query_cb)(const struct telephony_error* err
 typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);
 typedef int (*telephony_network_id_query_cb)(const struct telephony_error *error, const char *id, void *data);
 typedef int (*telephony_network_selection_mode_query_cb)(const struct telephony_error *error, bool automatic, void *data);
+typedef int (*telephony_fdn_status_query_cb)(const struct telephony_error* error, struct telephony_fdn_status *status, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
@@ -145,6 +151,7 @@ struct telephony_driver {
 	int (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
 	int (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
 	int (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
+	int (*fdn_status_query)(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data);
 
 	/* network */
 	int (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
