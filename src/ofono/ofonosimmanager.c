@@ -38,6 +38,7 @@ struct ofono_sim_manager {
 	enum ofono_sim_pin pin_required;
 	bool locked_pins[OFONO_SIM_PIN_TYPE_MAX];
 	int pin_retries[OFONO_SIM_PIN_TYPE_MAX];
+	bool fixed_dialing;
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
@@ -174,6 +175,9 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			sim->pin_retries[pin_type] = (int) g_variant_get_byte(prop_value);
 		}
 	}
+	else if (g_str_equal(name, "FixedDialing")) {
+		sim->fixed_dialing = g_variant_get_boolean(value);
+	}
 
 	if (sim->prop_changed_cb)
 		sim->prop_changed_cb(name, sim->prop_changed_data);
@@ -209,6 +213,7 @@ struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path)
 	sim->base = ofono_base_create(&sim_base_funcs, sim->remote, sim);
 	memset(sim->pin_retries, 0, sizeof(sim->pin_retries));
 	memset(sim->locked_pins, 0, sizeof(sim->locked_pins));
+	sim->fixed_dialing = false;
 
 	return sim;
 }
@@ -401,6 +406,14 @@ bool ofono_sim_manager_is_pin_locked(struct ofono_sim_manager *sim, enum ofono_s
 		return false;
 
 	return sim->locked_pins[pin_type];
+}
+
+bool ofono_sim_manager_get_fixed_dialing(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return false;
+
+	return sim->fixed_dialing;
 }
 
 // vim:ts=4:sw=4:noexpandtab

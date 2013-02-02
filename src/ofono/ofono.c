@@ -370,6 +370,26 @@ int ofono_pin1_unblock(struct telephony_service *service, const gchar *puk, cons
 	return 0;
 }
 
+int ofono_fdn_status_query(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_fdn_status fdn_status;
+	struct telephony_error err;
+
+	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&err, NULL, data);
+		return;
+	}
+
+	fdn_status.enabled = ofono_sim_manager_get_fixed_dialing(od->sim);
+	fdn_status.permanent_block = ofono_sim_manager_is_pin_locked(od->sim, OFONO_SIM_PIN_TYPE_PIN2);
+
+	cb(NULL, &fdn_status, data);
+
+	return 0;
+}
+
 static int retrieve_network_status(struct ofono_data *od, struct telephony_network_status *status)
 {
 	enum ofono_network_status net_status;
@@ -619,6 +639,7 @@ struct telephony_driver driver = {
 	.pin1_disable = ofono_pin1_disable,
 	.pin1_change = ofono_pin1_change,
 	.pin1_unblock = ofono_pin1_unblock,
+	.fdn_status_query = ofono_fdn_status_query,
 	.network_status_query = ofono_network_status_query,
 	.signal_strength_query = ofono_signal_strength_query,
 };
