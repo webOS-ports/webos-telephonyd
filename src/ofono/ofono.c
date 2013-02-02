@@ -124,7 +124,11 @@ int ofono_platform_query(struct telephony_service *service, telephony_platform_q
 	pinfo.platform_type = TELEPHONY_PLATFORM_TYPE_GSM;
 	pinfo.imei = ofono_modem_get_serial(od->modem);
 	pinfo.version = ofono_modem_get_revision(od->modem);
-	/* FIXME set mcc/mnc */
+
+	if (ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
+		pinfo.mcc = g_ascii_strtoll(ofono_sim_manager_get_mcc(od->sim), NULL, 0);
+		pinfo.mnc = g_ascii_strtoll(ofono_sim_manager_get_mnc(od->sim), NULL, 0);
+	}
 
 	cb(NULL, &pinfo, data);
 

@@ -178,6 +178,16 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	else if (g_str_equal(name, "FixedDialing")) {
 		sim->fixed_dialing = g_variant_get_boolean(value);
 	}
+	else if (g_str_equal(name, "MobileCountryCode")) {
+		if (sim->mcc)
+			g_free(sim->mcc);
+		sim->mcc = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "MobileNetworkCode")) {
+		if (sim->mnc)
+			g_free(sim->mnc);
+		sim->mnc = g_variant_dup_string(value, NULL);
+	}
 
 	if (sim->prop_changed_cb)
 		sim->prop_changed_cb(name, sim->prop_changed_data);
@@ -414,6 +424,22 @@ bool ofono_sim_manager_get_fixed_dialing(struct ofono_sim_manager *sim)
 		return false;
 
 	return sim->fixed_dialing;
+}
+
+const char* ofono_sim_manager_get_mcc(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return NULL;
+
+	return sim->mcc;
+}
+
+const char* ofono_sim_manager_get_mnc(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return NULL;
+
+	return sim->mnc;
 }
 
 // vim:ts=4:sw=4:noexpandtab
