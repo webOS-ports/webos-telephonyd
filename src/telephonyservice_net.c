@@ -359,6 +359,12 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 		goto cleanup;
 	}
 
+	if (service->network_status_query_pending) {
+		luna_service_message_reply_custom_error(handle, message,
+				"Another networkListQuery call is already pending");
+		goto cleanup;
+	}
+
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
