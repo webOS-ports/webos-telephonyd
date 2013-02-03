@@ -400,7 +400,7 @@ static int _service_network_list_query_cancel_finish(const struct telephony_erro
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);

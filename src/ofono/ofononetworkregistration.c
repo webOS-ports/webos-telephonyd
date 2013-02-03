@@ -281,7 +281,7 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 }
 
 void ofono_network_registration_scan(struct ofono_network_registration *netreg,
-			ofono_network_registration_operator_list_cb cb, void *data)
+			ofono_network_registration_operator_list_cb cb, GCancellable *cancellable, void *data)
 {
 	struct cb_data *cbd;
 	struct cb_data *cbd2;
@@ -297,7 +297,7 @@ void ofono_network_registration_scan(struct ofono_network_registration *netreg,
 	// NOTE: We need to do the scan-operation through the direct call of g_dbus_proxy_call
 	// because we have to specify a higher timeout and don't want to touch the default one
 	g_dbus_proxy_call (G_DBUS_PROXY (netreg->remote), "Scan", g_variant_new ("()"),
-		G_DBUS_CALL_FLAGS_NONE, 40000, NULL, get_operators_cb, cbd);
+		G_DBUS_CALL_FLAGS_NONE, 40000, cancellable, get_operators_cb, cbd);
 }
 
 void ofono_network_registration_get_operators(struct ofono_network_registration *netreg,

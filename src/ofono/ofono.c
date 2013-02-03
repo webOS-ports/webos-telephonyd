@@ -39,6 +39,7 @@ struct ofono_data {
 	enum telephony_sim_status sim_status;
 	bool initializing;
 	guint service_watch;
+	GCancellable *network_scan_cancellable;
 };
 
 void set_online_cb(struct ofono_error *error, gpointer user_data)
@@ -511,6 +512,7 @@ enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_netw
 int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 {
 	struct cb_data *cbd = data;
+	struct ofono_data *od = cbd->user;
 	struct telephony_error terr;
 	telephony_network_list_query_cb cb = cbd->cb;
 	GList *networks = NULL;
@@ -539,6 +541,8 @@ int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 		g_list_free_full(networks, g_free);
 	}
 
+	od->network_scan_cancellable = 0;
+
 	return 0;
 }
 
@@ -550,12 +554,32 @@ int ofono_network_list_query(struct telephony_service *service, telephony_networ
 	struct telephony_error error;
 
 	if (od->netreg) {
+		od->network_scan_cancellable = g_cancellable_new();
 		cbd = cb_data_new(cb, data);
-		ofono_network_registration_scan(od->netreg, scan_operators_cb, cbd);
+		cbd->user = od;
+		ofono_network_registration_scan(od->netreg, scan_operators_cb,
+					od->network_scan_cancellable, cbd);
 	}
 	else {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&error, NULL, data);
+	}
+
+	return 0;
+}
+
+int ofono_network_list_query_cancel(struct telephony_service *service, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+
+	if (od->network_scan_cancellable) {
+		g_cancellable_cancel(od->network_scan_cancellable);
+		cb(NULL, data);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+		cb(&error, data);
 	}
 
 	return 0;
@@ -717,6 +741,7 @@ struct telephony_driver driver = {
 	.network_status_query = ofono_network_status_query,
 	.signal_strength_query = ofono_signal_strength_query,
 	.network_list_query = ofono_network_list_query,
+	.network_list_query_cancel = ofono_network_list_query_cancel,
 };
 
 void ofono_init(struct telephony_service *service)

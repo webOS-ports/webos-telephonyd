@@ -63,7 +63,8 @@ void ofono_network_registration_register_prop_changed_handler(struct ofono_netwo
 void ofono_network_registration_register(struct ofono_network_registration *netreg,
 										ofono_base_result_cb cb, void *data);
 void ofono_network_registration_scan(struct ofono_network_registration *netreg,
-							ofono_network_registration_operator_list_cb cb, void *data);
+							ofono_network_registration_operator_list_cb cb, GCancellable *cancellable,
+							void *data);
 void ofono_network_registration_get_operators(struct ofono_network_registration *netreg,
 									ofono_network_registration_operator_list_cb cb, void *data);
 
