@@ -95,4 +95,17 @@
 			<arg type="v" name="value" direction="out"/>
 		</signal>
 	</interface>
+	<interface name="org.ofono.RadioSettings">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SetProperty">
+			<arg type="s" name="property" direction="in"/>
+			<arg type="v" name="value" direction="in"/>
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
 </node>
