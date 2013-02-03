@@ -739,6 +739,41 @@ int ofono_rat_query(struct telephony_service *service, telephony_rat_query_cb cb
 	return 0;
 }
 
+void rat_set_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, cbd->data);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+int ofono_rat_set(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct cb_data *cbd;
+
+	if (od->rs) {
+		cbd = cb_data_new(cb, data);
+		ofono_radio_settings_set_technology_preference(od->rs, mode, rat_set_cb, cbd);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -909,6 +944,7 @@ struct telephony_driver driver = {
 	.network_selection_mode_query = ofono_network_selection_mode_query,
 	.network_set = ofono_network_set,
 	.rat_query = ofono_rat_query,
+	.rat_set = ofono_rat_set,
 };
 
 void ofono_init(struct telephony_service *service)

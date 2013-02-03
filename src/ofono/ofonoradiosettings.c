@@ -121,6 +121,7 @@ void ofono_radio_settings_set_technology_preference(struct ofono_radio_settings 
 	struct cb_data *cbd = NULL;
 	char *mode_str;
 	struct ofono_error error;
+	GVariant *value = NULL;
 
 	if (!ras)
 		return;
@@ -147,8 +148,9 @@ void ofono_radio_settings_set_technology_preference(struct ofono_radio_settings 
 		return;
 	}
 
+	value = g_variant_new_variant(g_variant_new_string(mode_str));
 	ofono_base_set_property(ras->base, "TechnologyPreference",
-							g_variant_new_string(mode_str), set_technology_preference_cb, cbd);
+							value, set_technology_preference_cb, cbd);
 	g_free(mode_str);
 
 	return;
