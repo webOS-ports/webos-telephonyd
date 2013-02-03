@@ -76,7 +76,7 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "networkStatusQuery", _service_network_status_query_cb },
 	{ "networkListQuery", _service_network_list_query_cb },
 	{ "networkListQueryCancel", _service_network_list_query_cancel_cb },
-	{ "netorkIdQuery", _service_network_id_query_cb },
+	{ "networkIdQuery", _service_network_id_query_cb },
 	{ "networkSelectionModeQuery", _service_network_selection_mode_query_cb },
 	{ "networkSet", _service_network_set_cb },
 	{ "deviceLockQuery", _service_device_lock_query_cb },
