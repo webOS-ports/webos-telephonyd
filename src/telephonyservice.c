@@ -56,6 +56,7 @@ bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *messa
 bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -79,6 +80,7 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "networkIdQuery", _service_network_id_query_cb },
 	{ "networkSelectionModeQuery", _service_network_selection_mode_query_cb },
 	{ "networkSet", _service_network_set_cb },
+	{ "ratQuery", _service_rat_query_cb },
 	{ "deviceLockQuery", _service_device_lock_query_cb },
 	{ "chargeSourceQuery", _service_charge_source_query_cb },
 	{ 0, 0 }

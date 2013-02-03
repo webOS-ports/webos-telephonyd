@@ -708,4 +708,85 @@ cleanup:
 	return true;
 }
 
+static int _service_rat_query_finish(const struct telephony_error *error,
+									 enum telephony_radio_access_mode mode, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(success ? "success" : ""));
+
+	if (success) {
+		extended_obj = jobject_create();
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("mode"),
+					jstring_create(telephony_radio_access_mode_to_string(mode)));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Query the current radio access technology mode
+ *
+ * JSON format:
+ *  request:
+ *    { }
+ *  response:
+ *    {
+ *       "returnValue": <boolean>,
+ *       "errorCode": <integer>,
+ *       "errorString": <string>,
+ *       "extended": {
+ *          "mode": <string>,
+ *       }
+ *    }
+ **/
+bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->rat_query) {
+		g_warning("No implementation available for service ratQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->rat_query(service, _service_rat_query_finish, req_data) < 0) {
+		g_warning("Failed to process service ratQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed retrieve the radio access technology mode");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
 // vim:ts=4:sw=4:noexpandtab
