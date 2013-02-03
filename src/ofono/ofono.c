@@ -606,6 +606,29 @@ int ofono_network_id_query(struct telephony_service *service, telephony_network_
 	return 0;
 }
 
+int ofono_network_selection_mode_query(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	enum ofono_network_registration_mode mode;
+	bool automatic = false;
+
+	if (od->netreg) {
+		mode = ofono_network_registration_get_mode(od->netreg);
+
+		automatic = (mode == OFONO_NETWORK_REGISTRATION_MODE_AUTO ||
+					 mode == OFONO_NETWORK_REGISTRATION_MODE_AUTO_ONLY);
+
+		cb(NULL, automatic, data);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, false, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -764,6 +787,7 @@ struct telephony_driver driver = {
 	.network_list_query = ofono_network_list_query,
 	.network_list_query_cancel = ofono_network_list_query_cancel,
 	.network_id_query = ofono_network_id_query,
+	.network_selection_mode_query = ofono_network_selection_mode_query,
 };
 
 void ofono_init(struct telephony_service *service)
