@@ -585,6 +585,27 @@ int ofono_network_list_query_cancel(struct telephony_service *service, telephony
 	return 0;
 }
 
+int ofono_network_id_query(struct telephony_service *service, telephony_network_id_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	char netid[6];
+
+	if (od->netreg) {
+		snprintf(netid, 6, "%s%s",
+				 ofono_network_registration_get_mcc(od->netreg),
+				 ofono_network_registration_get_mnc(od->netreg));
+
+		cb(NULL, netid, data);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, NULL, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -742,6 +763,7 @@ struct telephony_driver driver = {
 	.signal_strength_query = ofono_signal_strength_query,
 	.network_list_query = ofono_network_list_query,
 	.network_list_query_cancel = ofono_network_list_query_cancel,
+	.network_id_query = ofono_network_id_query,
 };
 
 void ofono_init(struct telephony_service *service)
