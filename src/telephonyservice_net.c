@@ -789,4 +789,78 @@ cleanup:
 	return true;
 }
 
+/**
+ * @brief Set the radio access technology mode
+ *
+ * JSON format:
+ *  request:
+ *    {
+ *        "mode": <string>,
+ *    }
+ *  response:
+ *    {
+ *       "returnValue": <boolean>,
+ *       "errorCode": <integer>,
+ *       "errorString": <string>,
+ *    }
+ **/
+bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref mode_obj = NULL;
+	const char *payload;
+	raw_buffer mode_buf;
+	enum telephony_radio_access_mode mode;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->rat_set) {
+		g_warning("No implementation available for service ratSet API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("mode"), &mode_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	mode_buf = jstring_get(mode_obj);
+	mode = telephony_radio_access_mode_from_string(mode_buf.m_str);
+
+	if (mode < 0) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->rat_set(service, mode,
+									 telephonyservice_common_finish, req_data) < 0) {
+		g_warning("Failed to process service ratSet request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to set radio access technology mode");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
+
 // vim:ts=4:sw=4:noexpandtab

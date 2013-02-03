@@ -110,4 +110,22 @@ const char* telephony_radio_access_mode_to_string(enum telephony_radio_access_mo
 	return "unknown";
 }
 
+enum telephony_radio_access_mode telephony_radio_access_mode_from_string(const char *mode)
+{
+	enum telephony_radio_access_mode result = TELEPHONY_RADIO_ACCESS_MODE_ANY;
+
+	if (g_str_equal(mode, "any"))
+		result = TELEPHONY_RADIO_ACCESS_MODE_ANY;
+	else if (g_str_equal(mode, "gsm"))
+		result = TELEPHONY_RADIO_ACCESS_MODE_GSM;
+	else if (g_str_equal(mode, "umts"))
+		result = TELEPHONY_RADIO_ACCESS_MODE_UMTS;
+	else if (g_str_equal(mode, "lte"))
+		result = TELEPHONY_RADIO_ACCESS_MODE_LTE;
+	else
+		return -1;
+
+	return result;
+}
+
 // vim:ts=4:sw=4:noexpandtab

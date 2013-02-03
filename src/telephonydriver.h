@@ -78,6 +78,8 @@ const char* telephony_network_state_to_string(enum telephony_network_state state
 const char* telephony_network_registration_to_string(enum telephony_network_registration netreg);
 const char* telephony_radio_access_mode_to_string(enum telephony_radio_access_mode mode);
 
+enum telephony_radio_access_mode telephony_radio_access_mode_from_string(const char *mode);
+
 struct telephony_network_status {
 	enum telephony_network_state state;
 	enum telephony_network_registration registration;
@@ -163,6 +165,7 @@ struct telephony_driver {
 	int (*network_id_query)(struct telephony_service *service, telephony_network_id_query_cb cb, void *data);
 	int (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
 	int (*rat_query)(struct telephony_service *service, telephony_rat_query_cb cb, void *data);
+	int (*rat_set)(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
 };
 
 #endif
