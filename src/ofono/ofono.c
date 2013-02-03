@@ -28,6 +28,7 @@
 #include "ofonosimmanager.h"
 #include "ofononetworkregistration.h"
 #include "ofononetworkoperator.h"
+#include "ofonoradiosettings.h"
 #include "utils.h"
 
 struct ofono_data {
@@ -36,6 +37,7 @@ struct ofono_data {
 	struct ofono_modem *modem;
 	struct ofono_sim_manager *sim;
 	struct ofono_network_registration *netreg;
+	struct ofono_radio_settings *rs;
 	enum telephony_sim_status sim_status;
 	bool initializing;
 	guint service_watch;
@@ -719,6 +721,24 @@ int ofono_network_set(struct telephony_service *service, bool automatic, const c
 	return 0;
 }
 
+int ofono_rat_query(struct telephony_service *service, telephony_rat_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	enum telephony_radio_access_mode mode;
+
+	if (od->rs) {
+		mode = ofono_radio_settings_get_technology_preference(od->rs);
+		cb(NULL, mode, data);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, -1, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -747,6 +767,15 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 			ofono_network_registration_free(od->netreg);
 			od->netreg = NULL;
 		}
+
+		if (!od->rs && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_RADIO_SETTINGS)) {
+			od->rs = ofono_radio_settings_create(path);
+		}
+		else if (od->rs && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_RADIO_SETTINGS)) {
+			ofono_radio_settings_free(od->rs);
+			od->rs = NULL;
+		}
+
 	}
 	else if (g_str_equal(name, "Powered")) {
 		powered = ofono_modem_get_powered(od->modem);
@@ -879,6 +908,7 @@ struct telephony_driver driver = {
 	.network_id_query = ofono_network_id_query,
 	.network_selection_mode_query = ofono_network_selection_mode_query,
 	.network_set = ofono_network_set,
+	.rat_query = ofono_rat_query,
 };
 
 void ofono_init(struct telephony_service *service)
