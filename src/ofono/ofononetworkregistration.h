@@ -50,7 +50,7 @@ enum ofono_network_technology {
 struct ofono_network_registration;
 struct ofono_network_operator;
 
-typedef int (*ofono_network_registration_operator_list_cb)(struct ofono_error *err, GList *operators, void *data);
+typedef void (*ofono_network_registration_operator_list_cb)(struct ofono_error *err, GList *operators, void *data);
 
 struct ofono_network_registration* ofono_network_registration_create(const gchar *path);
 void ofono_network_registration_ref(struct ofono_network_registration *sim);

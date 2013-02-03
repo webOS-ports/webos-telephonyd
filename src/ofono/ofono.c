@@ -546,7 +546,7 @@ int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 	return 0;
 }
 
-int ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
+void ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
 							 void *data)
 {
 	struct ofono_data *od = telephony_service_get_data(service);
@@ -564,8 +564,6 @@ int ofono_network_list_query(struct telephony_service *service, telephony_networ
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&error, NULL, data);
 	}
-
-	return 0;
 }
 
 int ofono_network_list_query_cancel(struct telephony_service *service, telephony_result_cb cb, void *data)
@@ -624,6 +622,98 @@ int ofono_network_selection_mode_query(struct telephony_service *service, teleph
 	else {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&error, false, data);
+	}
+
+	return 0;
+}
+
+void netop_register_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, cbd->data);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+void get_operators_cb(struct ofono_error *err, GList *operators, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct ofono_network_operator *netop = NULL;
+	struct telephony_error terr;
+	int n;
+	const char *id = cbd->user;
+	char netid[6];
+	bool found = false;
+
+	for (n = 0; n < g_list_length(operators); n++) {
+		netop = g_list_nth_data(operators, n);
+
+		snprintf(netid, 6, "%s%s",
+				 ofono_network_operator_get_mcc(netop),
+				 ofono_network_operator_get_mnc(netop));
+
+		if (g_str_equal(netid, id)) {
+			ofono_network_operator_register(netop, netop_register_cb, cbd);
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		terr.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+		cb(&terr, cbd->data);
+		g_free(cbd);
+	}
+}
+
+void register_automatically_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, cbd->data);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+int ofono_network_set(struct telephony_service *service, bool automatic, const char *id,
+					  telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct cb_data *cbd;
+
+	if (od->netreg) {
+		cbd = cb_data_new(cb, data);
+
+		if (!automatic) {
+			cbd->user = (char*) id;
+			ofono_network_registration_get_operators(od->netreg, get_operators_cb, cbd);
+		}
+		else {
+			ofono_network_registration_register(od->netreg, register_automatically_cb, cbd);
+		}
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
 	}
 
 	return 0;
@@ -788,6 +878,7 @@ struct telephony_driver driver = {
 	.network_list_query_cancel = ofono_network_list_query_cancel,
 	.network_id_query = ofono_network_id_query,
 	.network_selection_mode_query = ofono_network_selection_mode_query,
+	.network_set = ofono_network_set,
 };
 
 void ofono_init(struct telephony_service *service)

@@ -652,6 +652,7 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	raw_buffer id_buf;
+	char *id = NULL;
 	bool automatic = false;
 
 	if (!service->initialized) {
@@ -679,16 +680,20 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	jboolean_get(automatic_obj, &automatic);
 
-	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("id"), &id_obj)) {
-		luna_service_message_reply_error_bad_json(handle, message);
-		goto cleanup;
-	}
+	if (!automatic) {
+		if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("id"), &id_obj)) {
+			luna_service_message_reply_error_bad_json(handle, message);
+			goto cleanup;
+		}
 
-	id_buf = jstring_get(id_obj);
+		id_buf = jstring_get(id_obj);
+		id = id_buf.m_str;
+	}
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->network_set(service, automatic, id_buf.m_str, telephonyservice_common_finish, req_data) < 0) {
+	if (service->driver->network_set(service, automatic, id,
+									 telephonyservice_common_finish, req_data) < 0) {
 		g_warning("Failed to process service networkSet request in our driver");
 		luna_service_message_reply_custom_error(handle, message, "Failed to connect to set network");
 		goto cleanup;

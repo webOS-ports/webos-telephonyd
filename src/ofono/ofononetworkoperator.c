@@ -194,6 +194,7 @@ void ofono_network_operator_register(struct ofono_network_operator *netop, ofono
 	}
 
 	cbd = cb_data_new(cb, user_data);
+	cbd->user = netop;
 
 	ofono_interface_network_operator_call_register(netop->remote, NULL, register_cb, cbd);
 }
