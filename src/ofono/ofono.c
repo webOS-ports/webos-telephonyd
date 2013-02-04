@@ -40,6 +40,8 @@ struct ofono_data {
 	struct ofono_radio_settings *rs;
 	enum telephony_sim_status sim_status;
 	bool initializing;
+	bool power_set_pending;
+	bool power_target;
 	guint service_watch;
 	GCancellable *network_scan_cancellable;
 };
@@ -47,6 +49,7 @@ struct ofono_data {
 void set_online_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
+	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
 
@@ -57,6 +60,7 @@ void set_online_cb(struct ofono_error *error, gpointer user_data)
 	}
 
 	cb(NULL, cbd->data);
+	od->power_set_pending = false;
 
 cleanup:
 	g_free(cbd);
@@ -73,11 +77,22 @@ void set_powered_cb(struct ofono_error *error, gpointer user_data)
 	if (error) {
 		terr.code = 1; /* FIXME */
 		cb(&terr, cbd->data);
-		g_free(cbd);
-		return;
+		goto cleanup;
 	}
 
-	ofono_modem_set_online(od->modem, powered, set_online_cb, cbd);
+	if (od->power_target) {
+		ofono_modem_set_online(od->modem, od->power_target, set_online_cb, cbd);
+	}
+	else {
+		od->power_set_pending = false;
+		cb(NULL, cbd->data);
+		goto cleanup;
+	}
+
+	return;
+
+cleanup:
+	g_free(cbd);
 }
 
 int ofono_power_set(struct telephony_service *service, bool power, telephony_result_cb cb, void *data)
@@ -85,6 +100,16 @@ int ofono_power_set(struct telephony_service *service, bool power, telephony_res
 	struct cb_data *cbd = cb_data_new(cb, data);
 	struct ofono_data *od = telephony_service_get_data(service);
 	bool powered = false;
+	struct telephony_error error;
+
+	if (od->power_set_pending) {
+		error.code = TELEPHONY_ERROR_ALREADY_INPROGRESS;
+		cb(&error, data);
+		return 0;
+	}
+
+	od->power_set_pending = true;
+	od->power_target = power;
 
 	cbd->user = od;
 
