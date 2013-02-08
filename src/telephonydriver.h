@@ -121,6 +121,14 @@ struct telephony_network {
 	enum telephony_radio_access_mode radio_access_mode;
 };
 
+struct telephony_subscriber_info {
+	enum telephony_platform_type platform_type;
+	const gchar *imsi;
+	const gchar *msisdn;
+	const gchar *min;
+	const gchar *mdn;
+};
+
 typedef void (*telephony_driver_result_cb)(void *data);
 
 typedef int (*telephony_result_cb)(const struct telephony_error* error, void *data);
@@ -135,13 +143,13 @@ typedef int (*telephony_network_id_query_cb)(const struct telephony_error *error
 typedef int (*telephony_network_selection_mode_query_cb)(const struct telephony_error *error, bool automatic, void *data);
 typedef int (*telephony_fdn_status_query_cb)(const struct telephony_error* error, struct telephony_fdn_status *status, void *data);
 typedef int (*telephony_rat_query_cb)(const struct telephony_error *error, enum telephony_radio_access_mode mode, void *data);
-
+typedef int (*telephony_subscriber_id_query_cb)(const struct telephony_error *error, struct telephony_subscriber_info *info, void *data);
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);
 
 	int (*platform_query)(struct telephony_service *service, telephony_platform_query_cb cb, void *data);
-
+	int (*subscriber_id_query)(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data);
 	/* power management */
 	int (*power_query)(struct telephony_service *service, telephony_power_query_cb cb, void *data);
 	int (*power_set)(struct telephony_service *service, bool power, telephony_result_cb cb, void *data);

@@ -343,5 +343,90 @@ cleanup:
 	return true;
 }
 
+static int _service_subscriber_id_query_finish(const struct telephony_error *error, struct telephony_subscriber_info *info, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
+					jstring_create(telephony_platform_type_to_string(info->platform_type)));
+
+		switch (info->platform_type) {
+		case TELEPHONY_PLATFORM_TYPE_GSM:
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("imsi"), jstring_create(info->imsi));
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("msisdn"), jstring_create(info->msisdn));
+			break;
+		case TELEPHONY_PLATFORM_TYPE_CDMA:
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("min"), jstring_create(info->min));
+			jobject_put(extended_obj, J_CSTR_TO_JVAL("mdn"), jstring_create(info->mdn));
+			break;
+		}
+
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	}
+	else {
+		/* FIXME better error message */
+		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief Query the subscriber id (IMSI, MSISDN)
+ */
+bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+	jvalue_ref parsed_obj = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
+		goto cleanup;
+	}
+
+	if (!service->driver || !service->driver->subscriber_id_query) {
+		g_warning("No implementation available for service subscriberIdQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+
+	if (service->driver->subscriber_id_query(service, _service_subscriber_id_query_finish, req_data) < 0) {
+		g_warning("Failed to process service subscriberIdQuery request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to query subscriber identification");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	if (req_data)
+		luna_service_req_data_free(req_data);
+
+	return true;
+}
 
 // vim:ts=4:sw=4:noexpandtab
