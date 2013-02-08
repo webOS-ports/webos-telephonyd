@@ -252,10 +252,6 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
-	/* handle possible subscriptions */
-	if (req_data->subscribed)
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
-
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 			jstring_create(telephony_platform_type_to_string(platform_info->platform_type)));
@@ -301,8 +297,6 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-	jvalue_ref parsed_obj = NULL;
-	const char *payload;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
@@ -312,13 +306,6 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	if (!service->driver || !service->driver->platform_query) {
 		g_warning("No implementation available for service platformQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
-	}
-
-	payload = LSMessageGetPayload(message);
-	parsed_obj = luna_service_message_parse_and_validate(payload);
-	if (jis_null(parsed_obj)) {
-		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
 	}
 
@@ -334,9 +321,6 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	return true;
 
 cleanup:
-	if (!jis_null(parsed_obj))
-		j_release(&parsed_obj);
-
 	if (req_data)
 		luna_service_req_data_free(req_data);
 
