@@ -239,7 +239,7 @@ struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path)
 	sim->remote = ofono_interface_sim_manager_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.sim interface");
+		g_error("Unable to initialize proxy for the org.ofono.SimManager interface");
 		g_error_free(error);
 		g_free(sim);
 		return NULL;
