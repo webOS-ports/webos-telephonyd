@@ -144,6 +144,7 @@ typedef int (*telephony_network_selection_mode_query_cb)(const struct telephony_
 typedef int (*telephony_fdn_status_query_cb)(const struct telephony_error* error, struct telephony_fdn_status *status, void *data);
 typedef int (*telephony_rat_query_cb)(const struct telephony_error *error, enum telephony_radio_access_mode mode, void *data);
 typedef int (*telephony_subscriber_id_query_cb)(const struct telephony_error *error, struct telephony_subscriber_info *info, void *data);
+
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);

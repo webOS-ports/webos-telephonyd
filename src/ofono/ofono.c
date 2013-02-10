@@ -799,6 +799,34 @@ int ofono_rat_set(struct telephony_service *service, enum telephony_radio_access
 	return 0;
 }
 
+int ofono_subscriber_id_query(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct telephony_subscriber_info info;
+	GSList *subscriber_numbers;
+
+	if (od->sim) {
+		memset(&info, 0, sizeof(struct telephony_subscriber_info));
+
+		info.imsi = ofono_sim_manager_get_subscriber_identity(od->sim);
+
+		subscriber_numbers = ofono_sim_manager_get_subscriber_numbers(od->sim);
+		if (subscriber_numbers) {
+			/* just take the first one as our service API doesn't support more than one */
+			info.msisdn = subscriber_numbers->data;
+		}
+
+		cb(NULL, &info, data);
+	}
+	else {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, NULL, data);
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -970,6 +998,7 @@ struct telephony_driver driver = {
 	.network_set = ofono_network_set,
 	.rat_query = ofono_rat_query,
 	.rat_set = ofono_rat_set,
+	.subscriber_id_query = ofono_subscriber_id_query,
 };
 
 void ofono_init(struct telephony_service *service)

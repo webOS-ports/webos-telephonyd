@@ -39,6 +39,9 @@ struct ofono_sim_manager {
 	bool locked_pins[OFONO_SIM_PIN_TYPE_MAX];
 	int pin_retries[OFONO_SIM_PIN_TYPE_MAX];
 	bool fixed_dialing;
+	gchar *subscriber_identity;
+	gchar *card_identifier;
+	GSList *subscriber_numbers;
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
@@ -129,6 +132,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_sim_manager *sim = user_data;
 	gchar *pin_type_str = NULL;
+	gchar *subscriber_number = NULL;
 	int n;
 	GVariant *child, *prop_value, *prop_key;
 	enum ofono_sim_pin pin_type;
@@ -187,6 +191,28 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		if (sim->mnc)
 			g_free(sim->mnc);
 		sim->mnc = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "CardIdentifier")) {
+		if (sim->card_identifier)
+			g_free(sim->card_identifier);
+		sim->card_identifier = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "SubscriberIdentity")) {
+		if (sim->subscriber_identity)
+			g_free(sim->subscriber_identity);
+		sim->subscriber_identity = g_variant_dup_string(value, NULL);
+	}
+	else if (g_str_equal(name, "SubscriberNumbers")) {
+		if (sim->subscriber_numbers) {
+			g_slist_free_full(sim->subscriber_numbers, g_free);
+			sim->subscriber_numbers = NULL;
+		}
+
+		for (n = 0; n < g_variant_n_children(value); n++) {
+			child = g_variant_get_child_value(value, n);
+			subscriber_number = g_variant_dup_string(child, NULL);
+			sim->subscriber_numbers = g_slist_append(sim->subscriber_numbers, subscriber_number);
+		}
 	}
 
 	if (sim->prop_changed_cb)
@@ -440,6 +466,30 @@ const char* ofono_sim_manager_get_mnc(struct ofono_sim_manager *sim)
 		return NULL;
 
 	return sim->mnc;
+}
+
+const char* ofono_sim_manager_get_subscriber_identity(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return NULL;
+
+	return sim->subscriber_identity;
+}
+
+const char* ofono_sim_manager_get_card_identifier(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return NULL;
+
+	return sim->card_identifier;
+}
+
+GSList* ofono_sim_manager_get_subscriber_numbers(struct ofono_sim_manager *sim)
+{
+	if (!sim)
+		return NULL;
+
+	return sim->subscriber_numbers;
 }
 
 // vim:ts=4:sw=4:noexpandtab

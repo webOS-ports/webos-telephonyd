@@ -69,6 +69,9 @@ bool ofono_sim_manager_is_pin_locked(struct ofono_sim_manager *sim, enum ofono_s
 bool ofono_sim_manager_get_fixed_dialing(struct ofono_sim_manager *sim);
 const char* ofono_sim_manager_get_mcc(struct ofono_sim_manager *sim);
 const char* ofono_sim_manager_get_mnc(struct ofono_sim_manager *sim);
+const char* ofono_sim_manager_get_subscriber_identity(struct ofono_sim_manager *sim);
+const char* ofono_sim_manager_get_card_identifier(struct ofono_sim_manager *sim);
+GSList* ofono_sim_manager_get_subscriber_numbers(struct ofono_sim_manager *sim);
 
 #endif
 
