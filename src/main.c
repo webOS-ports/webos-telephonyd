@@ -28,6 +28,7 @@
 #include <glib-object.h>
 
 #include "telephonyservice.h"
+#include "wanservice.h"
 
 #define SHUTDOWN_GRACE_SECONDS		2
 #define VERSION						"0.1"
@@ -139,7 +140,8 @@ int main(int argc, char **argv)
 	GOptionContext *context;
 	GError *err = NULL;
 	guint signal;
-	struct telephony_service *service;
+	struct telephony_service *telservice;
+	struct wan_service *wanservice;
 
 	g_type_init();
 
@@ -179,18 +181,17 @@ int main(int argc, char **argv)
 
 	event_loop = g_main_loop_new(NULL, FALSE);
 
-	service = telephony_service_create();
+	telservice = telephony_service_create();
+	wanservice = wan_service_create();
 
-	/* FIXME this should be done as part of a plugin mechanism */
-	ofono_init(service);
+	ofono_init(telservice);
 
 	g_main_loop_run(event_loop);
 
-cleanup:
-	/* FIXME this should be done as part of a plugin mechanism */
-	ofono_exit(service);
+	ofono_exit(telservice);
 
-	telephony_service_free(service);
+	wan_service_free(wanservice);
+	telephony_service_free(telservice);
 
 	g_source_remove(signal);
 
