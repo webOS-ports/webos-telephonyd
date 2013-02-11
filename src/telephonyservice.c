@@ -113,24 +113,6 @@ static bool retrieve_power_state_from_settings(void)
 	return power_state;
 }
 
-static int initialize_luna_service(struct telephony_service *service)
-{
-	LSError error;
-
-	g_message("Initializing luna service ...");
-
-	LSErrorInit(&error);
-
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
-			NULL, service, &error)) {
-		g_warning("Could not register service category");
-		LSErrorFree(&error);
-		return -EIO;
-	}
-
-	return 0;
-}
-
 int _service_initial_power_set_finish(const struct telephony_error *error, void *data)
 {
 	return 0;
@@ -154,36 +136,69 @@ static int configure_service(struct telephony_service *service)
 	return 0;
 }
 
-static void shutdown_luna_service(struct telephony_service *service)
-{
-	g_message("Shutting down luna service ...");
-}
-
-struct telephony_service* telephony_service_create(LSPalmService *palm_service)
+struct telephony_service* telephony_service_create()
 {
 	struct telephony_service *service;
+	LSError error;
 
 	service = g_try_new0(struct telephony_service, 1);
 	if (!service)
 		return NULL;
 
-	service->palm_service = palm_service;
-	service->private_service = LSPalmServiceGetPrivateConnection(palm_service);
 	service->initialized = false;
 	service->power_off_pending = false;
 	service->powered = false;
 	service->network_status_query_pending = false;
 	service->network_registered = false;
 
-	if (initialize_luna_service(service) < 0)
-		g_critical("Failed to initialize luna service. Wront service configuration?");
+	LSErrorInit(&error);
+
+	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
+		g_error("Failed to initialize the Luna Palm service: %s", error.message);
+		LSErrorFree(&error);
+		goto error;
+	}
+
+	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
+		g_error("Failed to attach to glib mainloop for palm service: %s", error.message);
+		LSErrorFree(&error);
+		goto error;
+	}
+
+	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
+			NULL, service, &error)) {
+		g_warning("Could not register service category");
+		LSErrorFree(&error);
+		goto error;
+	}
+
+	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
 
 	return service;
+
+error:
+	if (service->palm_service &&
+		LSUnregisterPalmService(service->palm_service, &error) < 0) {
+		g_error("Could not unregister palm service: %s", error.message);
+		LSErrorFree(&error);
+	}
+
+	g_free(service);
+
+	return NULL;
 }
 
 void telephony_service_free(struct telephony_service *service)
 {
-	shutdown_luna_service(service);
+	LSError error;
+
+	LSErrorInit(&error);
+
+	if (service->palm_service != NULL &&
+		LSUnregisterPalmService(service->palm_service, &error) < 0) {
+		g_error("Could not unregister palm service: %s", error.message);
+		LSErrorFree(&error);
+	}
 
 	if (service->driver) {
 		service->driver->remove(service);

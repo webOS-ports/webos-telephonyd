@@ -37,8 +37,6 @@ static gboolean option_detach = FALSE;
 static gboolean option_version = FALSE;
 static gboolean option_debug = FALSE;
 static unsigned int __terminated = 0;
-static LSHandle* private_service_handle = NULL;
-static LSPalmService *palm_service_handle = NULL;
 
 extern void ofono_init(struct telephony_service *service);
 extern void ofono_exit(struct telephony_service *service);
@@ -139,7 +137,6 @@ static void log_handler(const gchar *log_domain, GLogLevelFlags log_level,
 int main(int argc, char **argv)
 {
 	GOptionContext *context;
-	LSError lserror;
 	GError *err = NULL;
 	guint signal;
 	struct telephony_service *service;
@@ -182,23 +179,8 @@ int main(int argc, char **argv)
 
 	event_loop = g_main_loop_new(NULL, FALSE);
 
-	LSErrorInit(&lserror);
+	service = telephony_service_create();
 
-	if (!LSRegisterPalmService("com.palm.telephony", &palm_service_handle, &lserror)) {
-		g_error("Failed to initialize the Luna Palm service: %s", lserror.message);
-		LSErrorFree(&lserror);
-		goto cleanup;
-	}
-
-	if (!LSGmainAttachPalmService(palm_service_handle, event_loop, &lserror)) {
-		g_error("Failed to attach to glib mainloop for palm service: %s", lserror.message);
-		LSErrorFree(&lserror);
-		goto cleanup;
-	}
-
-	private_service_handle = LSPalmServiceGetPrivateConnection(palm_service_handle);
-
-	service = telephony_service_create(palm_service_handle);
 	/* FIXME this should be done as part of a plugin mechanism */
 	ofono_init(service);
 
@@ -209,11 +191,6 @@ cleanup:
 	ofono_exit(service);
 
 	telephony_service_free(service);
-
-	if (palm_service_handle != NULL && LSUnregisterPalmService(palm_service_handle, &lserror) < 0) {
-		g_error("Could not unregister palm service: %s", lserror.message);
-		LSErrorFree(&lserror);
-	}
 
 	g_source_remove(signal);
 

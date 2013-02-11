@@ -19,6 +19,8 @@
 #ifndef TELEPHONY_DRIVER_H_
 #define TELEPHONY_DRIVER_H_
 
+#include <stdbool.h>
+
 struct telephony_service;
 
 struct telephony_error {
