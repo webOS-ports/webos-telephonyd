@@ -1008,6 +1008,7 @@ void ofono_init(struct telephony_service *service)
 
 void ofono_exit(struct telephony_service *service)
 {
+	telephony_service_unregister_driver(service, &driver);
 }
 
 // vim:ts=4:sw=4:noexpandtab

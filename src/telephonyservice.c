@@ -237,6 +237,14 @@ void telephony_service_register_driver(struct telephony_service *service, struct
 	}
 }
 
+void telephony_service_unregister_driver(struct telephony_service *service, struct telephony_driver *driver)
+{
+	if (!service->driver || service->driver != driver)
+		return;
+
+	service->driver = NULL;
+}
+
 int telephonyservice_common_finish(const struct telephony_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;

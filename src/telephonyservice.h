@@ -28,6 +28,7 @@ void telephony_service_free(struct telephony_service *service);
 void telephony_service_set_data(struct telephony_service *service, void *data);
 void* telephony_service_get_data(struct telephony_service *service);
 void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver);
+void telephony_service_unregister_driver(struct telephony_service *service, struct telephony_driver *driver);
 
 void telephony_service_availability_changed_notify(struct telephony_service *service, bool available);
 void telephony_service_power_status_notify(struct telephony_service *service, bool power);
