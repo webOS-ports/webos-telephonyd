@@ -145,9 +145,9 @@ int main(int argc, char **argv)
 
 	g_type_init();
 
-	g_message("Telephony Interface Layer Daemon %s", VERSION);
-
 	g_log_set_handler (NULL, G_LOG_LEVEL_MASK, log_handler, NULL);
+
+	g_message("Telephony Interface Layer Daemon %s", VERSION);
 
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
