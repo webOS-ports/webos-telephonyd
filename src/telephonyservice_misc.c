@@ -31,6 +31,27 @@
 #include "utils.h"
 #include "luna_service_utils.h"
 
+int telephonyservice_common_finish(const struct telephony_error *error, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
 void telephony_service_power_status_notify(struct telephony_service *service, bool power)
 {
 	jvalue_ref reply_obj = NULL;
@@ -495,6 +516,121 @@ bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void 
 		luna_service_message_reply_error_internal(handle, message);
 
 	j_release(&reply_obj);
+
+	return true;
+}
+
+/**
+ * @brief Check wether telephony service is ready
+ **/
+
+bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
+	bool subscribed = false;
+
+	reply_obj = jobject_create();
+	extended_obj = jobject_create();
+
+	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("radioConnected"), jboolean_create(service->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("power"), jboolean_create(service->powered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("ready"), jboolean_create(service->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("networkRegistered"), jboolean_create(service->network_registered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(service->data_registered));
+
+	/* FIXME check in which situations the three fields below are set and updated */
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("emergency"), jboolean_create(false));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("security"), jboolean_create(false));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("securityLocked"), jboolean_create(false));
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
+		luna_service_message_reply_error_internal(handle, message);
+
+	j_release(&reply_obj);
+
+	return true;
+}
+
+/**
+ * @brief Subscribe for a specific group of events
+ *
+ * JSON format:
+ *    {"events":"<type>"}
+ **/
+bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref events_obj = NULL;
+	jvalue_ref reply_obj = NULL;
+	bool result = false;
+	LSError lserror;
+	const char *payload;
+	bool subscribed = false;
+
+	if (!service->initialized)
+		goto cleanup;
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("events"), &events_obj)) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
+
+	if (jstring_equal2(events_obj, J_CSTR_TO_BUF("network"))) {
+		result = LSSubscriptionAdd(handle, "/networkStatusQuery", message, &lserror);
+		if (!result) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+
+			luna_service_message_reply_error_internal(handle, message);
+			goto cleanup;
+		}
+
+		subscribed = true;
+	}
+	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signal"))) {
+		result = LSSubscriptionAdd(handle, "/signalStrengthQuery", message, &lserror);
+		if (!result) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+
+			luna_service_message_reply_error_internal(handle, message);
+			goto cleanup;
+		}
+
+		subscribed = true;
+	}
+
+	reply_obj = jobject_create();
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if (!luna_service_message_validate_and_send(handle, message, reply_obj)) {
+		luna_service_message_reply_error_internal(handle, message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&parsed_obj);
 
 	return true;
 }
