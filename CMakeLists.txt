@@ -74,7 +74,7 @@ endif()
 
 include_directories(src ${GDBUS_IF_DIR})
 include_directories(src src/ofono)
-file(GLOB SOURCE_FILES src/*.c src/ofono/*.c ${GDBUS_IF_DIR}/ofono-interface.c)
+file(GLOB SOURCE_FILES src/*.c drivers/ofono/*.c ${GDBUS_IF_DIR}/ofono-interface.c)
 
 webos_add_compiler_flags(ALL -Wall)
 webos_add_linker_options(ALL --no-undefined)

@@ -974,7 +974,7 @@ void ofono_remove(struct telephony_service *service)
 	telephony_service_set_data(service, NULL);
 }
 
-struct telephony_driver driver = {
+struct telephony_driver ofono_telephony_driver = {
 	.probe =		ofono_probe,
 	.remove =		ofono_remove,
 	.platform_query		= ofono_platform_query,
@@ -1000,15 +1000,5 @@ struct telephony_driver driver = {
 	.rat_set = ofono_rat_set,
 	.subscriber_id_query = ofono_subscriber_id_query,
 };
-
-int ofono_init(void)
-{
-	return telephony_driver_register(&driver);
-}
-
-void ofono_exit(void)
-{
-	telephony_driver_unregister(&driver);
-}
 
 // vim:ts=4:sw=4:noexpandtab
