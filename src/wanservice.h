@@ -22,6 +22,9 @@
 #include <luna-service2/lunaservice.h>
 #include "wandriver.h"
 
+int wan_driver_register(struct wan_driver *driver);
+void wan_driver_unregister(struct wan_driver *driver);
+
 struct wan_service* wan_service_create(void);
 void wan_service_free(struct wan_service *service);
 

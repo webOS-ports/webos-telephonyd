@@ -1001,14 +1001,14 @@ struct telephony_driver driver = {
 	.subscriber_id_query = ofono_subscriber_id_query,
 };
 
-void ofono_init(struct telephony_service *service)
+int ofono_init(void)
 {
-	telephony_service_register_driver(service, &driver);
+	return telephony_driver_register(&driver);
 }
 
-void ofono_exit(struct telephony_service *service)
+void ofono_exit(void)
 {
-	telephony_service_unregister_driver(service, &driver);
+	telephony_driver_unregister(&driver);
 }
 
 // vim:ts=4:sw=4:noexpandtab

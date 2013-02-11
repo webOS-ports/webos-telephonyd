@@ -21,6 +21,9 @@
 
 #include "telephonydriver.h"
 
+int telephony_driver_register(struct telephony_driver *driver);
+void telephony_driver_unregister(struct telephony_driver *driver);
+
 struct telephony_service* telephony_service_create();
 void telephony_service_free(struct telephony_service *service);
 

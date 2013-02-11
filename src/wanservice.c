@@ -30,6 +30,7 @@
 #include "luna_service_utils.h"
 
 extern GMainLoop *event_loop;
+static GSList *g_driver_list;
 
 struct wan_service {
 	struct wan_driver *driver;
@@ -47,9 +48,22 @@ struct wan_service* wan_service_create(void)
 	struct wan_service *service;
 	LSError error;
 
+	if (g_driver_list == NULL) {
+		g_message("Can't create WAN service as no suitable driver is available");
+		return NULL;
+	}
+
 	service = g_try_new0(struct wan_service, 1);
 	if (!service)
 		return NULL;
+
+	/* take first driver until we have some machanism to determine the best driver */
+	service->driver = g_driver_list->data;
+
+	if (service->driver->probe(service) < 0) {
+		g_free(service);
+		return NULL;
+	}
 
 	LSErrorInit(&error);
 
@@ -120,27 +134,19 @@ void* wan_service_get_data(struct wan_service *service)
 	return service->data;
 }
 
-void wan_service_register_driver(struct wan_service *service, struct telephony_driver *driver)
+int wan_driver_register(struct wan_driver *driver)
 {
-	if (service->driver) {
-		g_warning("Can not register a second WAN driver");
-		return;
-	}
+	if (driver->probe == NULL)
+		return -EINVAL;
 
-	service->driver = driver;
+	g_driver_list = g_slist_prepend(g_driver_list, driver);
 
-	if (service->driver->probe(service) < 0) {
-		g_warning("WAN driver failed to initialize");
-		service->driver = NULL;
-	}
+	return 0;
 }
 
-void wan_service_unregister_driver(struct wan_service *service, struct telephony_driver *driver)
+void wan_driver_unregister(struct wan_driver *driver)
 {
-	if (!service->driver || service->driver != driver)
-		return;
-
-	service->driver = NULL;
+	g_driver_list = g_slist_remove(g_driver_list, driver);
 }
 
 // vim:ts=4:sw=4:noexpandtab

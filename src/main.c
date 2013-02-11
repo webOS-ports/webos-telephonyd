@@ -39,8 +39,8 @@ static gboolean option_version = FALSE;
 static gboolean option_debug = FALSE;
 static unsigned int __terminated = 0;
 
-extern void ofono_init(struct telephony_service *service);
-extern void ofono_exit(struct telephony_service *service);
+extern void ofono_init(void);
+extern void ofono_exit(void);
 
 static GOptionEntry options[] = {
 	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
@@ -181,17 +181,17 @@ int main(int argc, char **argv)
 
 	event_loop = g_main_loop_new(NULL, FALSE);
 
+	ofono_init();
+
 	telservice = telephony_service_create();
 	wanservice = wan_service_create();
 
-	ofono_init(telservice);
-
 	g_main_loop_run(event_loop);
-
-	ofono_exit(telservice);
 
 	wan_service_free(wanservice);
 	telephony_service_free(telservice);
+
+	ofono_exit();
 
 	g_source_remove(signal);
 

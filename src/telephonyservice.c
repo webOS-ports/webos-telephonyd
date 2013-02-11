@@ -32,6 +32,7 @@
 #include "luna_service_utils.h"
 
 extern GMainLoop *event_loop;
+static GSList *g_driver_list;
 
 bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -141,9 +142,22 @@ struct telephony_service* telephony_service_create()
 	struct telephony_service *service;
 	LSError error;
 
+	if (g_driver_list == NULL) {
+		g_message("Can't create telephony servie as no suitable driver is available");
+		return NULL;
+	}
+
 	service = g_try_new0(struct telephony_service, 1);
 	if (!service)
 		return NULL;
+
+	/* take first driver until we have some machanism to determine the best driver */
+	service->driver = g_driver_list->data;
+
+	if (service->driver->probe(service) < 0) {
+		g_free(service);
+		return NULL;
+	}
 
 	service->initialized = false;
 	service->power_off_pending = false;
@@ -237,27 +251,19 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 	service->initialized = available;
 }
 
-void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver)
+int telephony_driver_register(struct telephony_driver *driver)
 {
-	if (service->driver) {
-		g_warning("Can not register a second telephony driver");
-		return;
-	}
+	if (driver->probe == NULL)
+		return -EINVAL;
 
-	service->driver = driver;
+	g_driver_list = g_slist_prepend(g_driver_list, driver);
 
-	if (service->driver->probe(service) < 0) {
-		g_warning("Telephony driver failed to initialize");
-		service->driver = NULL;
-	}
+	return 0;
 }
 
-void telephony_service_unregister_driver(struct telephony_service *service, struct telephony_driver *driver)
+void telephony_driver_unregister(struct telephony_driver *driver)
 {
-	if (!service->driver || service->driver != driver)
-		return;
-
-	service->driver = NULL;
+	g_driver_list = g_slist_remove(g_driver_list, driver);
 }
 
 // vim:ts=4:sw=4:noexpandtab
