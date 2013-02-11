@@ -108,4 +108,48 @@
 			<arg type="v" name="value" direction="out"/>
 		</signal>
 	</interface>
+	<interface name="org.ofono.ConnectionManager">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SetProperty">
+			<arg type="s" name="property" direction="in"/>
+			<arg type="v" name="value" direction="in"/>
+		</method>
+		<method name="DeactivateAll"/>
+		<method name="GetContexts">
+			<arg type="a(oa{sv})" direction="out"/>
+		</method>
+		<method name="AddContext">
+			<arg type="s" name="type" direction="in"/>
+			<arg type="o" direction="out"/>
+		</method>
+		<method name="RemoveContext">
+			<arg type="o" name="context" direction="in"/>
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+		<signal name="ContextAdded">
+			<arg type="o" name="path"/>
+			<arg type="a{sv}" name="properties"/>
+		</signal>
+		<signal name="ContextRemoved">
+			<arg type="o" name="path"/>
+		</signal>
+	</interface>
+	<interface name="org.ofono.ConnectionContext">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SetProperty">
+			<arg type="s" name="property" direction="in"/>
+			<arg type="v" name="value" direction="in"/>
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
 </node>
