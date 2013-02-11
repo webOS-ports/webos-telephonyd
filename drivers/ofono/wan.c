@@ -16,26 +16,45 @@
 *
 * LICENSE@@@ */
 
-extern struct telephony_driver ofono_telephony_driver;
-extern struct wan_driver ofono_wan_driver;
-
 #include <glib.h>
 #include <errno.h>
 #include <string.h>
 
 #include "wanservice.h"
-#include "telephonyservice.h"
+#include "wandriver.h"
 
-void ofono_init(void)
+struct ofono_wan_data {
+	struct wan_service *service;
+};
+
+int ofono_wan_probe(struct wan_service *service)
 {
-	telephony_driver_register(&ofono_telephony_driver);
-	wan_driver_register(&ofono_wan_driver);
+	struct ofono_wan_data *data;
+
+	data = g_try_new0(struct ofono_wan_data, 1);
+	if (!data)
+		return -ENOMEM;
+
+	wan_service_set_data(service, data);
+	data->service = service;
+
+	return 0;
 }
 
-void ofono_exit(void)
+void ofono_wan_remove(struct wan_service *service)
 {
-	wan_driver_unregister(&ofono_wan_driver);
-	telephony_driver_unregister(&ofono_telephony_driver);
+	struct ofono_data *data;
+
+	data = wan_service_get_data(service);
+
+	g_free(data);
+
+	wan_service_set_data(service, NULL);
 }
+
+struct wan_driver ofono_wan_driver = {
+	.probe =		ofono_wan_probe,
+	.remove =		ofono_wan_remove,
+};
 
 // vim:ts=4:sw=4:noexpandtab
