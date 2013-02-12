@@ -26,6 +26,7 @@
 #include <luna-service2/lunaservice.h>
 
 #include "wandriver.h"
+#include "wanservice.h"
 #include "utils.h"
 #include "luna_service_utils.h"
 
@@ -39,9 +40,102 @@ struct wan_service {
 	LSHandle *private_service;
 };
 
+bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data);
+
 static LSMethod _wan_service_methods[]  = {
+	{ "getstatus", _wan_service_getstatus_cb },
 	{ 0, 0 }
 };
+
+const char* wan_network_type_to_string(enum wan_network_type type)
+{
+	switch (type) {
+	case WAN_NETWORK_TYPE_GPRS:
+		return "gprs";
+	case WAN_NETWORK_TYPE_EDGE:
+		return "edge";
+	case WAN_NETWORK_TYPE_UMTS:
+		return "umts";
+	case WAN_NETWORK_TYPE_HSDPA:
+		return "hsdpa";
+	case WAN_NETWORK_TYPE_1X:
+		return "1x";
+	case WAN_NETWORK_TYPE_EVDO:
+		return "evdo";
+	default:
+		break;
+	}
+
+	return "none";
+}
+
+const char* wan_status_type_to_string(enum wan_status_type status)
+{
+	switch (status) {
+	case WAN_STATUS_TYPE_DISABLE:
+		return "disable";
+	case WAN_STATUS_TYPE_DISABLING:
+		return "disabling";
+	case WAN_STATUS_TYPE_ENABLE:
+		return "enable";
+	}
+
+	return NULL;
+}
+
+const char* wan_connection_status_to_string(enum wan_connection_status status)
+{
+	switch (status) {
+	case WAN_CONNECTION_STATUS_ACTIVE:
+		return "active";
+	case WAN_CONNECTION_STATUS_CONNECTING:
+		return "disconnecting";
+	case WAN_CONNECTION_STATUS_DISCONNECTED:
+		return "disconnected";
+	case WAN_CONNECTION_STATUS_DISCONNECTING:
+		return "disconnecting";
+	case WAN_CONNECTION_STATUS_DORMANT:
+		return "dormant";
+	}
+
+	return NULL;
+}
+
+const char* wan_service_type_to_string(enum wan_service_type type)
+{
+	switch (type) {
+	case WAN_SERVICE_TYPE_INTERNET:
+		return "internet";
+	case WAN_SERVICE_TYPE_MMS:
+		return "mms";
+	case WAN_SERVICE_TYPE_SPRINT_PROVISIONING:
+		return "sprintProvisioning";
+	case WAN_SERVICE_TYPE_TETHERED:
+		return "tethered";
+	default:
+		break;
+	}
+
+	return "unknown";
+}
+
+const char* wan_request_status_to_string(enum wan_request_status status)
+{
+	switch (status) {
+	case WAN_REQUEST_STATUS_CONNECT_FAILED:
+		return "connect failed";
+	case WAN_REQUEST_STATUS_CONNECT_SUCCEEDED:
+		return "connect succeeded";
+	case WAN_REQUEST_STATUS_DISCONNECT_FAILED:
+		return "disconnect failed";
+	case WAN_REQUEST_STATUS_DISCONNECT_SUCCEEDED:
+		return "disconnect succeeded";
+	default:
+		break;
+	}
+
+	return NULL;
+}
 
 struct wan_service* wan_service_create(void)
 {
@@ -147,6 +241,96 @@ int wan_driver_register(struct wan_driver *driver)
 void wan_driver_unregister(struct wan_driver *driver)
 {
 	g_driver_list = g_slist_remove(g_driver_list, driver);
+}
+
+void wan_service_status_changed_notify(struct wan_service *service, struct wan_status *status)
+{
+	jvalue_ref reply_obj = NULL;
+	jvalue_ref connected_services_obj = NULL;
+	jvalue_ref service_obj = NULL;
+	jvalue_ref services_obj = NULL;
+	int n;
+	struct wan_connected_service *wanservice;
+	GSList *iter;
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
+				jstring_create(status->state ? "enable" : "disable"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("roamGuard"),
+				jstring_create(status->roam_guard ? "enable" : "disable"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("networktype"),
+				jstring_create(wan_network_type_to_string(status->network_type)));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("dataaccess"),
+				jstring_create(status->dataaccess_usable ? "usable" : "unusable"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("networkstatus"),
+				jstring_create(status->network_attached ? "attached" : "notattached"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("wanstate"),
+				jstring_create(wan_status_type_to_string(status->wan_status)));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("disablewan"),
+				jstring_create(status->disablewan ? "on" : "off"));
+
+	connected_services_obj = jarray_create(NULL);
+	for (iter = status->connected_services; iter != NULL; iter = g_slist_next(iter)) {
+		wanservice = iter->data;
+
+		service_obj = jobject_create();
+		services_obj = jarray_create(NULL);
+
+		for (n = 0; n < WAN_SERVICE_TYPE_MAX; n++) {
+			if (wanservice->services[n]) {
+				jarray_append(services_obj,
+					jstring_create(wan_service_type_to_string((enum wan_service_type) n)));
+			}
+		}
+
+		jobject_put(service_obj, J_CSTR_TO_JVAL("service"), services_obj);
+		jobject_put(service_obj, J_CSTR_TO_JVAL("cid"),
+					jnumber_create_i32(wanservice->cid));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("connectstatus"),
+					jstring_create(wan_connection_status_to_string(wanservice->connection_status)));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("ipaddress"),
+					jstring_create(wanservice->ipaddress));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("requeststatus"),
+					jstring_create(wan_request_status_to_string(wanservice->req_status)));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("errorCode"),
+					jnumber_create_i32(wanservice->error_code));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("causeCode"),
+					jnumber_create_i32(wanservice->cause_code));
+		jobject_put(service_obj, J_CSTR_TO_JVAL("mipFailureCode"),
+					jnumber_create_i32(wanservice->mip_failure_code));
+
+		jarray_append(connected_services_obj, service_obj);
+	}
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("connectedservices"), connected_services_obj);
+
+	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
+
+
+	j_release(&reply_obj);
+}
+
+bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	jvalue_ref reply_obj = NULL;
+	bool subscribed = false;
+
+	reply_obj = jobject_create();
+
+	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+
+	if(!luna_service_message_validate_and_send(handle, message, reply_obj))
+		luna_service_message_reply_error_internal(handle, message);
+
+	j_release(&reply_obj);
+
+	return true;
 }
 
 // vim:ts=4:sw=4:noexpandtab
