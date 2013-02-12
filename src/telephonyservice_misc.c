@@ -219,8 +219,6 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-	jvalue_ref parsed_obj = NULL;
-	const char *payload;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
@@ -230,13 +228,6 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
-	}
-
-	payload = LSMessageGetPayload(message);
-	parsed_obj = luna_service_message_parse_and_validate(payload);
-	if (jis_null(parsed_obj)) {
-		luna_service_message_reply_error_bad_json(handle, message);
 		goto cleanup;
 	}
 
@@ -252,9 +243,6 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	return true;
 
 cleanup:
-	if (!jis_null(parsed_obj))
-		j_release(&parsed_obj);
-
 	if (req_data)
 		luna_service_req_data_free(req_data);
 
@@ -401,7 +389,6 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-	jvalue_ref parsed_obj = NULL;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
@@ -425,9 +412,6 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 	return true;
 
 cleanup:
-	if (!jis_null(parsed_obj))
-		j_release(&parsed_obj);
-
 	if (req_data)
 		luna_service_req_data_free(req_data);
 
