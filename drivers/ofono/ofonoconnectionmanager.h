@@ -41,6 +41,11 @@ void ofono_connection_manager_ref(struct ofono_connection_manager *cm);
 void ofono_connection_manager_unref(struct ofono_connection_manager *cm);
 void ofono_connection_manager_free(struct ofono_connection_manager *cm);
 
+void ofono_connection_manager_register_prop_changed_cb(struct ofono_connection_manager *cm,
+													   ofono_property_changed_cb cb, void *data);
+void ofono_connection_manager_register_contexts_changed_cb(struct ofono_connection_manager *cm,
+												  ofono_base_cb cb, void *data);
+
 void ofono_connection_manager_deactivate_all(struct ofono_connection_manager *cm, ofono_base_result_cb cb, void *data);
 void ofono_connection_manager_get_contexts(struct ofono_connection_manager *cm, ofono_connection_manager_get_contexts_cb cb, void *data);
 

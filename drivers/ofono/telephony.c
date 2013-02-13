@@ -874,7 +874,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 	}
 }
 
-void modems_changed_cb(gpointer user_data)
+static void modems_changed_cb(gpointer user_data)
 {
 	struct ofono_data *data = user_data;
 	const GList *modems = NULL;

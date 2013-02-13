@@ -116,6 +116,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 				modem->interfaces[OFONO_MODEM_INTERFACE_TEXT_TELEPHONY] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.VoiceCallManager"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER] = 1;
+			else if (g_str_equal(interface_name, "org.ofono.ConnectionManager"))
+				modem->interfaces[OFONO_MODEM_INTERFACE_CONNECTION_MANAGER] = 1;
 		}
 	}
 

@@ -45,6 +45,9 @@ void ofono_connection_context_free(struct ofono_connection_context *ctx);
 
 const char* ofono_connection_context_get_path(struct ofono_connection_context *ctx);
 
+void ofono_connection_context_register_prop_changed_cb(struct ofono_connection_context *ctx,
+													   ofono_property_changed_cb cb, void *data);
+
 bool ofono_connection_context_get_active(struct ofono_connection_context *ctx);
 const char* ofono_connection_context_get_access_point_name(struct ofono_connection_context *ctx);
 void ofono_connection_context_set_access_point_name(struct ofono_connection_context *ctx,

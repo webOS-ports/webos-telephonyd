@@ -38,11 +38,15 @@ struct ofono_connection_manager {
 	bool roaming_allowed;
 	enum ofono_connection_bearer bearer;
 	GSList *contexts;
+	ofono_property_changed_cb prop_changed_cb;
+	void *prop_changed_data;
+	ofono_base_cb contexts_changed_cb;
+	void *contexts_changed_data;
 };
 
 static enum ofono_connection_bearer parse_ofono_connection_bearer(const char *bearer)
 {
-	if (g_str_equal(bearer, "gsm"))
+	if (g_str_equal(bearer, "gprs"))
 		return OFONO_CONNECTION_BEARER_GPRS;
 	else if (g_str_equal(bearer, "edge"))
 		return OFONO_CONNECTION_BEARER_EDGE;
@@ -72,13 +76,16 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	else if (g_str_equal(name, "Suspended"))
 		cm->suspended = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Attached"))
-		cm->suspended = g_variant_get_boolean(value);
+		cm->attached = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "RoaminAllowed"))
-		cm->suspended = g_variant_get_boolean(value);
+		cm->roaming_allowed = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Bearer")) {
 		bearer = g_variant_get_string(value, NULL);
 		cm->bearer = parse_ofono_connection_bearer(bearer);
 	}
+
+	if (cm->prop_changed_cb)
+		cm->prop_changed_cb(name, cm->prop_changed_data);
 }
 
 struct ofono_base_funcs cm_base_funcs = {
@@ -143,6 +150,26 @@ void ofono_connection_manager_free(struct ofono_connection_manager *cm)
 	g_free(cm);
 }
 
+void ofono_connection_manager_register_prop_changed_cb(struct ofono_connection_manager *cm,
+													   ofono_property_changed_cb cb, void *data)
+{
+	if (!cm)
+		return;
+
+	cm->prop_changed_cb = cb;
+	cm->prop_changed_data = data;
+}
+
+void ofono_connection_manager_register_contexts_changed_cb(struct ofono_connection_manager *cm,
+												  ofono_base_cb cb, void *data)
+{
+	if (!cm)
+		return;
+
+	cm->contexts_changed_cb = cb;
+	cm->contexts_changed_data = data;
+}
+
 void deactivate_all_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
@@ -203,6 +230,9 @@ static void context_added_cb(OfonoInterfaceConnectionManager *source, const gcha
 
 	context = ofono_connection_context_create(path);
 	cm->contexts = g_slist_append(cm->contexts, context);
+
+	if (cm->contexts_changed_cb)
+		cm->contexts_changed_cb(cm->contexts_changed_data);
 }
 
 static void context_removed_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
@@ -228,6 +258,9 @@ static void context_removed_cb(OfonoInterfaceConnectionManager *source, const gc
 		ofono_connection_context_free(context);
 		cm->contexts = g_slist_remove(cm->contexts, removable);
 	}
+
+	if (cm->contexts_changed_cb)
+		cm->contexts_changed_cb(cm->contexts_changed_data);
 }
 
 static void get_contexts_cb(GObject *source, GAsyncResult *res, gpointer user_data)
@@ -236,14 +269,15 @@ static void get_contexts_cb(GObject *source, GAsyncResult *res, gpointer user_da
 	struct ofono_connection_manager *cm = cbd->user;
 	ofono_connection_manager_get_contexts_cb cb = cbd->cb;
 	struct ofono_error oerr;
-	GError *error;
+	GError *error = NULL;
 	gboolean success = FALSE;
 	GVariant *contexts_v, *context_v, *path_v;
 	const char *path = NULL;
 	int n;
 	struct ofono_connection_context *context;
 
-	success = ofono_interface_connection_manager_call_get_contexts_finish(cm->remote, &contexts_v, res, &error);
+	success = ofono_interface_connection_manager_call_get_contexts_finish(cm->remote, &contexts_v,
+																		  res, &error);
 	if (!success) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -286,7 +320,7 @@ void ofono_connection_manager_get_contexts(struct ofono_connection_manager *cm, 
 	}
 
 	/* Not the first time, so just return known contexts */
-	if (cm->contexts) {
+	if (g_slist_length(cm->contexts) > 0) {
 		cb(NULL, cm->contexts, data);
 		return;
 	}

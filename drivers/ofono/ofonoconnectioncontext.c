@@ -38,6 +38,8 @@ struct ofono_connection_context {
 	enum ofono_connection_context_type type;
 	enum ofono_connection_context_protocol protocol;
 	char *name;
+	ofono_property_changed_cb prop_changed_cb;
+	void *prop_changed_data;
 };
 
 static enum ofono_connection_context_type parse_ofono_connection_context_type(const char *type)
@@ -104,6 +106,9 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			g_free(ctx->name);
 		ctx->name = g_variant_dup_string(value, NULL);
 	}
+
+	if (ctx->prop_changed_cb)
+		ctx->prop_changed_cb(name, ctx->prop_changed_data);
 }
 
 struct ofono_base_funcs ctx_base_funcs = {
@@ -166,6 +171,16 @@ void ofono_connection_context_free(struct ofono_connection_context *ctx)
 		g_object_unref(ctx->remote);
 
 	g_free(ctx);
+}
+
+void ofono_connection_context_register_prop_changed_cb(struct ofono_connection_context *ctx,
+													   ofono_property_changed_cb cb, void *data)
+{
+	if (!ctx)
+		return;
+
+	ctx->prop_changed_cb = cb;
+	ctx->prop_changed_data = data;
 }
 
 const char* ofono_connection_context_get_path(struct ofono_connection_context *ctx)

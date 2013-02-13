@@ -243,7 +243,7 @@ void wan_driver_unregister(struct wan_driver *driver)
 	g_driver_list = g_slist_remove(g_driver_list, driver);
 }
 
-void wan_service_status_changed_notify(struct wan_service *service, struct wan_status *status)
+static jvalue_ref create_status_update_reply(struct wan_status *status)
 {
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref connected_services_obj = NULL;
@@ -252,6 +252,7 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 	int n;
 	struct wan_connected_service *wanservice;
 	GSList *iter;
+	const char *wanstatus;
 
 	reply_obj = jobject_create();
 
@@ -265,8 +266,12 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 				jstring_create(status->dataaccess_usable ? "usable" : "unusable"));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("networkstatus"),
 				jstring_create(status->network_attached ? "attached" : "notattached"));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("wanstate"),
-				jstring_create(wan_status_type_to_string(status->wan_status)));
+
+	wanstatus = wan_status_type_to_string(status->wan_status);
+	if (wanstatus)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("wanstate"),
+				jstring_create(wanstatus));
+
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("disablewan"),
 				jstring_create(status->disablewan ? "on" : "off"));
 
@@ -290,7 +295,7 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 		jobject_put(service_obj, J_CSTR_TO_JVAL("connectstatus"),
 					jstring_create(wan_connection_status_to_string(wanservice->connection_status)));
 		jobject_put(service_obj, J_CSTR_TO_JVAL("ipaddress"),
-					jstring_create(wanservice->ipaddress));
+					jstring_create(wanservice->ipaddress ? wanservice->ipaddress : ""));
 		jobject_put(service_obj, J_CSTR_TO_JVAL("requeststatus"),
 					jstring_create(wan_request_status_to_string(wanservice->req_status)));
 		jobject_put(service_obj, J_CSTR_TO_JVAL("errorCode"),
@@ -305,18 +310,43 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("connectedservices"), connected_services_obj);
 
-	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
+	return reply_obj;
+}
 
+void wan_service_status_changed_notify(struct wan_service *service, struct wan_status *status)
+{
+	jvalue_ref reply_obj = NULL;
+
+	reply_obj = create_status_update_reply(status);
+	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
 
 	j_release(&reply_obj);
 }
 
+void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+
+	reply_obj = create_status_update_reply(status);
+
+	luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj);
+}
+
 bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
+	struct wan_service *service = user_data;
 	jvalue_ref reply_obj = NULL;
 	bool subscribed = false;
+	struct luna_service_req_data *req_data = NULL;
 
 	reply_obj = jobject_create();
+
+	if (!service->driver || !service->driver->get_status) {
+		g_warning("No implementation available for service getstatus API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		return true;
+	}
 
 	subscribed = luna_service_check_for_subscription_and_process(handle, message);
 
@@ -329,6 +359,16 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 		luna_service_message_reply_error_internal(handle, message);
 
 	j_release(&reply_obj);
+
+	/* Trigger a status update so connected client gets an reply immediately */
+	if (subscribed) {
+		req_data = luna_service_req_data_new(handle, message);
+		if (service->driver->get_status(service, get_status_cb, req_data) < 0) {
+			g_warning("Failed to process service getstatus request in our driver");
+			luna_service_message_reply_custom_error(handle, message, "Failed to retrieve status");
+			g_free(req_data);
+		}
+	}
 
 	return true;
 }

@@ -37,6 +37,7 @@ struct ofono_error {
 	const gchar *message;
 };
 
+typedef void (*ofono_base_cb)(void *data);
 typedef void (*ofono_base_result_cb)(struct ofono_error *error, void *data);
 typedef void (*ofono_property_changed_cb)(const gchar *name, void *data);
 
