@@ -22,6 +22,7 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "glib-helpers.h"
 #include "utils.h"
 #include "ofonosimmanager.h"
 #include "ofono-interface.h"
@@ -45,8 +46,6 @@ struct ofono_sim_manager {
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
-
-typedef gboolean (*_common_async_finish_cb)(void *proxy, GAsyncResult *res, GError **error);
 
 enum ofono_sim_pin parse_ofono_sim_pin_type(const gchar *pin)
 {
@@ -299,7 +298,7 @@ static void common_pin_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	struct cb_data *cbd2 = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	struct ofono_sim_manager *sim = cbd2->data;
-	_common_async_finish_cb finish_cb = cbd2->cb;
+	glib_common_async_finish_cb finish_cb = cbd2->cb;
 	struct ofono_error oerr;
 	gboolean success;
 	GError *error = NULL;
