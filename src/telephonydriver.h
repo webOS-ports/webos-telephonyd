@@ -178,6 +178,12 @@ struct telephony_driver {
 	int (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
 	int (*rat_query)(struct telephony_service *service, telephony_rat_query_cb cb, void *data);
 	int (*rat_set)(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
+
+	/* call control */
+	int (*dial)(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb, void *data);
+	int (*answer)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	int (*ignore)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	int (*hangup)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
 };
 
 #endif

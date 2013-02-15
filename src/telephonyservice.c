@@ -60,6 +60,10 @@ bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void 
 bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -88,6 +92,10 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "deviceLockQuery", _service_device_lock_query_cb },
 	{ "chargeSourceQuery", _service_charge_source_query_cb },
 	{ "subscriberIdQuery", _service_subscriber_id_query_cb },
+	{ "dial", _service_dial_cb },
+	{ "answer", _service_answer_cb },
+	{ "ignore", _service_ignore_cb },
+	{ "hangup", _service_hangup_cb },
 	{ 0, 0 }
 };
 
