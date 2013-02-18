@@ -124,11 +124,6 @@ bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->sim_status_query) {
 		g_warning("No implementation available for service simStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -191,11 +186,6 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin1StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -227,11 +217,6 @@ bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin2StatusQuery API method");
@@ -268,11 +253,6 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer pin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_verify) {
 		g_warning("No implementation available for service pin1Verify API method");
@@ -326,11 +306,6 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 	const char *payload;
 	raw_buffer pin_buf;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->pin1_enable) {
 		g_warning("No implementation available for service pin1Enable API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -382,11 +357,6 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer pin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_disable) {
 		g_warning("No implementation available for service pin1Disable API method");
@@ -440,11 +410,6 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer oldpin_buf, newpin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_change) {
 		g_warning("No implementation available for service pin1Change API method");
@@ -506,11 +471,6 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer puk_buf, newpin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_unblock) {
 		g_warning("No implementation available for service pin1Unblock API method");
@@ -612,11 +572,6 @@ bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service fdnStatusQuery API method");

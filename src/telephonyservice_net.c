@@ -144,11 +144,6 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->signal_strength_query) {
 		g_warning("No implementation available for service signalStrengthQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -238,11 +233,6 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->network_status_query) {
 		g_warning("No implementation available for service networkStatusQuery API method");
@@ -348,11 +338,6 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->network_list_query) {
 		g_warning("No implementation available for service networkListQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -432,11 +417,6 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->network_list_query_cancel) {
 		g_warning("No implementation available for service networkListQueryCancel API method");
@@ -524,11 +504,6 @@ bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *us
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->network_id_query) {
 		g_warning("No implementation available for service networkIdQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -599,11 +574,6 @@ bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *messa
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->network_selection_mode_query) {
 		g_warning("No implementation available for service networkSelectionModeQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -654,11 +624,6 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 	raw_buffer id_buf;
 	char *id = NULL;
 	bool automatic = false;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->network_set) {
 		g_warning("No implementation available for service networkSet API method");
@@ -761,11 +726,6 @@ bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
-
 	if (!service->driver || !service->driver->rat_query) {
 		g_warning("No implementation available for service ratQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -813,11 +773,6 @@ bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	raw_buffer mode_buf;
 	enum telephony_radio_access_mode mode;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Service not yet successfully initialized.");
-		goto cleanup;
-	}
 
 	if (!service->driver || !service->driver->rat_set) {
 		g_warning("No implementation available for service ratSet API method");
