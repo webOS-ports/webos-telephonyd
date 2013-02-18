@@ -867,10 +867,13 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 	}
 	else if (g_str_equal(name, "Powered")) {
 		powered = ofono_modem_get_powered(od->modem);
+		/* We need to handle power status changes differently when in initialization phase */
 		if (od->initializing && powered) {
 			telephony_service_availability_changed_notify(od->service, true);
 			od->initializing = false;
 		}
+
+		telephony_service_power_status_notify(od->service, powered);
 	}
 }
 
