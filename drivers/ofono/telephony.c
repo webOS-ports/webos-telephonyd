@@ -959,6 +959,8 @@ static void service_vanished_cb(GDBusConnection *conn, const gchar *name, gpoint
 	g_message("ofono dbus service disappeared");
 
 	free_used_instances(od);
+
+	telephony_service_availability_changed_notify(od->service, false);
 }
 
 int ofono_probe(struct telephony_service *service)
