@@ -58,6 +58,11 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 
 	service->powered = power;
 
+	if (!service->initialized) {
+		g_message("Service not yet successfully initialized. Not sending power status notification");
+		return;
+	}
+
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jstring_create(power ? "on": "off"));
