@@ -32,6 +32,8 @@ typedef void (*ofono_voicecall_manager_get_calls_cb)(const struct ofono_error *e
 typedef void (*ofono_voicecall_manager_dial_cb)(const struct ofono_error *error,
 												const char *path, void *data);
 
+typedef void (*ofono_voicecall_manager_call_changed_cb)(const char *path, void *data);
+
 struct ofono_voicecall_manager;
 
 struct ofono_voicecall_manager* ofono_voicecall_manager_create(const gchar *path);
@@ -43,6 +45,11 @@ void ofono_voicecall_manager_register_prop_changed_cb(struct ofono_voicecall_man
 													   ofono_property_changed_cb cb, void *data);
 void ofono_voicecall_manager_register_calls_changed_cb(struct ofono_voicecall_manager *vm,
 												  ofono_base_cb cb, void *data);
+
+void ofono_voicecall_manager_register_call_added_cb(struct ofono_voicecall_manager *vm,
+													ofono_voicecall_manager_call_changed_cb cb, void *data);
+void ofono_voicecall_manager_register_call_removed_cb(struct ofono_voicecall_manager *vm,
+													ofono_voicecall_manager_call_changed_cb cb, void *data);
 
 void ofono_voicecall_manager_dial(struct ofono_voicecall_manager *vm,
 								  const char *number, enum ofono_voicecall_clir_option clir,

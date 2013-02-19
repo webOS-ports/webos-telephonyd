@@ -29,6 +29,8 @@
 #include "ofononetworkregistration.h"
 #include "ofononetworkoperator.h"
 #include "ofonoradiosettings.h"
+#include "ofonovoicecallmanager.h"
+#include "ofonovoicecall.h"
 #include "utils.h"
 
 struct ofono_data {
@@ -38,12 +40,20 @@ struct ofono_data {
 	struct ofono_sim_manager *sim;
 	struct ofono_network_registration *netreg;
 	struct ofono_radio_settings *rs;
+	struct ofono_voicecall_manager *vm;
 	enum telephony_sim_status sim_status;
 	bool initializing;
 	bool power_set_pending;
 	bool power_target;
 	guint service_watch;
 	GCancellable *network_scan_cancellable;
+	GHashTable *calls;
+	unsigned int next_call_id;
+};
+
+struct call_info {
+	int id;
+	struct ofono_voicecall *call;
 };
 
 void set_online_cb(struct ofono_error *error, gpointer user_data)
@@ -827,6 +837,61 @@ int ofono_subscriber_id_query(struct telephony_service *service, telephony_subsc
 	return 0;
 }
 
+static void dial_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, cbd->data);
+		goto cleanup;
+	}
+
+	cb(NULL, cbd->data);
+
+cleanup:
+	g_free(cbd);
+}
+
+int ofono_dial(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct cb_data *cbd;
+
+	if (!od->vm) {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
+		return 0;
+	}
+
+	cbd = cb_data_new(cb, data);
+
+	ofono_voicecall_manager_dial(od->vm, number,
+		block_id ? OFONO_VOICECALL_CLIR_OPTION_ENABLED : OFONO_VOICECALL_CLIR_OPTION_DISABLED,
+		dial_cb, cbd);
+
+	return 0;
+}
+
+int ofono_answer(struct telephony_service *service, int call_id, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct cb_data *cbd;
+	struct call_info *cinfo;
+
+	if (!od->vm) {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
+		return 0;
+	}
+
+	return 0;
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -864,6 +929,13 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 			od->rs = NULL;
 		}
 
+		if (!od->vm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
+			od->vm = ofono_voicecall_manager_create(path);
+		}
+		else if (od->vm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
+			ofono_voicecall_manager_free(od->vm);
+			od->vm = NULL;
+		}
 	}
 	else if (g_str_equal(name, "Powered")) {
 		powered = ofono_modem_get_powered(od->modem);
@@ -976,6 +1048,8 @@ int ofono_probe(struct telephony_service *service)
 
 	data->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 	data->initializing = false;
+	data->calls = g_hash_table_new_full(g_str_hash, g_str_equal,
+										g_free, (GDestroyNotify) g_hash_table_destroy);
 
 	data->service_watch = g_bus_watch_name(G_BUS_TYPE_SYSTEM, "org.ofono", G_BUS_NAME_WATCHER_FLAGS_NONE,
 					 service_appeared_cb, service_vanished_cb, data, NULL);
@@ -988,6 +1062,8 @@ void ofono_remove(struct telephony_service *service)
 	struct ofono_data *data;
 
 	data = telephony_service_get_data(service);
+
+	g_hash_table_destroy(data->calls);
 
 	free_used_instances(data);
 	g_free(data);
@@ -1022,6 +1098,8 @@ struct telephony_driver ofono_telephony_driver = {
 	.rat_query = ofono_rat_query,
 	.rat_set = ofono_rat_set,
 	.subscriber_id_query = ofono_subscriber_id_query,
+	.dial = ofono_dial,
+	.answer = ofono_answer
 };
 
 // vim:ts=4:sw=4:noexpandtab

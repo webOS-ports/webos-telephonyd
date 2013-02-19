@@ -39,6 +39,10 @@ struct ofono_voicecall_manager {
 	void *prop_changed_data;
 	ofono_base_cb calls_changed_cb;
 	void *calls_changed_data;
+	ofono_voicecall_manager_call_changed_cb call_added_cb;
+	void *call_added_data;
+	ofono_voicecall_manager_call_changed_cb call_removed_cb;
+	void *call_removed_data;
 };
 
 const char* ofono_voicecall_clir_option_to_string(enum ofono_voicecall_clir_option clir)
@@ -160,6 +164,26 @@ void ofono_voicecall_manager_register_calls_changed_cb(struct ofono_voicecall_ma
 
 	vm->calls_changed_cb = cb;
 	vm->calls_changed_data = data;
+}
+
+void ofono_voicecall_manager_register_call_added_cb(struct ofono_voicecall_manager *vm,
+													ofono_voicecall_manager_call_changed_cb cb, void *data)
+{
+	if (!vm)
+		return;
+
+	vm->call_added_cb = cb;
+	vm->call_added_data = data;
+}
+
+void ofono_voicecall_manager_register_call_removed_cb(struct ofono_voicecall_manager *vm,
+													ofono_voicecall_manager_call_changed_cb cb, void *data)
+{
+	if (!vm)
+		return;
+
+	vm->call_removed_cb = cb;
+	vm->call_removed_data = data;
 }
 
 static void dial_cb(GObject *source, GAsyncResult *res, gpointer data)
@@ -347,6 +371,9 @@ static void call_added_cb(OfonoInterfaceConnectionManager *source, const gchar *
 
 	if (vm->calls_changed_cb)
 		vm->calls_changed_cb(vm->calls_changed_data);
+
+	if (vm->call_added_cb)
+		vm->call_added_cb(path, vm->call_added_data);
 }
 
 static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
@@ -375,6 +402,9 @@ static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar
 
 	if (vm->calls_changed_cb)
 		vm->calls_changed_cb(vm->calls_changed_data);
+
+	if (vm->call_removed_cb)
+		vm->call_removed_cb(path, vm->call_removed_data);
 }
 
 static void get_calls_cb(GObject *source, GAsyncResult *res, gpointer user_data)
