@@ -909,6 +909,21 @@ static void modems_changed_cb(gpointer user_data)
 
 static void free_used_instances(struct ofono_data *od)
 {
+	if (od->rs) {
+		ofono_radio_settings_free(od->rs);
+		od->rs = NULL;
+	}
+
+	if (od->vm) {
+		ofono_voicecall_manager_free(od->vm);
+		od->vm = NULL;
+	}
+
+	if (od->netreg) {
+		ofono_network_registration_free(od->netreg);
+		od->netreg = NULL;
+	}
+
 	if (od->sim) {
 		ofono_sim_manager_free(od->sim);
 		od->sim = NULL;
@@ -918,6 +933,9 @@ static void free_used_instances(struct ofono_data *od)
 		ofono_manager_free(od->manager);
 		od->manager = NULL;
 	}
+
+	/* The manager already takes care about releasing the modem instances */
+	od->modem = NULL;
 }
 
 static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const gchar *name_owner,
