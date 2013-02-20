@@ -54,6 +54,8 @@ enum ofono_connection_bearer ofono_connection_manager_get_bearer(struct ofono_co
 bool ofono_connection_manager_get_powered(struct ofono_connection_manager *cm);
 bool ofono_connection_manager_get_suspended(struct ofono_connection_manager *cm);
 bool ofono_connection_manager_get_roaming_allowed(struct ofono_connection_manager *cm);
+void ofono_connection_manager_set_roaming_allowed(struct ofono_connection_manager *cm, bool roaming_allowed,
+												  ofono_base_result_cb cb, void *data);
 
 #endif
 

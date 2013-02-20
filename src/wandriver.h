@@ -21,6 +21,14 @@
 
 struct wan_service;
 
+enum wan_error_type {
+	WAN_ERROR_NOT_IMPLEMENTED = 0,
+	WAN_ERROR_INTERNAL,
+	WAN_ERROR_INVALID_ARGUMENT,
+	WAN_ERROR_NOT_AVAILABLE,
+	WAN_ERROR_ALREADY_INPROGRESS
+};
+
 struct wan_error {
 	int code;
 };

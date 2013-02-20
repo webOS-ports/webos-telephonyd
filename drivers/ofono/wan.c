@@ -144,6 +144,42 @@ static int ofono_wan_get_status(struct wan_service *service, wan_get_status_cb c
 	return 0;
 }
 
+static void set_roaming_allowed_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	wan_result_cb cb = cbd->cb;
+	struct wan_error werr;
+
+	if (!error) {
+		werr.code = WAN_ERROR_INTERNAL;
+		cb(&werr, cbd->data);
+		goto cleanup;
+	}
+
+	cb(NULL, cbd->data);
+
+cleanup:
+	g_free(cbd);
+}
+
+static int ofono_wan_set_configuration(struct wan_service *service, struct wan_configuration *configuration,
+									   wan_result_cb cb, void *data)
+{
+	struct ofono_wan_data *od = wan_service_get_data(service);
+	struct cb_data *cbd = NULL;
+
+	if (configuration->roamguard && !ofono_connection_manager_get_roaming_allowed(od->cm)) {
+		cb(NULL, data);
+		return 0;
+	}
+
+	cbd = cb_data_new(cb, data);
+	ofono_connection_manager_set_roaming_allowed(od->cm, !configuration->roamguard,
+												 set_roaming_allowed_cb, cbd);
+
+	return 0;
+}
+
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
 {
 	struct ofono_wan_data *od = data;
@@ -273,6 +309,7 @@ struct wan_driver ofono_wan_driver = {
 	.probe =		ofono_wan_probe,
 	.remove =		ofono_wan_remove,
 	.get_status = 		ofono_wan_get_status,
+	.set_configuration = 		ofono_wan_set_configuration,
 };
 
 // vim:ts=4:sw=4:noexpandtab

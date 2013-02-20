@@ -371,4 +371,26 @@ bool ofono_connection_manager_get_roaming_allowed(struct ofono_connection_manage
 	return cm->roaming_allowed;
 }
 
+void set_roaming_allowed_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	ofono_base_result_cb cb = cbd->cb;
+
+	cb(error, cbd->data);
+	g_free(cbd);
+}
+
+void ofono_connection_manager_set_roaming_allowed(struct ofono_connection_manager *cm, bool roaming_allowed,
+												  ofono_base_result_cb cb, void *data)
+{
+	struct cb_data *cbd;
+	GVariant *value;
+
+	cbd = cb_data_new(cb, data);
+
+	value = g_variant_new_variant(g_variant_new_boolean(roaming_allowed));
+	ofono_base_set_property(cm->base, "RoamingAllowed",
+							value, set_roaming_allowed_cb, cbd);
+}
+
 // vim:ts=4:sw=4:noexpandtab
