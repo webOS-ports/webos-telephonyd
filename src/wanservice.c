@@ -38,12 +38,15 @@ struct wan_service {
 	void *data;
 	LSPalmService *palm_service;
 	LSHandle *private_service;
+	struct wan_configuration configuration;
 };
 
 bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _wan_service_methods[]  = {
 	{ "getstatus", _wan_service_getstatus_cb },
+	{ "set", _wan_service_set_cb },
 	{ 0, 0 }
 };
 
@@ -150,6 +153,8 @@ struct wan_service* wan_service_create(void)
 	service = g_try_new0(struct wan_service, 1);
 	if (!service)
 		return NULL;
+
+	memset(&service->configuration, 0, sizeof(struct wan_configuration));
 
 	/* take first driver until we have some machanism to determine the best driver */
 	service->driver = g_driver_list->data;
@@ -369,6 +374,87 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 			g_free(req_data);
 		}
 	}
+
+	return true;
+}
+
+void _service_set_finish(const struct wan_error *error, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = NULL;
+	bool success = (error == NULL);
+
+	reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
+
+	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+		goto cleanup;
+	}
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+}
+
+bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct wan_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref disablewan_obj = NULL;
+	jvalue_ref roamguard_obj = NULL;
+	const char *payload;
+
+	if (!service->driver || !service->driver->set_configuration) {
+		g_warning("No implementation available for service set API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		return true;
+	}
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("disablewan"), &disablewan_obj)) {
+		if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("on")))
+			service->configuration.disablewan = true;
+		else if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("off")))
+			service->configuration.disablewan = false;
+	}
+
+	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("roamguard"), &roamguard_obj)) {
+		if (jstring_equal2(roamguard_obj, J_CSTR_TO_BUF("enable"))) {
+			service->configuration.roamguard = true;
+		}
+		else if (jstring_equal2(roamguard_obj, J_CSTR_TO_BUF("disable"))) {
+			service->configuration.roamguard = false;
+		}
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+	req_data->user_data = service;
+
+	if (service->driver->set_configuration(service, &service->configuration, _service_set_finish, req_data) < 0) {
+		g_warning("Failed to process service set request in our driver");
+		luna_service_message_reply_custom_error(handle, message, "Failed to set WAN configuration");
+		goto cleanup;
+	}
+
+	return true;
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	if (req_data)
+		luna_service_req_data_free(req_data);
 
 	return true;
 }

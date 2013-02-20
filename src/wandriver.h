@@ -89,6 +89,12 @@ struct wan_status {
 	GSList *connected_services;
 };
 
+struct wan_configuration {
+	bool roamguard;
+	bool disablewan;
+};
+
+typedef void (*wan_result_cb)(const struct wan_error* error, void *data);
 typedef void (*wan_get_status_cb)(const struct wan_error *error, struct wan_status *status, void *data);
 
 struct wan_driver {
@@ -96,6 +102,8 @@ struct wan_driver {
 	void (*remove)(struct wan_service *service);
 
 	int (*get_status)(struct wan_service *service, wan_get_status_cb cb, void *data);
+	int (*set_configuration)(struct wan_service *service, struct wan_configuration *configuration,
+							 wan_result_cb cb, void *data);
 };
 
 #endif
