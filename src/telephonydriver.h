@@ -151,39 +151,39 @@ struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);
 
-	int (*platform_query)(struct telephony_service *service, telephony_platform_query_cb cb, void *data);
-	int (*subscriber_id_query)(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data);
+	void (*platform_query)(struct telephony_service *service, telephony_platform_query_cb cb, void *data);
+	void (*subscriber_id_query)(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data);
 	/* power management */
-	int (*power_query)(struct telephony_service *service, telephony_power_query_cb cb, void *data);
-	int (*power_set)(struct telephony_service *service, bool power, telephony_result_cb cb, void *data);
+	void (*power_query)(struct telephony_service *service, telephony_power_query_cb cb, void *data);
+	void (*power_set)(struct telephony_service *service, bool power, telephony_result_cb cb, void *data);
 
 	/* SIM */
-	int (*sim_status_query)(struct telephony_service *service, telephony_sim_status_query_cb, void *data);
-	int (*pin1_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
-	int (*pin1_verify)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	int (*pin1_change)(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
-	int (*pin1_enable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	int (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	int (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
-	int (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
-	int (*fdn_status_query)(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data);
+	void (*sim_status_query)(struct telephony_service *service, telephony_sim_status_query_cb, void *data);
+	void (*pin1_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
+	void (*pin1_verify)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_change)(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
+	void (*pin1_enable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
+	void (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
+	void (*fdn_status_query)(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data);
 
 	/* network */
-	int (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
-	int (*signal_strength_query)(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data);
-	int (*network_list_query)(struct telephony_service *service, telephony_network_list_query_cb cb, void *data);
-	int (*network_list_query_cancel)(struct telephony_service *service, telephony_result_cb cb, void *data);
-	int (*network_set)(struct telephony_service *service, bool automatic, const char *id, telephony_result_cb cb, void *data);
-	int (*network_id_query)(struct telephony_service *service, telephony_network_id_query_cb cb, void *data);
-	int (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
-	int (*rat_query)(struct telephony_service *service, telephony_rat_query_cb cb, void *data);
-	int (*rat_set)(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
+	void (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
+	void (*signal_strength_query)(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data);
+	void (*network_list_query)(struct telephony_service *service, telephony_network_list_query_cb cb, void *data);
+	void (*network_list_query_cancel)(struct telephony_service *service, telephony_result_cb cb, void *data);
+	void (*network_set)(struct telephony_service *service, bool automatic, const char *id, telephony_result_cb cb, void *data);
+	void (*network_id_query)(struct telephony_service *service, telephony_network_id_query_cb cb, void *data);
+	void (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
+	void (*rat_query)(struct telephony_service *service, telephony_rat_query_cb cb, void *data);
+	void (*rat_set)(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
 
 	/* call control */
-	int (*dial)(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb, void *data);
-	int (*answer)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
-	int (*ignore)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
-	int (*hangup)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	void (*dial)(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb, void *data);
+	void (*answer)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	void (*ignore)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	void (*hangup)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
 };
 
 #endif

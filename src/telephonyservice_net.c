@@ -147,23 +147,13 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	if (!service->driver || !service->driver->signal_strength_query) {
 		g_warning("No implementation available for service signalStrengthQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data) < 0) {
-		g_warning("Failed to process service signalStrengthQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query network signal strength");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data);
 
 	return true;
 }
@@ -237,23 +227,13 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 	if (!service->driver || !service->driver->network_status_query) {
 		g_warning("No implementation available for service networkStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->network_status_query(service, _service_network_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service networkStatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query network status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->network_status_query(service, _service_network_status_query_finish, req_data);
 
 	return true;
 }
@@ -341,13 +321,13 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 	if (!service->driver || !service->driver->network_list_query) {
 		g_warning("No implementation available for service networkListQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	if (service->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message,
 				"Another networkListQuery call is already pending");
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -355,17 +335,7 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 
 	service->network_status_query_pending = true;
 
-	if (service->driver->network_list_query(service, _service_network_list_query_finish, req_data) < 0) {
-		g_warning("Failed to process service networkListQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query for available networks");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->network_list_query(service, _service_network_list_query_finish, req_data);
 
 	return true;
 }
@@ -421,28 +391,18 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 	if (!service->driver || !service->driver->network_list_query_cancel) {
 		g_warning("No implementation available for service networkListQueryCancel API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	if (!service->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message, "No network list query pending");
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->network_list_query_cancel(service, _service_network_list_query_cancel_finish, req_data) < 0) {
-		g_warning("Failed to process service networkListQueryCancel request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to cancel query for available networks");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->network_list_query_cancel(service, _service_network_list_query_cancel_finish, req_data);
 
 	return true;
 }
@@ -507,23 +467,13 @@ bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *us
 	if (!service->driver || !service->driver->network_id_query) {
 		g_warning("No implementation available for service networkIdQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->network_id_query(service, _service_network_id_query_finish, req_data) < 0) {
-		g_warning("Failed to process service networkIdQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed retrieve id of current connected network");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->network_id_query(service, _service_network_id_query_finish, req_data);
 
 	return true;
 }
@@ -577,22 +527,12 @@ bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *messa
 	if (!service->driver || !service->driver->network_selection_mode_query) {
 		g_warning("No implementation available for service networkSelectionModeQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->network_selection_mode_query(service, _service_network_selection_mode_query_finish, req_data) < 0) {
-		g_warning("Failed to process service networkSelectionModeQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed retrieve the current network selection mode");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->network_selection_mode_query(service, _service_network_selection_mode_query_finish, req_data);
 
 	return true;
 }
@@ -657,18 +597,11 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->network_set(service, automatic, id,
-									 telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service networkSet request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to connect to set network");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->network_set(service, automatic, id, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -729,22 +662,12 @@ bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data
 	if (!service->driver || !service->driver->rat_query) {
 		g_warning("No implementation available for service ratQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->rat_query(service, _service_rat_query_finish, req_data) < 0) {
-		g_warning("Failed to process service ratQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed retrieve the radio access technology mode");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->rat_query(service, _service_rat_query_finish, req_data);
 
 	return true;
 }
@@ -802,18 +725,11 @@ bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->rat_set(service, mode,
-									 telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service ratSet request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to set radio access technology mode");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->rat_set(service, mode, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }

@@ -70,20 +70,11 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->dial(service, number_buf.m_str, block_id, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service dial request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed create outgoing call");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->dial(service, number_buf.m_str, block_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }
@@ -120,20 +111,11 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->answer(service, call_id, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service answer request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed answer incoming call");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->answer(service, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }
@@ -170,20 +152,11 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->ignore(service, call_id, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service answer ignore in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed ignore incoming call");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->ignore(service, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }
@@ -220,20 +193,11 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->hangup(service, call_id, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service hangup request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to hang up active call");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->hangup(service, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }

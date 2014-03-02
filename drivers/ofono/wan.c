@@ -130,7 +130,7 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 	g_free(cbd);
 }
 
-static int ofono_wan_get_status(struct wan_service *service, wan_get_status_cb cb, void *data)
+void ofono_wan_get_status(struct wan_service *service, wan_get_status_cb cb, void *data)
 {
 	struct ofono_wan_data *od = wan_service_get_data(service);
 	struct cb_data *cbd = NULL;
@@ -140,8 +140,6 @@ static int ofono_wan_get_status(struct wan_service *service, wan_get_status_cb c
 
 	/* we need to retrieve all available connection contexts first */
 	ofono_connection_manager_get_contexts(od->cm, get_contexts_cb, cbd);
-
-	return 0;
 }
 
 static void set_roaming_allowed_cb(struct ofono_error *error, void *data)
@@ -162,7 +160,7 @@ cleanup:
 	g_free(cbd);
 }
 
-static int ofono_wan_set_configuration(struct wan_service *service, struct wan_configuration *configuration,
+void ofono_wan_set_configuration(struct wan_service *service, struct wan_configuration *configuration,
 									   wan_result_cb cb, void *data)
 {
 	struct ofono_wan_data *od = wan_service_get_data(service);
@@ -170,14 +168,12 @@ static int ofono_wan_set_configuration(struct wan_service *service, struct wan_c
 
 	if (configuration->roamguard && !ofono_connection_manager_get_roaming_allowed(od->cm)) {
 		cb(NULL, data);
-		return 0;
+		return;
 	}
 
 	cbd = cb_data_new(cb, data);
 	ofono_connection_manager_set_roaming_allowed(od->cm, !configuration->roamguard,
 												 set_roaming_allowed_cb, cbd);
-
-	return 0;
 }
 
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)

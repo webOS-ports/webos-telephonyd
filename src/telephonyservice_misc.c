@@ -152,20 +152,11 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->power_set(service, power, _service_power_set_finish, req_data) < 0) {
-		g_warning("Failed to process service powerSet request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to set power mode");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->power_set(service, power, _service_power_set_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }
@@ -223,23 +214,13 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->power_query(service, _service_power_query_finish, req_data) < 0) {
-		g_warning("Failed to process service powerQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query power status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->power_query(service, _service_power_query_finish, req_data);
 
 	return true;
 }
@@ -311,18 +292,9 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->platform_query(service, _service_platform_query_finish, req_data) < 0) {
-		g_warning("Failed to process service platformQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query platform information");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->platform_query(service, _service_platform_query_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
-
 	return true;
 }
 
@@ -383,22 +355,12 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 	if (!service->driver || !service->driver->subscriber_id_query) {
 		g_warning("No implementation available for service subscriberIdQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->subscriber_id_query(service, _service_subscriber_id_query_finish, req_data) < 0) {
-		g_warning("Failed to process service subscriberIdQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query subscriber identification");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->subscriber_id_query(service, _service_subscriber_id_query_finish, req_data);
 
 	return true;
 }

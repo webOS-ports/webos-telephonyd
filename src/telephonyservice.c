@@ -161,10 +161,7 @@ static int configure_service(struct telephony_service *service)
 		return -EINVAL;
 	}
 
-	if (service->driver->power_set(service, power_state, _service_initial_power_set_finish, service) < 0) {
-		g_warning("Failed to set initial power state");
-		return -EIO;
-	}
+	service->driver->power_set(service, power_state, _service_initial_power_set_finish, service);
 
 	return 0;
 }

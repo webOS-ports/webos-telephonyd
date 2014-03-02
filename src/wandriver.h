@@ -109,8 +109,8 @@ struct wan_driver {
 	int (*probe)(struct wan_service *service);
 	void (*remove)(struct wan_service *service);
 
-	int (*get_status)(struct wan_service *service, wan_get_status_cb cb, void *data);
-	int (*set_configuration)(struct wan_service *service, struct wan_configuration *configuration,
+	void (*get_status)(struct wan_service *service, wan_get_status_cb cb, void *data);
+	void (*set_configuration)(struct wan_service *service, struct wan_configuration *configuration,
 							 wan_result_cb cb, void *data);
 };
 

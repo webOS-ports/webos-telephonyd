@@ -127,23 +127,13 @@ bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	if (!service->driver || !service->driver->sim_status_query) {
 		g_warning("No implementation available for service simStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->sim_status_query(service, _service_sim_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service simStatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query sim card status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->sim_status_query(service, _service_sim_status_query_finish, req_data);
 
 	return true;
 }
@@ -189,23 +179,13 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin1StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->pin1_status_query(service, _service_pin_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1StatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query PIN1 status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->pin1_status_query(service, _service_pin_status_query_finish, req_data);
 
 	return true;
 }
@@ -221,23 +201,13 @@ bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin2StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	if (service->driver->pin2_status_query(service, _service_pin_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service pin2StatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query PIN1 status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->pin2_status_query(service, _service_pin_status_query_finish, req_data);
 
 	return true;
 }
@@ -276,17 +246,11 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->pin1_verify(service, pin_buf.m_str, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1Verify request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed send PIN1 for verification to the SIM card");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->pin1_verify(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -328,17 +292,11 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->pin1_enable(service, pin_buf.m_str, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1Verify request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed enable PIN1 on the SIM card");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->pin1_enable(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -380,17 +338,11 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->pin1_disable(service, pin_buf.m_str, telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1Disable request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed disable PIN1 on the SIM card");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->pin1_disable(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -440,18 +392,11 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->pin1_change(service, oldpin_buf.m_str, newpin_buf.m_str,
-									 telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1Change request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed change PIN1 on the SIM card");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->pin1_change(service, oldpin_buf.m_str, newpin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -501,18 +446,12 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->pin1_unblock(service, puk_buf.m_str, newpin_buf.m_str,
-									  telephonyservice_common_finish, req_data) < 0) {
-		g_warning("Failed to process service pin1Unblock request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed unblock PIN1 on the SIM card");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->pin1_unblock(service, puk_buf.m_str, newpin_buf.m_str,
+								  telephonyservice_common_finish, req_data);
 
 cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -576,22 +515,12 @@ bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service fdnStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 
-	if (service->driver->fdn_status_query(service, _service_fdn_status_query_finish, req_data) < 0) {
-		g_warning("Failed to process service fdnStatusQuery request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to query FDN status");
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	if (req_data)
-		luna_service_req_data_free(req_data);
+	service->driver->fdn_status_query(service, _service_fdn_status_query_finish, req_data);
 
 	return true;
 }

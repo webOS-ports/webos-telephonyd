@@ -336,6 +336,8 @@ void get_status_cb(const struct wan_error *error, struct wan_status *status, voi
 	reply_obj = create_status_update_reply(status);
 
 	luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj);
+
+	luna_service_req_data_free(req_data);
 }
 
 bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data)
@@ -368,11 +370,7 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 	/* Trigger a status update so connected client gets an reply immediately */
 	if (subscribed) {
 		req_data = luna_service_req_data_new(handle, message);
-		if (service->driver->get_status(service, get_status_cb, req_data) < 0) {
-			g_warning("Failed to process service getstatus request in our driver");
-			luna_service_message_reply_custom_error(handle, message, "Failed to retrieve status");
-			g_free(req_data);
-		}
+		service->driver->get_status(service, get_status_cb, req_data);
 	}
 
 	return true;
@@ -441,20 +439,11 @@ bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	if (service->driver->set_configuration(service, &service->configuration, _service_set_finish, req_data) < 0) {
-		g_warning("Failed to process service set request in our driver");
-		luna_service_message_reply_custom_error(handle, message, "Failed to set WAN configuration");
-		goto cleanup;
-	}
-
-	return true;
+	service->driver->set_configuration(service, &service->configuration, _service_set_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
-
-	if (req_data)
-		luna_service_req_data_free(req_data);
 
 	return true;
 }
