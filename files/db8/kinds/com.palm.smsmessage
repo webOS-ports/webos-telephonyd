@@ -1,0 +1,16 @@
+{
+    "id": "com.palm.smsmessage:1",
+    "extends": [ "com.palm.message:1" ],
+    "owner": "com.palm.telephony",
+    "sync": true,
+    "indexes": [
+        {
+            "name": "outgoing",
+            "props": [
+                { "name": "folder" },
+                { "name": "status" },
+                { "name": "localTimestamp" }
+            ]
+        }
+    ]
+}

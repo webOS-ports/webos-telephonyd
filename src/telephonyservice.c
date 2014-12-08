@@ -65,6 +65,8 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
+bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message, void *user_data);
+
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
 	{ "isTelephonyReady", _service_is_telephony_ready_cb },
@@ -97,6 +99,11 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "ignore", _service_ignore_cb },
 	{ "hangup", _service_hangup_cb },
 	{ 0, 0 }
+};
+
+static LSMethod _telephony_service_internal_methods[] = {
+    { "sendSmsFromDb", _service_internal_send_sms_from_db_cb },
+    { 0, 0 }
 };
 
 static bool retrieve_power_state_from_settings(void)
@@ -149,6 +156,13 @@ static int configure_service(struct telephony_service *service)
 	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
 			NULL, service, &error)) {
 		g_warning("Could not register service category");
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	if (!LSPalmServiceRegisterCategory(service->palm_service, "/internal", NULL, _telephony_service_internal_methods,
+			NULL, service, &error)) {
+		g_warning("Could not register internal service category");
 		LSErrorFree(&error);
 		return -EIO;
 	}

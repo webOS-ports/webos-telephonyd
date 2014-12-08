@@ -225,4 +225,50 @@
 			<arg type="s" name="reason" direction="out"/>
 		</signal>
 	</interface>
+        <interface name="org.ofono.MessageManager">
+            <method name="GetProperties">
+                <arg type="a{sv}" direction="out"/>
+            </method>
+            <method name="SetProperty">
+                <arg type="s" name="property" direction="in"/>
+                <arg type="v" name="value" direction="in"/>
+            </method>
+            <method name="GetMessages">
+                <arg type="a(oa{sv})" name="messages" direction="out"/>
+            </method>
+            <method name="SendMessage">
+                <arg type="s" name="to" direction="in"/>
+                <arg type="s" name="text" direction="in"/>
+                <arg type="o" name="path" direction="out"/>
+            </method>
+            <signal name="PropertyChanged">
+                <arg type="s" name="property" direction="out"/>
+                <arg type="v" name="value" direction="out"/>
+            </signal>
+            <signal name="ImmediateMessage">
+                <arg type="s" name="message" direction="out"/>
+                <arg type="a{sv}" name="info" direction="out"/>
+            </signal>
+            <signal name="IncomingMessage">
+                <arg type="s" name="message" direction="out"/>
+                <arg type="a{sv}" name="info" direction="out"/>
+            </signal>
+            <signal name="MessageAdded">
+                <arg type="o" name="path" direction="out"/>
+                <arg type="a{sv}" name="properties" direction="out"/>
+            </signal>
+            <signal name="MessageRemoved">
+                <arg type="o" name="path" direction="out"/>
+            </signal>
+        </interface>
+        <interface name="org.ofono.Message">
+            <method name="GetProperties">
+                <arg type="a{sv}" direction="out"/>
+            </method>
+            <method name="Cancel"/>
+            <signal name="PropertyChanged">
+                <arg type="s" name="property" direction="out"/>
+                <arg type="v" name="value" direction="out"/>
+            </signal>
+        </interface>
 </node>
