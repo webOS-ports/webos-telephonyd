@@ -944,6 +944,19 @@ static void incoming_message_cb(struct ofono_message *message, void *data)
 	telephony_service_incoming_message_notify(od->service, &msg);
 }
 
+static void notify_no_network_registration(struct telephony_service *service)
+{
+	/* notify possible network status subscribers about us having no connectivity
+	 * anymore */
+	struct telephony_network_status net_status;
+
+	net_status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
+	net_status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
+	net_status.name = 0;
+
+	telephony_service_network_status_changed_notify(service, &net_status);
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_data *od = data;
@@ -971,6 +984,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
 			ofono_network_registration_free(od->netreg);
 			od->netreg = NULL;
+			notify_no_network_registration(od->service);
 		}
 
 		if (!od->rs && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_RADIO_SETTINGS)) {
