@@ -28,6 +28,7 @@
 #include "telephonysettings.h"
 #include "telephonydriver.h"
 #include "telephonyservice_internal.h"
+#include "telephonyservice_sms.h"
 #include "utils.h"
 #include "luna_service_utils.h"
 
@@ -207,6 +208,8 @@ struct telephony_service* telephony_service_create()
 	}
 
 	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
+
+	telephonyservice_sms_setup(service);
 
 	return service;
 }

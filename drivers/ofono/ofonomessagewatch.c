@@ -42,16 +42,18 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 	g_message("[Message:%s] property %s changed", watch->path, name);
 
-	if (g_strcmp0(name, "State") != 0) {
-		char *state_str = g_variant_get_string(value, NULL);
+	if (g_strcmp0(name, "State") == 0) {
+		const gchar *state_str = g_variant_get_string(value, NULL);
 		enum ofono_message_status state = OFONO_MESSAGE_STATUS_UNKNOWN;
 
-		if (g_strcmp0(state_str, "pending") != 0)
+		if (g_strcmp0(state_str, "pending") == 0)
 			state = OFONO_MESSAGE_STATUS_PENDING;
-		else if (g_strcmp0(state_str, "sent") != 0)
+		else if (g_strcmp0(state_str, "sent") == 0)
 			state = OFONO_MESSAGE_STATUS_SENT;
-		else if (g_strcmp0(state_str, "failed") != 0)
+		else if (g_strcmp0(state_str, "failed") == 0)
 			state = OFONO_MESSAGE_STATUS_FAILED;
+
+		g_message("[Message:%s] state %s (%d)", watch->path, state_str, state);
 
 		if (state != OFONO_MESSAGE_STATUS_UNKNOWN && watch->status_cb)
 			watch->status_cb(state, watch->status_data);

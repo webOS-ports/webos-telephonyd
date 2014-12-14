@@ -183,7 +183,7 @@ static void send_message_cb(GObject *source, GAsyncResult *res, gpointer user_da
 	struct ofono_error oerr;
 	GError *error = NULL;
 	gboolean success = FALSE;
-	const char *path = NULL;
+	gchar *path = NULL;
 
 	success = ofono_interface_message_manager_call_send_message_finish(manager->remote, &path, res, &error);
 	if (!success) {
@@ -206,6 +206,8 @@ void ofono_message_manager_send_message(struct ofono_message_manager *manager, c
 {
 	struct cb_data *cbd;
 	struct ofono_error error;
+
+	g_message("[MessageManager:%s] sending SMS to '%s'' with text '%s'", manager->path, to, text);
 
 	if (!manager) {
 		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;

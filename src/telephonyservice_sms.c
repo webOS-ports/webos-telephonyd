@@ -110,6 +110,22 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	j_release(&req_obj);
 }
 
+static void restart_activity(struct telephony_service *service)
+{
+	jvalue_ref req_obj = 0;
+
+	req_obj = jobject_create();
+
+	jobject_put(req_obj, J_CSTR_TO_JVAL("activityName"), jstring_create("telephony-send-outgoing-sms"));
+	jobject_put(req_obj, J_CSTR_TO_JVAL("restart"), jboolean_create(true));
+
+	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.activitymanager/complete", req_obj,
+											 NULL, NULL))
+		g_warning("Failed to restart SMS send activity");
+
+	j_release(&req_obj);
+}
+
 struct pending_sms {
 	char *id;
 	char *to;
@@ -120,9 +136,35 @@ static bool message_updated_cb(LSHandle *handle, LSMessage *message, void *user_
 {
 	// FIXME parse response and handle result correctly
 
-	g_message("Message object successfully updated");
+	g_message("[Telephony:SMS] Message object successfully updated");
 
 	return true;
+}
+
+static void update_message_status(struct telephony_service *service, const char *id, const char *status)
+{
+	jvalue_ref req_obj = 0;
+	jvalue_ref objects_obj = 0;
+	jvalue_ref msg_obj = 0;
+
+	req_obj = jobject_create();
+	objects_obj = jarray_create(NULL);
+
+	msg_obj = jobject_create();
+	jobject_put(msg_obj, J_CSTR_TO_JVAL("_id"), jstring_create(id));
+	jobject_put(msg_obj, J_CSTR_TO_JVAL("status"), jstring_create(status));
+
+	jarray_append(objects_obj, msg_obj);
+
+	jobject_put(req_obj, J_CSTR_TO_JVAL("objects"), objects_obj);
+
+	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/merge", req_obj,
+											 message_updated_cb, service)) {
+		g_warning("[Telephony:SMS] Failed to update message status");
+		tx_active = FALSE;
+	}
+
+	j_release(&req_obj);
 }
 
 
@@ -134,24 +176,9 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 
 	bool success = (error == NULL);
 
-	jvalue_ref req_obj = 0;
-	jvalue_ref objects_obj = 0;
-	jvalue_ref msg_obj = 0;
+	g_message("[Telephony:SMS] sending message %s", success ? "succeedded" : "failed");
 
-	req_obj = jobject_create();
-	objects_obj = jarray_create(NULL);
-
-	msg_obj = jobject_create();
-	jobject_put(msg_obj, J_CSTR_TO_JVAL("_id"), jstring_create(msg->id));
-	jobject_put(msg_obj, J_CSTR_TO_JVAL("status"), jstring_create(success ? "successful" : "failed"));
-
-	jobject_put(req_obj, J_CSTR_TO_JVAL("objects"), objects_obj);
-
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/merge", req_obj,
-	                                         message_updated_cb, service)) {
-		g_warning("Failed to update message status");
-		return 0;
-	}
+	update_message_status(service, msg->id, success ? "successful" : "failed");
 
 	/* FIXME eventually retry failed messages after some time again */
 
@@ -161,8 +188,6 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 	g_free(msg);
 
 	g_free(cbd);
-
-	j_release(&req_obj);
 
 	/* now we can send the next message */
 	tx_active = FALSE;
@@ -185,18 +210,22 @@ static gboolean tx_timeout_cb(gpointer user_data)
 	struct pending_sms *msg = 0;
 	struct cb_data *cbd = 0;
 
-	if (tx_active)
+	if (tx_active) {
+		g_message("[Telephony:SMS] TX still active. Waiting for next free slot.");
 		return TRUE;
+	}
+
+	if (tx_queue == NULL || g_queue_is_empty(tx_queue)) {
+		tx_timeout = 0;
+		restart_activity(service);
+		return FALSE;
+	}
 
 	if (!service->initialized) {
 		/* if service isn't initialized yet we have to wait a bit before trying
 		 * again to send all messages */
 		tx_timeout = g_timeout_add_seconds(5, restart_tx_queue_cb, service);
-		return FALSE;
-	}
-
-	if (g_queue_is_empty(tx_queue)) {
-		tx_timeout = 0;
+		restart_activity(service);
 		return FALSE;
 	}
 
@@ -205,6 +234,7 @@ static gboolean tx_timeout_cb(gpointer user_data)
 	cbd = cb_data_new(NULL, service);
 	cbd->user = msg;
 
+	/* block others from sending at the same time */
 	tx_active = TRUE;
 
 	service->driver->send_sms(service, msg->to, msg->text, send_msg_cb, cbd);
@@ -241,7 +271,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		jvalue_ref text_obj = 0;
 		jvalue_ref addr_obj = 0;
 		raw_buffer id_buf;
-		raw_buffer to_buf;
+		raw_buffer addr_buf;
 		raw_buffer text_buf;
 		struct pending_sms *msg;
 
@@ -250,32 +280,35 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 			continue;
 		}
 
+		id_buf = jstring_get(id_obj);
+
 		if (!jobject_get_exists(result_obj, J_CSTR_TO_BUF("to"), &to_obj)) {
 			g_warning("Found pending outgoing SMS message without a recipient. Skipping it.");
-			// FIXME mark message as failed
+			update_message_status(service, id_buf.m_str, "failed");
 			continue;
 		}
 
 		if (!jobject_get_exists(to_obj, J_CSTR_TO_BUF("addr"), &addr_obj)) {
 			g_warning("Found pending outgoing SMS message without a recipient. Skipping it.");
-			// FIXME mark message as failed
+			update_message_status(service, id_buf.m_str, "failed");
 			continue;
 		}
 
 		if (!jobject_get_exists(result_obj, J_CSTR_TO_BUF("messageText"), &text_obj)) {
 			g_warning("Found pending outgoing SMS message without a text. Skipping it.");
-			// FIXME mark message as failed
+			update_message_status(service, id_buf.m_str, "failed");
 			continue;
 		}
 
-		id_buf = jstring_get(id_obj);
-		to_buf = jstring_get(to_obj);
+		addr_buf = jstring_get(addr_obj);
 		text_buf = jstring_get(text_obj);
 
 		msg = g_new(struct pending_sms, 1);
 
+		g_message("New message to %s", addr_buf.m_str);
+
 		msg->id = g_strdup(id_buf.m_str);
-		msg->to = g_strdup(to_buf.m_str);
+		msg->to = g_strdup(addr_buf.m_str);
 		msg->text = g_strdup(text_buf.m_str);
 
 		/* if we're the first one using it then create the queue */
@@ -283,11 +316,17 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 			tx_queue = g_queue_new();
 
 		g_queue_push_tail(tx_queue, msg);
+
+		update_message_status(service, id_buf.m_str, "sending");
 	}
 
+	g_message("[Telephony:SMS] tx_timeout %d", tx_timeout);
+
 	/* if the tx queue isn't already processed trigger it */
-	if (!tx_timeout)
-		tx_timeout = g_timeout_add(100, tx_timeout_cb, service);
+	if (!tx_timeout) {
+		g_message("[Telephony:SMS] starting TX timeout");
+		tx_timeout = g_timeout_add(1000, tx_timeout_cb, service);
+	}
 
 cleanup:
 	j_release(&parsed_obj);
@@ -299,11 +338,17 @@ bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message,
 {
 	struct telephony_service *service = user_data;
 	jvalue_ref req_obj = 0;
+	jvalue_ref query_obj = 0;
 	jvalue_ref where_obj = 0;
 	jvalue_ref folder_obj = 0;
 	jvalue_ref status_obj = 0;
 
-	jobject_put(req_obj, J_CSTR_TO_JVAL("from"), jstring_create("com.palm.smsmessage:1"));
+	luna_service_message_reply_success(handle, message);
+
+	req_obj = jobject_create();
+	query_obj = jobject_create();
+
+	jobject_put(query_obj, J_CSTR_TO_JVAL("from"), jstring_create("com.palm.smsmessage:1"));
 
 	where_obj = jarray_create(0);
 
@@ -321,7 +366,10 @@ bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message,
 
 	jarray_append(where_obj, status_obj);
 
-	jobject_put(req_obj, J_CSTR_TO_JVAL("where"), where_obj);
+	jobject_put(query_obj, J_CSTR_TO_JVAL("where"), where_obj);
+	jobject_put(query_obj, J_CSTR_TO_JVAL("orderBy"), jstring_create("localTimestamp"));
+
+	jobject_put(req_obj, J_CSTR_TO_JVAL("query"), query_obj);
 
 	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/find",
 	                                         req_obj, query_pending_messages_cb, service))
@@ -333,4 +381,9 @@ bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message,
 	j_release(&req_obj);
 
 	return true;
+}
+
+void telephonyservice_sms_setup(struct telephony_service *service)
+{
+	restart_activity(service);
 }
