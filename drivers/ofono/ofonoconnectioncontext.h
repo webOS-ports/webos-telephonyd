@@ -69,6 +69,9 @@ void ofono_connection_context_set_protocol(struct ofono_connection_context *ctx,
 const char* ofono_connection_context_get_name(struct ofono_connection_context *ctx);
 void ofono_connection_context_set_name(struct ofono_connection_context *ctx, const char *name,
 									   ofono_base_result_cb cb, void *data);
+const char* ofono_connection_context_get_address(struct ofono_connection_context *ctx);
+const char* ofono_connection_context_get_netmask(struct ofono_connection_context *ctx);
+const char* ofono_connection_context_get_gateway(struct ofono_connection_context *ctx);
 
 #endif
 

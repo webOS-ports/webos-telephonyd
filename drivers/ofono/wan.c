@@ -114,6 +114,7 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 			break;
 		}
 
+		wanservice->ipaddress = ofono_connection_context_get_address(context);
 		wanservice->connection_status = ofono_connection_context_get_active(context) ?
 					WAN_CONNECTION_STATUS_ACTIVE : WAN_CONNECTION_STATUS_DISCONNECTED;
 
