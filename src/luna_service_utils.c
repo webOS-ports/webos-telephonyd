@@ -118,6 +118,30 @@ bool luna_service_message_validate_and_send(LSHandle *handle, LSMessage *message
 	return success;
 }
 
+bool luna_service_call_validate_and_send(LSHandle *handle, const char *uri, jvalue_ref req_obj,
+                                         LSFilterFunc callback, void *user_data)
+{
+	jschema_ref request_schema = NULL;
+	LSError lserror;
+	bool success = true;
+
+	LSErrorInit(&lserror);
+
+	request_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+	if(!request_schema)
+		return false;
+
+	if (!LSCallOneReply(handle, uri, jvalue_tostring(req_obj, request_schema), callback, user_data, 0, &lserror)) {
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+		success = false;
+	}
+
+	jschema_release(&request_schema);
+
+	return success;
+}
+
 bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message)
 {
 	LSError lserror;

@@ -33,8 +33,8 @@ struct ofono_voicecall_manager {
 	OfonoInterfaceVoiceCallManager *remote;
 	struct ofono_base *base;
 	int ref_count;
-	GSList *emergency_numbers;
-	GSList *calls;
+	GList *emergency_numbers;
+	GList *calls;
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 	ofono_base_cb calls_changed_cb;
@@ -68,15 +68,19 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 	g_message("[VoicecallManager:%s] property %s changed", vm->path, name);
 
-	if (g_str_equal(name, "EmergencyNumbers")) {
-		if (vm->emergency_numbers)
-			g_slist_free_full(vm->emergency_numbers, g_free);
+	if (g_strcmp0(name, "EmergencyNumbers") == 0) {
+		if (vm->emergency_numbers) {
+			g_list_free(vm->emergency_numbers);
+			vm->emergency_numbers = 0;
+		}
 
 		for (n = 0; n < g_variant_n_children(value); n++) {
 			child = g_variant_get_child_value(value, n);
 
 			number = g_variant_dup_string(child, NULL);
-			vm->emergency_numbers = g_slist_append(vm->emergency_numbers, number);
+			vm->emergency_numbers = g_list_append(vm->emergency_numbers, number);
+
+			g_variant_unref(child);
 		}
 	}
 
@@ -140,6 +144,9 @@ void ofono_voicecall_manager_free(struct ofono_voicecall_manager *vm)
 	if (!vm)
 		return;
 
+	if (vm->base)
+		ofono_base_free(vm->base);
+
 	if (vm->remote)
 		g_object_unref(vm->remote);
 
@@ -192,7 +199,7 @@ static void dial_cb(GObject *source, GAsyncResult *res, gpointer data)
 	ofono_voicecall_manager_dial_cb cb = cbd->cb;
 	struct ofono_voicecall_manager *vm = cbd->user;
 	GError *error;
-	const char *path = NULL;
+	gchar *path = NULL;
 	struct ofono_error oerr;
 	gboolean success = FALSE;
 
@@ -354,11 +361,11 @@ static void call_added_cb(OfonoInterfaceConnectionManager *source, const gchar *
 							 GVariant *properties, gpointer user_data)
 {
 	struct ofono_voicecall_manager *vm = user_data;
-	GSList *iter;
+	GList *iter;
 	struct ofono_voicecall *call;
 	const char *call_path;
 
-	for (iter = vm->calls; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = vm->calls; iter != NULL; iter = g_list_next(iter)) {
 		call = iter->data;
 		call_path = ofono_voicecall_get_path(call);
 
@@ -367,7 +374,7 @@ static void call_added_cb(OfonoInterfaceConnectionManager *source, const gchar *
 	}
 
 	call = ofono_voicecall_create(path);
-	vm->calls = g_slist_append(vm->calls, call);
+	vm->calls = g_list_append(vm->calls, call);
 
 	if (vm->calls_changed_cb)
 		vm->calls_changed_cb(vm->calls_changed_data);
@@ -380,15 +387,15 @@ static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar
 							   gpointer user_data)
 {
 	struct ofono_voicecall_manager *vm = user_data;
-	GSList *iter, *removable = NULL;
+	GList *iter, *removable = NULL;
 	struct ofono_voicecall *call;
 	const char *call_path;
 
-	for (iter = vm->calls; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = vm->calls; iter != NULL; iter = g_list_next(iter)) {
 		call = iter->data;
 		call_path = ofono_voicecall_get_path(call);
 
-		if (g_str_equal(call_path, path)) {
+		if (g_strcmp0(call_path, path) == 0) {
 			removable = iter;
 			break;
 		}
@@ -397,7 +404,7 @@ static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar
 	if (removable) {
 		call = removable->data;
 		ofono_voicecall_free(call);
-		vm->calls = g_slist_remove(vm->calls, removable);
+		vm->calls = g_list_remove(vm->calls, removable);
 	}
 
 	if (vm->calls_changed_cb)
@@ -436,7 +443,10 @@ static void get_calls_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 
 		call = ofono_voicecall_create(path);
 
-		vm->calls = g_slist_append(vm->calls, call);
+		vm->calls = g_list_append(vm->calls, call);
+
+		g_variant_unref(path_v);
+		g_variant_unref(call_v);
 	}
 
 	/* As we're not called a second time connect here to any possible call updates */
@@ -465,7 +475,7 @@ void ofono_voicecall_manager_get_calls(struct ofono_voicecall_manager *vm,
 	}
 
 	/* Not the first time, so just return known calls */
-	if (g_slist_length(vm->calls) > 0) {
+	if (g_list_length(vm->calls) > 0) {
 		cb(NULL, vm->calls, data);
 		return;
 	}
@@ -476,7 +486,7 @@ void ofono_voicecall_manager_get_calls(struct ofono_voicecall_manager *vm,
 	ofono_interface_voice_call_manager_call_get_calls(vm->remote, NULL, get_calls_cb, cbd);
 }
 
-GSList* ofono_voicecall_manager_get_emergency_numbers(struct ofono_voicecall_manager *vm)
+GList* ofono_voicecall_manager_get_emergency_numbers(struct ofono_voicecall_manager *vm)
 {
 	if (!vm)
 		return NULL;

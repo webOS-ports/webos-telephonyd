@@ -100,6 +100,9 @@ void ofono_radio_settings_free(struct ofono_radio_settings *ras)
 	if (!ras)
 		return;
 
+	if (ras->base)
+		ofono_base_free(ras->base);
+
 	if (ras->remote)
 		g_object_unref(ras->remote);
 

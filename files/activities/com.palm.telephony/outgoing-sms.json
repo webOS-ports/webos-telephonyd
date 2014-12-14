@@ -1,0 +1,31 @@
+{
+    "start": true,
+    "activity": {
+        "name": "Watching for new outgoing SMS messages",
+        "description": "DB8 watch to get notified once a new SMS message is ready to be send",
+        "type": {
+            "foreground": true,
+            "power":true,
+            "powerDebounce":true,
+            "explicit":true
+        },
+        "trigger": {
+            "method": "palm://com.palm.db/watch",
+            "key": "fired",
+            "params": {
+                "subscribe": true,
+                "query": {
+                    "from": "com.palm.smsmessage:1",
+                    "where": [
+                        {"op":"=","prop":"status","val":"pending"},
+                        {"op":"=","prop":"folder","val":"outbox"}
+                    ]
+                }
+            }
+        },
+        "callback": {
+            "method": "palm://com.palm.telephony/internal/sendSmsFromDb",
+            "params": {}
+        }
+    }
+}

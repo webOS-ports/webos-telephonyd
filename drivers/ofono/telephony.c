@@ -31,6 +31,9 @@
 #include "ofonoradiosettings.h"
 #include "ofonovoicecallmanager.h"
 #include "ofonovoicecall.h"
+#include "ofonomessagemanager.h"
+#include "ofonomessage.h"
+#include "ofonomessagewatch.h"
 #include "utils.h"
 
 struct ofono_data {
@@ -41,6 +44,7 @@ struct ofono_data {
 	struct ofono_network_registration *netreg;
 	struct ofono_radio_settings *rs;
 	struct ofono_voicecall_manager *vm;
+	struct ofono_message_manager *mm;
 	enum telephony_sim_status sim_status;
 	bool initializing;
 	bool power_set_pending;
@@ -82,7 +86,6 @@ void set_powered_cb(struct ofono_error *error, gpointer user_data)
 	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
-	bool powered;
 
 	if (error) {
 		terr.code = 1; /* FIXME */
@@ -526,7 +529,7 @@ enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_netw
 	return TELEPHONY_RADIO_ACCESS_MODE_GSM;
 }
 
-int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
+void scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 {
 	struct cb_data *cbd = data;
 	struct ofono_data *od = cbd->user;
@@ -559,8 +562,6 @@ int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 	}
 
 	od->network_scan_cancellable = 0;
-
-	return 0;
 }
 
 void ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
@@ -803,7 +804,7 @@ void ofono_subscriber_id_query(struct telephony_service *service, telephony_subs
 	}
 }
 
-static void dial_cb(struct ofono_error *error, void *data)
+static void dial_cb(const struct ofono_error *error, const char *path, void *data)
 {
 	struct cb_data *cbd = data;
 	telephony_result_cb cb = cbd->cb;
@@ -844,14 +845,111 @@ void ofono_answer(struct telephony_service *service, int call_id, telephony_resu
 {
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_error error;
-	struct cb_data *cbd;
-	struct call_info *cinfo;
 
 	if (!od->vm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
 		cb(&error, data);
 		return;
 	}
+}
+
+static void message_status_cb(enum ofono_message_status status, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+	struct ofono_message_watch *watch = cbd->user;
+
+	if (status == OFONO_MESSAGE_STATUS_FAILED) {
+		terr.code = TELEPHONY_ERROR_FAIL;
+		cb(&terr, cbd->data);
+		goto cleanup;
+	}
+	else if (status == OFONO_MESSAGE_STATUS_SENT) {
+		cb(NULL, cbd->data);
+		goto cleanup;
+	}
+
+	return;
+
+cleanup:
+	if (watch)
+		ofono_message_watch_free(watch);
+
+	g_free(cbd);
+}
+
+static void send_sms_cb(struct ofono_error *error, const char *path, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		terr.code = TELEPHONY_ERROR_INTERNAL;
+		cb(&terr, cbd->data);
+		g_free(cbd);
+		return;
+	}
+
+	struct ofono_message_watch *watch = ofono_message_watch_create(path);
+	cbd->user = watch;
+	ofono_message_watch_set_status_callback(watch, message_status_cb, cbd);
+}
+
+void ofono_send_sms(struct telephony_service *service, const char *to, const char *text, telephony_result_cb cb, void *data)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+	struct telephony_error error;
+	struct cb_data *cbd;
+
+	if (!od->mm) {
+		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
+		return;
+	}
+
+	cbd = cb_data_new(cb, data);
+
+	ofono_message_manager_send_message(od->mm, to, text, send_sms_cb, cbd);
+}
+
+static void incoming_message_cb(struct ofono_message *message, void *data)
+{
+	struct ofono_data *od = data;
+
+	struct telephony_message msg;
+
+	msg.sender = ofono_message_get_sender(message);
+	msg.text = ofono_message_get_text(message);
+	msg.sent_time = ofono_message_get_sent_time(message);
+
+	switch (ofono_message_get_type(message)) {
+	case OFONO_MESSAGE_TYPE_CLASS0:
+		msg.type = TELEPHONY_MESSAGE_TYPE_CLASS0;
+		break;
+	case OFONO_MESSAGE_TYPE_TEXT:
+		msg.type = TELEPHONY_MESSAGE_TYPE_TEXT;
+		break;
+	default:
+		msg.type = TELEPHONY_MESSAGE_TYPE_UNKNOWN;
+		break;
+	}
+
+	telephony_service_incoming_message_notify(od->service, &msg);
+}
+
+static void notify_no_network_registration(struct telephony_service *service)
+{
+	/* notify possible network status subscribers about us having no connectivity
+	 * anymore */
+	struct telephony_network_status net_status;
+
+	net_status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
+	net_status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
+	net_status.name = 0;
+
+	telephony_service_network_status_changed_notify(service, &net_status);
 }
 
 static void modem_prop_changed_cb(const gchar *name, void *data)
@@ -881,6 +979,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
 			ofono_network_registration_free(od->netreg);
 			od->netreg = NULL;
+			notify_no_network_registration(od->service);
 		}
 
 		if (!od->rs && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_RADIO_SETTINGS)) {
@@ -897,6 +996,15 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->vm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
 			ofono_voicecall_manager_free(od->vm);
 			od->vm = NULL;
+		}
+
+		if (!od->mm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MESSAGE_MANAGER)) {
+			od->mm = ofono_message_manager_create(path);
+			ofono_message_manager_set_incoming_message_callback(od->mm, incoming_message_cb, od);
+		}
+		else if (od->mm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MESSAGE_MANAGER)) {
+			ofono_message_manager_free(od->mm);
+			od->mm = NULL;
 		}
 	}
 	else if (g_str_equal(name, "Powered")) {
@@ -943,6 +1051,11 @@ static void modems_changed_cb(gpointer user_data)
 
 static void free_used_instances(struct ofono_data *od)
 {
+	if (od->mm) {
+		ofono_message_manager_free(od->mm);
+		od->mm = NULL;
+	}
+
 	if (od->rs) {
 		ofono_radio_settings_free(od->rs);
 		od->rs = NULL;
@@ -1021,16 +1134,17 @@ int ofono_probe(struct telephony_service *service)
 
 void ofono_remove(struct telephony_service *service)
 {
-	struct ofono_data *data;
+	struct ofono_data *data = 0;
 
 	data = telephony_service_get_data(service);
 
 	g_hash_table_destroy(data->calls);
 
 	free_used_instances(data);
-	g_free(data);
 
 	g_bus_unwatch_name(data->service_watch);
+
+	g_free(data);
 
 	telephony_service_set_data(service, NULL);
 }
@@ -1061,7 +1175,8 @@ struct telephony_driver ofono_telephony_driver = {
 	.rat_set = ofono_rat_set,
 	.subscriber_id_query = ofono_subscriber_id_query,
 	.dial = ofono_dial,
-	.answer = ofono_answer
+	.answer = ofono_answer,
+	.send_sms = ofono_send_sms
 };
 
 // vim:ts=4:sw=4:noexpandtab

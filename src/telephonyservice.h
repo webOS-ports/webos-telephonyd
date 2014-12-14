@@ -40,6 +40,22 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status);
 void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars);
 
+enum telephony_message_type {
+	TELEPHONY_MESSAGE_TYPE_UNKNOWN,
+	TELEPHONY_MESSAGE_TYPE_CLASS0,
+	TELEPHONY_MESSAGE_TYPE_TEXT
+};
+
+struct telephony_message {
+	enum telephony_message_type type;
+	const char *sender;
+	const char *text;
+	time_t sent_time;
+	time_t local_sent_time;
+};
+
+void telephony_service_incoming_message_notify(struct telephony_service *service, struct telephony_message *message);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab

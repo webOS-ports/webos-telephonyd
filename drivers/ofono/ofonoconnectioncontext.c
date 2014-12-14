@@ -35,6 +35,9 @@ struct ofono_connection_context {
 	char *access_point_name;
 	char *username;
 	char *password;
+	char *address;
+	char *netmask;
+	char *gateway;
 	enum ofono_connection_context_type type;
 	enum ofono_connection_context_protocol protocol;
 	char *name;
@@ -106,6 +109,30 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			g_free(ctx->name);
 		ctx->name = g_variant_dup_string(value, NULL);
 	}
+	else if (g_strcmp0(name, "Settings") == 0) {
+		gchar *setting_name = NULL;
+		GVariant *setting_value = NULL;
+		GVariantIter iter;
+
+		g_variant_iter_init(&iter, value);
+		while (g_variant_iter_loop(&iter, "{sv}", &setting_name, &setting_value)) {
+			if (g_strcmp0(setting_name, "Address") == 0) {
+				if (ctx->address)
+					g_free(ctx->address);
+				ctx->address = g_variant_dup_string(setting_value, NULL);
+			}
+			else if (g_strcmp0(setting_name, "Netmask") == 0) {
+				if (ctx->netmask)
+					g_free(ctx->netmask);
+				ctx->netmask = g_variant_dup_string(setting_value, NULL);
+			}
+			else if (g_strcmp0(setting_name, "Gateway") == 0) {
+				if (ctx->gateway)
+					g_free(ctx->gateway);
+				ctx->gateway = g_variant_dup_string(setting_value, NULL);
+			}
+		}
+	}
 
 	if (ctx->prop_changed_cb)
 		ctx->prop_changed_cb(name, ctx->prop_changed_data);
@@ -166,6 +193,33 @@ void ofono_connection_context_free(struct ofono_connection_context *ctx)
 {
 	if (!ctx)
 		return;
+
+	if (ctx->base)
+		ofono_base_free(ctx->base);
+
+	if (ctx->access_point_name)
+		g_free(ctx->access_point_name);
+
+	if (ctx->username)
+		g_free(ctx->username);
+
+	if (ctx->password)
+		g_free(ctx->password);
+
+	if (ctx->name)
+		g_free(ctx->name);
+
+	if (ctx->path)
+		g_free(ctx->path);
+
+	if (ctx->address)
+		g_free(ctx->address);
+
+	if (ctx->netmask)
+		g_free(ctx->netmask);
+
+	if (ctx->gateway)
+		g_free(ctx->gateway);
 
 	if (ctx->remote)
 		g_object_unref(ctx->remote);
@@ -277,6 +331,30 @@ const char* ofono_connection_context_get_name(struct ofono_connection_context *c
 void ofono_connection_context_set_name(struct ofono_connection_context *ctx, const char *name,
 									   ofono_base_result_cb cb, void *data)
 {
+}
+
+const char* ofono_connection_context_get_address(struct ofono_connection_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	return ctx->address;
+}
+
+const char* ofono_connection_context_get_netmask(struct ofono_connection_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	return ctx->netmask;
+}
+
+const char* ofono_connection_context_get_gateway(struct ofono_connection_context *ctx)
+{
+	if (!ctx)
+		return NULL;
+
+	return ctx->gateway;
 }
 
 // vim:ts=4:sw=4:noexpandtab

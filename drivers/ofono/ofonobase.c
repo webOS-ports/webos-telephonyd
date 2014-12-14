@@ -29,6 +29,7 @@
 struct ofono_base {
 	void *remote;
 	void *user_data;
+	gulong property_changed_signal;
 	struct ofono_base_funcs *funcs;
 };
 
@@ -113,7 +114,7 @@ struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remot
 	base->user_data = user_data;
 	base->funcs = funcs;
 
-	g_signal_connect(G_OBJECT(base->remote), "property-changed",
+	base->property_changed_signal = g_signal_connect(G_OBJECT(base->remote), "property-changed",
 		G_CALLBACK(property_changed_cb), base);
 
 	if (base->funcs->get_properties) {
@@ -138,8 +139,7 @@ void ofono_base_free(struct ofono_base *base)
 	if (!base)
 		return;
 
-	if (base->remote)
-		g_object_unref(base->remote);
+	g_signal_handler_disconnect(G_OBJECT(base->remote), base->property_changed_signal);
 
 	g_free(base);
 }

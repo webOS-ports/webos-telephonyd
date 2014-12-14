@@ -286,6 +286,9 @@ void ofono_sim_manager_free(struct ofono_sim_manager *sim)
 	if (!sim)
 		return;
 
+	if (sim->base)
+		ofono_base_free(sim->base);
+
 	if (sim->remote)
 		g_object_unref(sim->remote);
 

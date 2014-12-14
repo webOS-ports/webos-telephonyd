@@ -28,7 +28,7 @@ enum ofono_voicecall_clir_option {
 };
 
 typedef void (*ofono_voicecall_manager_get_calls_cb)(const struct ofono_error *error,
-														 GSList *calls, void *data);
+														 GList *calls, void *data);
 typedef void (*ofono_voicecall_manager_dial_cb)(const struct ofono_error *error,
 												const char *path, void *data);
 
@@ -71,7 +71,7 @@ void ofono_voicecall_manager_send_tones(struct ofono_voicecall_manager *vm, cons
 
 void ofono_voicecall_manager_get_calls(struct ofono_voicecall_manager *vm,
 										ofono_voicecall_manager_get_calls_cb cb, void *data);
-GSList* ofono_voicecall_manager_get_emergency_numbers(struct ofono_voicecall_manager *vm);
+GList* ofono_voicecall_manager_get_emergency_numbers(struct ofono_voicecall_manager *vm);
 
 #endif
 

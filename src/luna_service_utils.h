@@ -35,6 +35,9 @@ bool luna_service_message_validate_and_send(LSHandle *handle, LSMessage *message
 bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message);
 void luna_service_post_subscription(LSHandle *handle, const char *path, const char *method, jvalue_ref reply_obj);
 
+bool luna_service_call_validate_and_send(LSHandle *handle, const char *uri, jvalue_ref req_obj,
+                                         LSFilterFunc callback, void *user_data);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab

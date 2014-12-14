@@ -32,6 +32,8 @@ struct ofono_manager {
 	GList *modems;
 	ofono_manager_modems_chanaged_cb modems_changed_cb;
 	gpointer modems_changed_data;
+	gulong modem_added_signal;
+	gulong modem_removed_signal;
 };
 
 static void notify_modems_changed(struct ofono_manager *manager)
@@ -44,28 +46,13 @@ static void modem_added_cb(OfonoInterfaceManager *object, const gchar *path, GVa
 {
 	struct ofono_manager *manager = user_data;
 	struct ofono_modem *modem = NULL;
-	GList *iter = NULL;
-	const gchar *modem_path = NULL;
-	gboolean found_modem = FALSE;
 
-	for (iter = manager->modems; iter != NULL; iter = iter->next) {
-		modem = (struct ofono_modem*)(iter->data);
+	modem = ofono_modem_create(path);
 
-		modem_path = ofono_modem_get_path(modem);
-		if (g_str_equal(modem_path, path)) {
-			found_modem = TRUE;
-			break;
-		}
-	}
+	ofono_modem_ref(modem);
+	manager->modems = g_list_append(manager->modems, modem);
 
-	if (!found_modem) {
-		modem = ofono_modem_create(path);
-
-		ofono_modem_ref(modem);
-		manager->modems = g_list_append(manager->modems, modem);
-
-		notify_modems_changed(manager);
-	}
+	notify_modems_changed(manager);
 }
 
 static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, gpointer user_data)
@@ -74,19 +61,22 @@ static void modem_removed_cb(OfonoInterfaceManager *object, const gchar *path, g
 	struct ofono_modem *modem = NULL;
 	GList *iter = NULL;
 	const gchar *modem_path = NULL;
+	bool found = false;
 
 	for (iter = manager->modems; iter != NULL; iter = iter->next) {
 		modem = (struct ofono_modem*)(iter->data);
 
 		modem_path = ofono_modem_get_path(modem);
-		if (g_str_equal(modem_path, path)) {
-			manager->modems = g_list_remove_link(manager->modems, g_list_find(manager->modems, modem));
-			ofono_modem_unref(modem);
-
-			notify_modems_changed(manager);
-
+		if (g_strcmp0(modem_path, path) == 0) {
+			found = true;
 			break;
 		}
+	}
+
+	if (found) {
+		manager->modems = g_list_remove(manager->modems, modem);
+		ofono_modem_unref(modem);
+		notify_modems_changed(manager);
 	}
 }
 
@@ -105,7 +95,7 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	if (!success) {
 		g_error("Failed to retrieve list of available modems from manager: %s", error->message);
 		g_error_free(error);
-		return;
+		goto done;
 	}
 
 	for (n = 0; n < g_variant_n_children(modems); n++) {
@@ -113,13 +103,18 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 
 		path = g_variant_dup_string(g_variant_get_child_value(child, 0), NULL);
 
-		g_message("Found modem %s", path);
-
 		modem = ofono_modem_create(path);
 		manager->modems = g_list_append(manager->modems, modem);
 	}
 
 	notify_modems_changed(manager);
+
+done:
+	manager->modem_added_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-added",
+		G_CALLBACK(modem_added_cb), manager);
+
+	manager->modem_removed_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-removed",
+		G_CALLBACK(modem_removed_cb), manager);
 }
 
 struct ofono_manager* ofono_manager_create(void)
@@ -142,12 +137,6 @@ struct ofono_manager* ofono_manager_create(void)
 		return NULL;
 	}
 
-	g_signal_connect(G_OBJECT(manager->remote), "modem-added",
-		G_CALLBACK(modem_added_cb), manager);
-
-	g_signal_connect(G_OBJECT(manager->remote), "modem-removed",
-		G_CALLBACK(modem_removed_cb), manager);
-
 	ofono_interface_manager_call_get_modems(manager->remote, NULL, get_modems_cb, manager);
 
 	return manager;
@@ -158,8 +147,11 @@ void ofono_manager_free(struct ofono_manager *manager)
 	if (!manager)
 		return;
 
-	if (manager->remote)
+	if (manager->remote) {
+		g_signal_handler_disconnect(manager->remote, manager->modem_added_signal);
+		g_signal_handler_disconnect(manager->remote, manager->modem_removed_signal);
 		g_object_unref(manager->remote);
+	}
 
 	g_list_free_full(manager->modems, (GDestroyNotify) ofono_modem_free);
 

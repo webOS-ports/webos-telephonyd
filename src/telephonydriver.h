@@ -32,7 +32,8 @@ enum telephony_error_type {
 	TELEPHONY_ERROR_INTERNAL,
 	TELEPHONY_ERROR_INVALID_ARGUMENT,
 	TELEPHONY_ERROR_NOT_AVAILABLE,
-	TELEPHONY_ERROR_ALREADY_INPROGRESS
+	TELEPHONY_ERROR_ALREADY_INPROGRESS,
+	TELEPHONY_ERROR_FAIL
 };
 
 enum telephony_sim_status {
@@ -184,6 +185,9 @@ struct telephony_driver {
 	void (*answer)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
 	void (*ignore)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
 	void (*hangup)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+
+	/* sms */
+	void (*send_sms)(struct telephony_service *service, const char *to, const char *text, telephony_result_cb cb, void *data);
 };
 
 #endif

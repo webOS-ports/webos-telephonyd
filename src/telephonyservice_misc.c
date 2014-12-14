@@ -110,6 +110,11 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	const char *payload;
 	bool should_save = false;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->power_set) {
 		g_warning("No implementation available for service powerSet API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -211,6 +216,11 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -283,6 +293,11 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->platform_query) {
 		g_warning("No implementation available for service platformQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -351,6 +366,11 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
 
 	if (!service->driver || !service->driver->subscriber_id_query) {
 		g_warning("No implementation available for service subscriberIdQuery API method");
