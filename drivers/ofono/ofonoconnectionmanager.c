@@ -144,11 +144,11 @@ void ofono_connection_manager_free(struct ofono_connection_manager *cm)
 	if (!cm)
 		return;
 
-	if (cm->remote)
-		g_object_unref(cm->remote);
-
 	if (cm->base)
 		ofono_base_free(cm->base);
+
+	if (cm->remote)
+		g_object_unref(cm->remote);
 
 	g_free(cm);
 }

@@ -72,7 +72,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 		for (n = 0; n < g_variant_n_children(value); n++) {
 			child = g_variant_get_child_value(value, n);
-			interface_name = g_variant_dup_string(child, NULL);
+			interface_name = g_variant_get_string(child, NULL);
 
 			if (g_str_equal(interface_name, "org.ofono.AssistedSatelliteNavigation"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_ASSISTET_SATELLITE_NAVIGATION] = 1;
@@ -118,6 +118,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 				modem->interfaces[OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.ConnectionManager"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_CONNECTION_MANAGER] = 1;
+
+			g_variant_unref(child);
 		}
 	}
 
@@ -189,11 +191,20 @@ void ofono_modem_free(struct ofono_modem *modem)
 	if (!modem)
 		return;
 
-	if (modem->remote)
-		g_object_unref(modem->remote);
+	if (modem->name)
+		g_free(modem->name);
+
+	if (modem->serial)
+		g_free(modem->serial);
+
+	if (modem->revision)
+		g_free(modem->revision);
 
 	if (modem->base)
 		ofono_base_free(modem->base);
+
+	if (modem->remote)
+		g_object_unref(modem->remote);
 
 	g_free(modem);
 }

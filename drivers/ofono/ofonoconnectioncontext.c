@@ -167,6 +167,24 @@ void ofono_connection_context_free(struct ofono_connection_context *ctx)
 	if (!ctx)
 		return;
 
+	if (ctx->base)
+		ofono_base_free(ctx->base);
+
+	if (ctx->access_point_name)
+		g_free(ctx->access_point_name);
+
+	if (ctx->username)
+		g_free(ctx->username);
+
+	if (ctx->password)
+		g_free(ctx->password);
+
+	if (ctx->name)
+		g_free(ctx->name);
+
+	if (ctx->path)
+		g_free(ctx->path);
+
 	if (ctx->remote)
 		g_object_unref(ctx->remote);
 

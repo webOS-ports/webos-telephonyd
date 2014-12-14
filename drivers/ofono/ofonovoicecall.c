@@ -167,6 +167,9 @@ void ofono_voicecall_free(struct ofono_voicecall *call)
 	if (!call)
 		return;
 
+	if (call->base)
+		ofono_base_free(call->base);
+
 	if (call->remote)
 		g_object_unref(call->remote);
 

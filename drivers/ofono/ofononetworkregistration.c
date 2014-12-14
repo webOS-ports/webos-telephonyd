@@ -183,6 +183,9 @@ void ofono_network_registration_free(struct ofono_network_registration *netreg)
 	if (!netreg)
 		return;
 
+	if (netreg->base)
+		ofono_base_free(netreg->base);
+
 	if (netreg->remote)
 		g_object_unref(netreg->remote);
 

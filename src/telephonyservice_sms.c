@@ -170,6 +170,15 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 	return 0;
 }
 
+static gboolean tx_timeout_cb(gpointer user_data);
+
+static gboolean restart_tx_queue_cb(gpointer user_data)
+{
+	tx_timeout = g_timeout_add(100, tx_timeout_cb, user_data);
+
+	return FALSE;
+}
+
 static gboolean tx_timeout_cb(gpointer user_data)
 {
 	struct telephony_service *service = user_data;
@@ -178,6 +187,13 @@ static gboolean tx_timeout_cb(gpointer user_data)
 
 	if (tx_active)
 		return TRUE;
+
+	if (!service->initialized) {
+		/* if service isn't initialized yet we have to wait a bit before trying
+		 * again to send all messages */
+		tx_timeout = g_timeout_add_seconds(5, restart_tx_queue_cb, service);
+		return FALSE;
+	}
 
 	if (g_queue_is_empty(tx_queue)) {
 		tx_timeout = 0;

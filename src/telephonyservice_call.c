@@ -41,6 +41,11 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	bool block_id = false;
 	raw_buffer number_buf;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service dial API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -88,6 +93,11 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	int call_id = 0;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service answer API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -129,6 +139,11 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	int call_id = 0;
 
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
+
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service ignore API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -169,6 +184,11 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	int call_id = 0;
+
+	if (!service->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		return;
+	}
 
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service hangup API method");

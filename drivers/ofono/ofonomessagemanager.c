@@ -146,11 +146,11 @@ void ofono_message_manager_free(struct ofono_message_manager *manager)
 	if (!manager)
 		return;
 
-	if (manager->remote)
-		g_object_unref(manager->remote);
-
 	if (manager->base)
 		ofono_base_free(manager->base);
+
+	if (manager->remote)
+		g_object_unref(manager->remote);
 
 	g_free(manager);
 }

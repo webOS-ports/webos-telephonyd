@@ -137,37 +137,6 @@ int _service_initial_power_set_finish(const struct telephony_error *error, void 
 static int configure_service(struct telephony_service *service)
 {
 	bool power_state = true;
-	LSError error;
-
-	LSErrorInit(&error);
-
-	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
-		g_error("Failed to initialize the Luna Palm service: %s", error.message);
-		LSErrorFree(&error);
-		return -EIO;
-	}
-
-	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
-		g_error("Failed to attach to glib mainloop for palm service: %s", error.message);
-		LSErrorFree(&error);
-		return -EIO;
-	}
-
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
-			NULL, service, &error)) {
-		g_warning("Could not register service category");
-		LSErrorFree(&error);
-		return -EIO;
-	}
-
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/internal", NULL, _telephony_service_internal_methods,
-			NULL, service, &error)) {
-		g_warning("Could not register internal service category");
-		LSErrorFree(&error);
-		return -EIO;
-	}
-
-	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
 
 	power_state = retrieve_power_state_from_settings();
 	if (!service->driver || !service->driver->power_set) {
@@ -207,11 +176,39 @@ struct telephony_service* telephony_service_create()
 	service->network_status_query_pending = false;
 	service->network_registered = false;
 
+	LSError error;
+
+	LSErrorInit(&error);
+
+	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
+		g_error("Failed to initialize the Luna Palm service: %s", error.message);
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
+		g_error("Failed to attach to glib mainloop for palm service: %s", error.message);
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
+			NULL, service, &error)) {
+		g_warning("Could not register service category");
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	if (!LSPalmServiceRegisterCategory(service->palm_service, "/internal", NULL, _telephony_service_internal_methods,
+			NULL, service, &error)) {
+		g_warning("Could not register internal service category");
+		LSErrorFree(&error);
+		return -EIO;
+	}
+
+	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
+
 	return service;
-
-	g_free(service);
-
-	return NULL;
 }
 
 void telephony_service_free(struct telephony_service *service)
@@ -260,23 +257,6 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 			g_error("Could not configure service");
 			return;
 		}
-	}
-	else if (service->initialized && !available)
-	{
-		LSErrorInit(&error);
-
-		if (!LSGmainDetachPalmService(service->palm_service, &error)) {
-			g_error("Could not detach Palm service from mainloop: %s", error.message);
-			LSErrorFree(&error);
-		}
-
-		if (!LSUnregisterPalmService(service->palm_service, &error)) {
-			g_error("Could not unregister palm service: %s", error.message);
-			LSErrorFree(&error);
-		}
-
-		service->palm_service = NULL;
-		service->private_service = NULL;
 	}
 
 	service->initialized = available;

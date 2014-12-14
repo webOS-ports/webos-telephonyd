@@ -31,7 +31,7 @@
 #include "telephonyservice.h"
 #include "wanservice.h"
 
-#define SHUTDOWN_GRACE_SECONDS		2
+#define SHUTDOWN_GRACE_SECONDS		0
 #define VERSION						"0.1"
 
 GMainLoop *event_loop;
@@ -188,6 +188,8 @@ int main(int argc, char **argv)
 	wanservice = wan_service_create();
 
 	g_main_loop_run(event_loop);
+
+	g_message("Cleaning up");
 
 	wan_service_free(wanservice);
 	telephony_service_free(telservice);

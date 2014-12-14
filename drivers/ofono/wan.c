@@ -63,7 +63,7 @@ enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum o
 static void free_used_instances(struct ofono_wan_data *od)
 {
 	if (od->manager) {
-		g_free(od->manager);
+		ofono_manager_free(od->manager);
 		od->manager = 0;
 	}
 }
@@ -116,6 +116,9 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 
 		wanservice->connection_status = ofono_connection_context_get_active(context) ?
 					WAN_CONNECTION_STATUS_ACTIVE : WAN_CONNECTION_STATUS_DISCONNECTED;
+
+		/* FIXME to what we have to set the following field? */
+		wanservice->req_status = WAN_REQUEST_STATUS_CONNECT_SUCCEEDED;
 
 		/* If at least one service is active we report a active connection */
 		if (wanservice->connection_status == WAN_CONNECTION_STATUS_ACTIVE)
@@ -296,6 +299,7 @@ void ofono_wan_remove(struct wan_service *service)
 	g_bus_unwatch_name(data->service_watch);
 
 	free_used_instances(data);
+
 	g_free(data);
 
 	wan_service_set_data(service, NULL);

@@ -142,6 +142,9 @@ void ofono_network_operator_free(struct ofono_network_operator *netop)
 	if (!netop)
 		return;
 
+	if (netop->base)
+		ofono_base_free(netop->base);
+
 	if (netop->remote)
 		g_object_unref(netop->remote);
 

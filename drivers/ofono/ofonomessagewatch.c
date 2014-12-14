@@ -95,6 +95,9 @@ void ofono_message_watch_free(struct ofono_message_watch *watch)
 	if (!watch)
 		return;
 
+	if (watch->base)
+		ofono_base_free(watch->base);
+
 	if (watch->remote)
 		g_object_unref(watch->remote);
 

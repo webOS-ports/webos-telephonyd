@@ -86,7 +86,6 @@ void set_powered_cb(struct ofono_error *error, gpointer user_data)
 	struct ofono_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
-	bool powered;
 
 	if (error) {
 		terr.code = 1; /* FIXME */
@@ -530,7 +529,7 @@ enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_netw
 	return TELEPHONY_RADIO_ACCESS_MODE_GSM;
 }
 
-int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
+void scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 {
 	struct cb_data *cbd = data;
 	struct ofono_data *od = cbd->user;
@@ -563,8 +562,6 @@ int scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 	}
 
 	od->network_scan_cancellable = 0;
-
-	return 0;
 }
 
 void ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
@@ -807,7 +804,7 @@ void ofono_subscriber_id_query(struct telephony_service *service, telephony_subs
 	}
 }
 
-static void dial_cb(struct ofono_error *error, void *data)
+static void dial_cb(const struct ofono_error *error, const char *path, void *data)
 {
 	struct cb_data *cbd = data;
 	telephony_result_cb cb = cbd->cb;
@@ -848,8 +845,6 @@ void ofono_answer(struct telephony_service *service, int call_id, telephony_resu
 {
 	struct ofono_data *od = telephony_service_get_data(service);
 	struct telephony_error error;
-	struct cb_data *cbd;
-	struct call_info *cinfo;
 
 	if (!od->vm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -1056,6 +1051,11 @@ static void modems_changed_cb(gpointer user_data)
 
 static void free_used_instances(struct ofono_data *od)
 {
+	if (od->mm) {
+		ofono_message_manager_free(od->mm);
+		od->mm = NULL;
+	}
+
 	if (od->rs) {
 		ofono_radio_settings_free(od->rs);
 		od->rs = NULL;
@@ -1134,16 +1134,17 @@ int ofono_probe(struct telephony_service *service)
 
 void ofono_remove(struct telephony_service *service)
 {
-	struct ofono_data *data;
+	struct ofono_data *data = 0;
 
 	data = telephony_service_get_data(service);
 
 	g_hash_table_destroy(data->calls);
 
 	free_used_instances(data);
-	g_free(data);
 
 	g_bus_unwatch_name(data->service_watch);
+
+	g_free(data);
 
 	telephony_service_set_data(service, NULL);
 }
