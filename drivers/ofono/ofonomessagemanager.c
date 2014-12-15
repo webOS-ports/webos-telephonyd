@@ -55,14 +55,41 @@ struct ofono_base_funcs mm_base_funcs = {
 	.get_properties_finish = ofono_interface_message_manager_call_get_properties_finish
 };
 
+/**
+ * Taken from https://github.com/cmende/libmpdclient/blob/master/src/iso8601.c
+ */
+static time_t timezone_offset(void)
+{
+	const time_t t0 = 1234567890;
+	time_t t = t0;
+	struct tm tm_buffer, *tm;
+
+	tm = gmtime_r(&t, &tm_buffer);
+	if (tm == NULL)
+		return 0;
+
+	/* force the daylight saving time to be off; gmtime_r() should
+	   have set this already */
+	tm->tm_isdst = 0;
+
+	t = mktime(tm);
+	if (t == -1)
+		return 0;
+
+	return t0 - t;
+}
+
 static time_t decode_iso8601_time(const char *str)
 {
 	struct tm t;
+	unsigned int offset = 0;
+
 	memset(&t, 0, sizeof(struct tm));
 
-	sscanf(str, "%4d%2d%2dT%2d%2d%2dZ",
+	sscanf(str, "%4d-%2d-%2dT%2d:%2d:%2d+%4d",
 		   &t.tm_year, &t.tm_mon, &t.tm_mday,
-		   &t.tm_hour, &t.tm_min, &t.tm_sec);
+		   &t.tm_hour, &t.tm_min, &t.tm_sec,
+		   &offset);
 
 	t.tm_year = abs(t.tm_year - 1900);
 
@@ -75,8 +102,13 @@ static time_t decode_iso8601_time(const char *str)
 	if (t.tm_sec > 0)
 		t.tm_sec -= 1;
 
-	return mktime(&t);
+	t.tm_isdst = 0;
+
+	time_t tres = mktime(&t);
+
+	return tres + timezone_offset();
 }
+
 
 static void incoming_message_cb(OfonoInterfaceMessageManager *source, gchar *text, GVariant *properties, gpointer user_data)
 {
@@ -101,11 +133,16 @@ static void incoming_message_cb(OfonoInterfaceMessageManager *source, gchar *tex
 
 	g_variant_iter_init(&iter, properties);
 	while (g_variant_iter_loop(&iter, "{sv}", &property_name, &property_value)) {
-		if (g_strcmp0(property_name, "Sender") != 0)
+		if (g_strcmp0(property_name, "Sender") == 0) {
 			ofono_message_set_sender(message, g_variant_get_string(property_value, NULL));
-		else if (g_strcmp0(property_name, "SentTime") != 0 || g_strcmp0(property_name, "LocalSentTime") != 0) {
+		}
+		else if (g_strcmp0(property_name, "SentTime") == 0) {
 			time_t sent_time = decode_iso8601_time(g_variant_get_string(property_value, NULL));
 			ofono_message_set_sent_time(message, sent_time);
+		}
+		else if (g_strcmp0(property_name, "LocalSentTime") == 0) {
+			time_t local_sent_time = decode_iso8601_time(g_variant_get_string(property_value, NULL));
+			ofono_message_set_local_sent_time(message, local_sent_time);
 		}
 	}
 
