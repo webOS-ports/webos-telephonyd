@@ -1,0 +1,22 @@
+[
+	{
+		"type": "db.kind",
+		"object": "com.palm.smsmessage:1",
+		"caller": "org.webosports.*",
+		"operations": {
+			"extend": "allow",
+			"read": "allow"
+		}
+	},
+	{
+		"type": "db.kind",
+		"object": "com.palm.smsmessage:1",
+		"caller": "org.webosports.app.messaging",
+		"operations": {
+			"create": "allow",
+			"delete": "allow",
+			"read": "allow",
+			"update": "allow"
+		}
+	}
+]
