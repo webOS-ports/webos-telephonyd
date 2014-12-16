@@ -91,7 +91,7 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	jobject_put(message_obj, J_CSTR_TO_JVAL("successful"), jstring_create("successful"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("serviceName"), jstring_create("sms"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("messageText"), jstring_create(message->text));
-	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(message->local_sent_time));
+	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(time(NULL)));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("timestamp"), jnumber_create_i64(message->sent_time));
 
 	from_obj = jobject_create();
