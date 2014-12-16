@@ -18,5 +18,16 @@
 			"read": "allow",
 			"update": "allow"
 		}
+	},
+	{
+		"type": "db.kind",
+		"object": "com.palm.smsmessage:1",
+		"caller": "org.webosports.service.messaging",
+		"operations": {
+			"create": "allow",
+			"delete": "allow",
+			"read": "allow",
+			"update": "allow"
+		}
 	}
 ]
