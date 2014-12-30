@@ -55,6 +55,7 @@ cleanup:
 void telephony_service_power_status_notify(struct telephony_service *service, bool power)
 {
 	jvalue_ref reply_obj = NULL;
+	jvalue_ref extended_obj = NULL;
 
 	service->powered = power;
 
@@ -65,7 +66,11 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("eventPower"), jstring_create(power ? "on": "off"));
+
+	extended_obj = jobject_create();
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on": "off"));
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
 	luna_service_post_subscription(service->private_service, "/", "powerQuery", reply_obj);
 
