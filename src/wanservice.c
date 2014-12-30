@@ -323,6 +323,8 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = create_status_update_reply(status);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+
 	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
 
 	j_release(&reply_obj);
@@ -334,6 +336,7 @@ void get_status_cb(const struct wan_error *error, struct wan_status *status, voi
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = create_status_update_reply(status);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
 	luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj);
 

@@ -30,6 +30,7 @@
 #include "ofonomodem.h"
 #include "ofonoconnectioncontext.h"
 #include "ofonoconnectionmanager.h"
+#include "ofononetworkregistration.h"
 
 struct ofono_wan_data {
 	struct wan_service *service;
@@ -37,6 +38,7 @@ struct ofono_wan_data {
 	struct ofono_manager *manager;
 	struct ofono_modem *modem;
 	struct ofono_connection_manager *cm;
+	struct ofono_network_registration *netreg;
 	bool status_update_pending;
 };
 
@@ -53,6 +55,25 @@ enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum o
 		return WAN_NETWORK_TYPE_HSDPA;
 	case OFONO_CONNECTION_BEARER_UMTS:
 		return WAN_NETWORK_TYPE_UMTS;
+	default:
+		break;
+	}
+
+	return WAN_NETWORK_TYPE_NONE;
+}
+
+enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum ofono_network_technology technology)
+{
+	switch (technology) {
+	case OFONO_NETWORK_TECHNOLOGOY_GSM:
+		return WAN_NETWORK_TYPE_GPRS;
+	case OFONO_NETWORK_TECHNOLOGOY_EDGE:
+		return WAN_NETWORK_TYPE_EDGE;
+	case OFONO_NETWORK_TECHNOLOGOY_UMTS:
+		return WAN_NETWORK_TYPE_UMTS;
+	case OFONO_NETWORK_TECHNOLOGOY_HSPA:
+	case OFONO_NETWORK_TECHNOLOGOY_LTE:
+		return WAN_NETWORK_TYPE_HSDPA;
 	default:
 		break;
 	}
@@ -93,8 +114,15 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 
 	status.roam_guard = ofono_connection_manager_get_roaming_allowed(od->cm);
 	status.network_attached = ofono_connection_manager_get_attached(od->cm);
-	status.network_type =
-		convert_ofono_connection_bearer_to_wan_network_type(ofono_connection_manager_get_bearer(od->cm));
+
+	enum ofono_connection_bearer bearer = ofono_connection_manager_get_bearer(od->cm);
+	if (bearer == OFONO_CONNECTION_BEARER_UNKNOWN && od->netreg) {
+		enum ofono_network_technology tech = ofono_network_registration_get_technology(od->netreg);
+		status.network_type = convert_ofono_network_technology_to_wan_network_type(tech);
+	}
+	else {
+		status.network_type = convert_ofono_connection_bearer_to_wan_network_type(bearer);
+	}
 
 	for (iter = contexts; iter != NULL; iter = g_slist_next(iter)) {
 		context = iter->data;
@@ -211,6 +239,11 @@ static void context_prop_changed_cb(const char *name, void *data)
 	send_status_update_cb(data);
 }
 
+static void network_prop_changed_cb(const gchar *name, void *data)
+{
+	send_status_update_cb(data);
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_wan_data *od = data;
@@ -225,6 +258,15 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->cm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_CONNECTION_MANAGER)) {
 			ofono_connection_manager_free(od->cm);
 			od->cm = NULL;
+		}
+		if (!od->netreg && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+			od->netreg = ofono_network_registration_create(path);
+			ofono_network_registration_register_prop_changed_handler(od->netreg, network_prop_changed_cb, od);
+		}
+		else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
+			ofono_network_registration_free(od->netreg);
+			od->netreg = NULL;
+			send_status_update_cb(od);
 		}
 	}
 }
