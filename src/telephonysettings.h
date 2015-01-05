@@ -21,6 +21,7 @@
 
 enum telephony_settings_type {
 	TELEPHONY_SETTINGS_TYPE_POWER_STATE = 0,
+	TELEPHONY_SETTINGS_TYPE_DISABLE_WAN = 1,
 };
 
 const char* telephony_settings_load(enum telephony_settings_type type);

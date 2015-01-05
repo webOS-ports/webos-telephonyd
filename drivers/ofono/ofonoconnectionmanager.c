@@ -376,6 +376,9 @@ bool ofono_connection_manager_get_roaming_allowed(struct ofono_connection_manage
 
 void set_roaming_allowed_cb(struct ofono_error *error, void *data)
 {
+	if (!data)
+		return;
+
 	struct cb_data *cbd = data;
 	ofono_base_result_cb cb = cbd->cb;
 

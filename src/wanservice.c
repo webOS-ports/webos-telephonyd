@@ -27,6 +27,7 @@
 
 #include "wandriver.h"
 #include "wanservice.h"
+#include "telephonysettings.h"
 #include "utils.h"
 #include "luna_service_utils.h"
 
@@ -146,7 +147,7 @@ struct wan_service* wan_service_create(void)
 	LSError error;
 
 	if (g_driver_list == NULL) {
-		g_message("Can't create WAN service as no suitable driver is available");
+		g_warning("Can't create WAN service as no suitable driver is available");
 		return NULL;
 	}
 
@@ -388,8 +389,10 @@ void _service_set_finish(const struct wan_error *error, void *data)
 	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
+	if (!success) {
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
+	}
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
@@ -423,11 +426,15 @@ bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 		goto cleanup;
 	}
 
+	service->configuration.flags = 0;
+
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("disablewan"), &disablewan_obj)) {
 		if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("on")))
 			service->configuration.disablewan = true;
 		else if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("off")))
 			service->configuration.disablewan = false;
+
+		service->configuration.flags |= WAN_CONFIGURATION_TYPE_DISABLEWAN;
 	}
 
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("roamguard"), &roamguard_obj)) {
@@ -437,6 +444,8 @@ bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 		else if (jstring_equal2(roamguard_obj, J_CSTR_TO_BUF("disable"))) {
 			service->configuration.roamguard = false;
 		}
+
+		service->configuration.flags |= WAN_CONFIGURATION_TYPE_ROAMGUARD;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);

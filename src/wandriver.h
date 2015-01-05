@@ -74,6 +74,11 @@ enum wan_request_status {
 	WAN_REQUEST_STATUS_EVENT
 };
 
+enum wan_configuration_type {
+	WAN_CONFIGURATION_TYPE_ROAMGUARD = (1 << 0),
+	WAN_CONFIGURATION_TYPE_DISABLEWAN = (1 << 1),
+};
+
 struct wan_connected_service {
 	bool services[WAN_SERVICE_TYPE_MAX];
 	int cid;
@@ -100,6 +105,7 @@ struct wan_status {
 struct wan_configuration {
 	bool roamguard;
 	bool disablewan;
+	guint flags;
 };
 
 typedef void (*wan_result_cb)(const struct wan_error* error, void *data);
