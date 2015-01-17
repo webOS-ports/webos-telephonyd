@@ -88,7 +88,7 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	jobject_put(message_obj, J_CSTR_TO_JVAL("_kind"), jstring_create("com.palm.smsmessage:1"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("flags"), flags_obj);
 	jobject_put(message_obj, J_CSTR_TO_JVAL("folder"), jstring_create("inbox"));
-	jobject_put(message_obj, J_CSTR_TO_JVAL("successful"), jstring_create("successful"));
+	jobject_put(message_obj, J_CSTR_TO_JVAL("status"), jstring_create("successful"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("serviceName"), jstring_create("sms"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("messageText"), jstring_create(message->text));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(time(NULL)));
@@ -130,6 +130,7 @@ struct pending_sms {
 	char *id;
 	char *to;
 	char *text;
+	bool inhibit_network_send;
 };
 
 static bool message_updated_cb(LSHandle *handle, LSMessage *message, void *user_data)
@@ -167,6 +168,16 @@ static void update_message_status(struct telephony_service *service, const char 
 	j_release(&req_obj);
 }
 
+static void free_pending_message(struct pending_sms *msg)
+{
+	if (!msg)
+		return;
+
+	g_free(msg->id);
+	g_free(msg->to);
+	g_free(msg->text);
+	g_free(msg);
+}
 
 static int send_msg_cb(const struct telephony_error* error, void *user_data)
 {
@@ -182,10 +193,7 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 
 	/* FIXME eventually retry failed messages after some time again */
 
-	g_free(msg->id);
-	g_free(msg->to);
-	g_free(msg->text);
-	g_free(msg);
+	free_pending_message(msg);
 
 	g_free(cbd);
 
@@ -231,6 +239,16 @@ static gboolean tx_timeout_cb(gpointer user_data)
 
 	msg = g_queue_pop_head(tx_queue);
 
+	if (msg->inhibit_network_send) {
+		g_message("[Telephony:SMS] didn't send message %s cause it was inhibited to be "
+				  "send over the network but marking it as successful.", msg->id);
+
+		update_message_status(service, msg->id, "successful");
+		free_pending_message(msg);
+
+		return TRUE;
+	}
+
 	cbd = cb_data_new(NULL, service);
 	cbd->user = msg;
 
@@ -270,6 +288,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		jvalue_ref to_obj = 0;
 		jvalue_ref text_obj = 0;
 		jvalue_ref addr_obj = 0;
+		jvalue_ref inhibit_network_send_obj = 0;
 		raw_buffer id_buf;
 		raw_buffer addr_buf;
 		raw_buffer text_buf;
@@ -310,6 +329,10 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		msg->id = g_strdup(id_buf.m_str);
 		msg->to = g_strdup(addr_buf.m_str);
 		msg->text = g_strdup(text_buf.m_str);
+		msg->inhibit_network_send = false;
+
+		if (jobject_get_exists(result_obj, J_CSTR_TO_BUF("inhibitNetworkSend"), &inhibit_network_send_obj))
+			jboolean_get(inhibit_network_send_obj, &msg->inhibit_network_send);
 
 		/* if we're the first one using it then create the queue */
 		if (!tx_queue)
