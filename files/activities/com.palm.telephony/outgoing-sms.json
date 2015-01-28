@@ -1,7 +1,7 @@
 {
     "start": true,
     "activity": {
-        "name": "Watching for new outgoing SMS messages",
+        "name": "telephony-send-outgoing-sms",
         "description": "DB8 watch to get notified once a new SMS message is ready to be send",
         "type": {
             "foreground": true,
