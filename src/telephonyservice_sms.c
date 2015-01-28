@@ -36,6 +36,15 @@ GQueue *tx_queue = 0;
 guint tx_timeout = 0;
 gboolean tx_active = FALSE;
 
+struct pending_sms {
+	char *id;
+	GQueue *to;
+	char *text;
+	bool inhibit_network_send;
+};
+
+static void process_message(struct telephony_service *service, struct pending_sms *msg);
+
 static bool create_message_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	// FIXME parse response and handle results
@@ -114,6 +123,8 @@ static void restart_activity(struct telephony_service *service)
 {
 	jvalue_ref req_obj = 0;
 
+	g_message("[Telephony:SMS] Restarting activity \"telephony-send-outgoing-sms\"");
+
 	req_obj = jobject_create();
 
 	jobject_put(req_obj, J_CSTR_TO_JVAL("activityName"), jstring_create("telephony-send-outgoing-sms"));
@@ -125,13 +136,6 @@ static void restart_activity(struct telephony_service *service)
 
 	j_release(&req_obj);
 }
-
-struct pending_sms {
-	char *id;
-	char *to;
-	char *text;
-	bool inhibit_network_send;
-};
 
 static bool message_updated_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
@@ -174,7 +178,7 @@ static void free_pending_message(struct pending_sms *msg)
 		return;
 
 	g_free(msg->id);
-	g_free(msg->to);
+	g_queue_free_full(msg->to, g_free);
 	g_free(msg->text);
 	g_free(msg);
 }
@@ -186,6 +190,13 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 	struct pending_sms *msg = cbd->user;
 
 	bool success = (error == NULL);
+
+	/* Check if we have any further recipients we need to send the message to */
+	if (success && !g_queue_is_empty(msg->to)) {
+		g_free(cbd);
+		process_message(service, msg);
+		return 0;
+	}
 
 	g_message("[Telephony:SMS] sending message %s", success ? "succeedded" : "failed");
 
@@ -212,11 +223,28 @@ static gboolean restart_tx_queue_cb(gpointer user_data)
 	return FALSE;
 }
 
+static void process_message(struct telephony_service *service, struct pending_sms *msg)
+{
+	struct cb_data *cbd = 0;
+	char *to_addr = 0;
+
+	cbd = cb_data_new(NULL, service);
+	cbd->user = msg;
+
+	/* block others from sending at the same time */
+	tx_active = TRUE;
+
+	to_addr = g_queue_pop_head(msg->to);
+
+	service->driver->send_sms(service, to_addr, msg->text, send_msg_cb, cbd);
+
+	g_free(to_addr);
+}
+
 static gboolean tx_timeout_cb(gpointer user_data)
 {
 	struct telephony_service *service = user_data;
 	struct pending_sms *msg = 0;
-	struct cb_data *cbd = 0;
 
 	if (tx_active) {
 		g_message("[Telephony:SMS] TX still active. Waiting for next free slot.");
@@ -249,13 +277,7 @@ static gboolean tx_timeout_cb(gpointer user_data)
 		return TRUE;
 	}
 
-	cbd = cb_data_new(NULL, service);
-	cbd->user = msg;
-
-	/* block others from sending at the same time */
-	tx_active = TRUE;
-
-	service->driver->send_sms(service, msg->to, msg->text, send_msg_cb, cbd);
+	process_message(service, msg);
 
 	return TRUE;
 }
@@ -266,7 +288,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 	const char *payload = 0;
 	jvalue_ref parsed_obj = 0;
 	jvalue_ref results_obj = 0;
-	int n = 0;
+	int n = 0, m = 0;
 
 	// FIXME:
 	// - record all messages in a list and sent them one after another and mark them
@@ -293,6 +315,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		raw_buffer addr_buf;
 		raw_buffer text_buf;
 		struct pending_sms *msg;
+		GQueue *recipients = 0;
 
 		if (!jobject_get_exists(result_obj, J_CSTR_TO_BUF("_id"), &id_obj)) {
 			g_warning("Found pending outgoing SMS message without a id. Skipping it.");
@@ -307,8 +330,37 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 			continue;
 		}
 
-		if (!jobject_get_exists(to_obj, J_CSTR_TO_BUF("addr"), &addr_obj)) {
-			g_warning("Found pending outgoing SMS message without a recipient. Skipping it.");
+		if (jis_array(to_obj)) {
+			for (m = 0; m < jarray_size(to_obj); m++) {
+				jvalue_ref recipient_obj = jarray_get(to_obj, m);
+
+				if (!jobject_get_exists(recipient_obj, J_CSTR_TO_BUF("addr"), &addr_obj)) {
+					g_queue_free_full(recipients, g_free);
+					break;
+				}
+
+				addr_buf = jstring_get(addr_obj);
+
+				if (!recipients)
+					recipients = g_queue_new();
+
+				g_queue_push_tail(recipients, g_strdup(addr_buf.m_str));
+			}
+		}
+		else if (jis_object(to_obj)) {
+			if (!jobject_get_exists(to_obj, J_CSTR_TO_BUF("addr"), &addr_obj)) {
+				g_queue_free_full(recipients, g_free);
+				break;
+			}
+
+			addr_buf = jstring_get(addr_obj);
+
+			recipients = g_queue_new();
+			g_queue_push_tail(recipients, g_strdup(addr_buf.m_str));
+		}
+
+		if (!recipients) {
+			g_warning("Found pending outgoing SMS message without valid recipients. Skipping it.");
 			update_message_status(service, id_buf.m_str, "failed");
 			continue;
 		}
@@ -319,7 +371,6 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 			continue;
 		}
 
-		addr_buf = jstring_get(addr_obj);
 		text_buf = jstring_get(text_obj);
 
 		msg = g_new(struct pending_sms, 1);
@@ -327,7 +378,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		g_message("New message to %s", addr_buf.m_str);
 
 		msg->id = g_strdup(id_buf.m_str);
-		msg->to = g_strdup(addr_buf.m_str);
+		msg->to = recipients;
 		msg->text = g_strdup(text_buf.m_str);
 		msg->inhibit_network_send = false;
 
