@@ -123,6 +123,8 @@ static void restart_activity(struct telephony_service *service)
 {
 	jvalue_ref req_obj = 0;
 
+	g_message("[Telephony:SMS] Restarting activity \"telephony-send-outgoing-sms\"");
+
 	req_obj = jobject_create();
 
 	jobject_put(req_obj, J_CSTR_TO_JVAL("activityName"), jstring_create("telephony-send-outgoing-sms"));
