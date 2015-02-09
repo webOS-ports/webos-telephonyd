@@ -32,6 +32,9 @@
 #include "ofonoconnectionmanager.h"
 #include "ofononetworkregistration.h"
 
+#define is_flag_set(flags, flag) \
+	((flags & flag) == flag)
+
 struct ofono_wan_data {
 	struct wan_service *service;
 	guint service_watch;
@@ -40,6 +43,7 @@ struct ofono_wan_data {
 	struct ofono_connection_manager *cm;
 	struct ofono_network_registration *netreg;
 	bool status_update_pending;
+	struct wan_configuration *pending_configuration;
 	guint connman_watch;
 	GDBusProxy *connman_manager_proxy;
 	gboolean wan_disabled;
@@ -96,24 +100,70 @@ static void free_used_instances(struct ofono_wan_data *od)
 	}
 }
 
-static void current_service_enabled_cb(GObject *source, GAsyncResult *res, gpointer user_data)
+static void current_service_autoconnect_set_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
-	struct ofono_wan_data *od = user_data;
+	struct cb_data *cbd = user_data;
+	struct ofono_wan_data *od = cbd->user;
+	wan_result_cb cb = cbd->cb;
+	struct wan_error werror;
 	GError *error = 0;
 	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
 	GVariant *result = g_dbus_connection_call_finish(conn, res, &error);
 	if (error) {
-		g_warning("Failed to enable/disable current cellular service %s: %s",
+		g_warning("Failed to set auto connect field for cellular service %s: %s",
 				  od->current_service_path, error->message);
 		g_error_free(error);
+
+		werror.code = WAN_ERROR_FAILED;
+		cb(&werror, cbd->data);
+
+		goto cleanup;
+	}
+
+	g_variant_unref(result);
+
+	cb(NULL, cbd->data);
+
+cleanup:
+	g_free(cbd);
+}
+
+static void current_service_enabled_cb(GObject *source, GAsyncResult *res, gpointer user_data)
+{
+	struct cb_data *cbd = user_data;
+	struct ofono_wan_data *od = cbd->user;
+	wan_result_cb cb = cbd->cb;
+	struct wan_error werror;
+	GError *error = 0;
+	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
+
+	GVariant *result = g_dbus_connection_call_finish(conn, res, &error);
+	if (error) {
+		g_warning("Failed to %s current cellular service %s: %s",
+				  !od->pending_configuration->disablewan ? "enable" : "disable",
+				  od->current_service_path, error->message);
+		g_error_free(error);
+
+		werror.code = WAN_ERROR_FAILED;
+		cb(&werror, cbd->data);
+
+		g_free(cbd);
+
 		return;
 	}
 
 	g_variant_unref(result);
+
+	g_dbus_connection_call(conn, "net.connman", od->current_service_path,
+						   "net.connman.Service", "SetProperty",
+						   g_variant_new("(sv)", "AutoConnect", g_variant_new_boolean(!od->pending_configuration->disablewan)), NULL,
+						   G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+						   current_service_autoconnect_set_cb, od);
 }
 
-static void switch_current_service_state(struct ofono_wan_data *od, bool enable)
+static void switch_current_service_state(struct ofono_wan_data *od, bool enable,
+										 wan_result_cb cb, void *data)
 {
 	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
@@ -122,13 +172,7 @@ static void switch_current_service_state(struct ofono_wan_data *od, bool enable)
 	g_dbus_connection_call(conn, "net.connman", od->current_service_path,
 						   "net.connman.Service", enable ? "Connect" : "Disconnect", NULL, NULL,
 						   G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-						   (GAsyncReadyCallback) current_service_enabled_cb, od);
-
-	g_dbus_connection_call(conn, "net.connman", od->current_service_path,
-						   "net.connman.Service", "SetProperty",
-						   g_variant_new("(sv)", "AutoConnect", g_variant_new_boolean(enable)), NULL,
-						   G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-						   NULL, NULL);
+						   (GAsyncReadyCallback) current_service_enabled_cb, data);
 }
 
 static void context_prop_changed_cb(const char *name, void *data);
@@ -216,33 +260,88 @@ void ofono_wan_get_status(struct wan_service *service, wan_get_status_cb cb, voi
 	ofono_connection_manager_get_contexts(od->cm, get_contexts_cb, cbd);
 }
 
-#define is_flag_set(flags, flag) \
-	((flags & flag) == flag)
+static void roamguard_set_cb(const struct wan_error* error, void *data)
+{
+	struct cb_data *cbd = data;
+	struct ofono_wan_data *od = cbd->user;
+	wan_result_cb cb = cbd->cb;
+
+	if (error) {
+		cb(error, cbd->data);
+		goto cleanup;
+	}
+
+	od->pending_configuration = NULL;
+
+	cb(NULL, cbd->data);
+
+cleanup:
+	g_free(cbd);
+}
+
+static void disablewan_set_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	struct ofono_wan_data *od = cbd->user;
+	wan_result_cb cb = cbd->cb;
+	struct wan_error werror;
+
+	if (error) {
+		werror.code = WAN_ERROR_FAILED;
+		cb(&werror, cbd->data);
+		goto cleanup;
+	}
+
+	if (is_flag_set(od->pending_configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
+		if (od->pending_configuration->roamguard == ofono_connection_manager_get_roaming_allowed(od->cm)) {
+			ofono_connection_manager_set_roaming_allowed(od->cm, !od->pending_configuration->roamguard,
+														 roamguard_set_cb, cbd);
+			return;
+		}
+	}
+
+	cb(NULL, cbd->data);
+
+cleanup:
+	g_free(cbd);
+}
 
 void ofono_wan_set_configuration(struct wan_service *service, struct wan_configuration *configuration,
 									   wan_result_cb cb, void *data)
 {
 	struct ofono_wan_data *od = wan_service_get_data(service);
 	struct cb_data *cbd = NULL;
-	bool success = true;
+	struct wan_error error;
+
+	if (!od->current_service_path) {
+		error.code = WAN_ERROR_NOT_AVAILABLE;
+		cb(&error, data);
+		return;
+	}
+
+	od->pending_configuration = configuration;
 
 	if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_DISABLEWAN)) {
 		if (configuration->disablewan != od->wan_disabled) {
-			switch_current_service_state(od, !configuration->disablewan);
-			success &= true;
+			cbd = cb_data_new(cb, data);
+			cbd->user = od;
+
+			switch_current_service_state(od, !configuration->disablewan,
+										 disablewan_set_cb, cbd);
 		}
 	}
-
-	if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
+	else if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
 		if (configuration->roamguard == ofono_connection_manager_get_roaming_allowed(od->cm)) {
 			cbd = cb_data_new(cb, data);
+			cbd->user = od;
+
 			ofono_connection_manager_set_roaming_allowed(od->cm, !configuration->roamguard,
-														 NULL, NULL);
-			success &= true;
+														 roamguard_set_cb, cbd);
 		}
 	}
-
-	cb (NULL, data);
+	else {
+		cb (NULL, data);
+	}
 }
 
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
@@ -395,11 +494,38 @@ static void current_service_signal_cb(GDBusProxy *proxy, gchar *sender_name, gch
 	g_variant_unref(prop_value);
 }
 
+static void cellular_service_setup_cb(const struct wan_error* error, void *data)
+{
+	if (error) {
+		g_message("[WAN] Failed to connect cellular service");
+		return;
+	}
+
+	g_message("[WAN] Successfully connected celluar service the first time");
+}
+
 static void assign_current_cellular_service(struct ofono_wan_data *od, const gchar *path, GVariant *properties)
 {
 	GVariant *property = 0, *prop_name = 0, *prop_value = 0;
 	gsize n = 0;
 	const gchar *name = 0;
+	bool favorite = false;
+
+	if (!path) {
+		if (od->current_service_watch)
+			g_signal_handler_disconnect(od->current_service_proxy,
+								od->current_service_watch);
+
+		if (od->current_service_proxy)
+			g_object_unref(od->current_service_proxy);
+
+
+		od->current_service_path = NULL;
+		od->current_service_proxy = 0;
+		od->current_service_watch = 0;
+
+		return;
+	}
 
 	od->current_service_path = g_strdup(path);
 
@@ -419,6 +545,15 @@ static void assign_current_cellular_service(struct ofono_wan_data *od, const gch
 		prop_value = g_variant_get_child_value(property, 1);
 
 		name = g_variant_get_string(prop_name, NULL);
+
+		if (g_strcmp0(name, "Favorite") == 0) {
+			favorite = g_variant_get_boolean(g_variant_get_variant(prop_value));
+
+			if (!favorite) {
+				g_message("[WAN] Found a not yet configured cellular service; connecting it the first time");
+				switch_current_service_state(od, true, cellular_service_setup_cb, od);
+			}
+		}
 
 		handle_current_service_property(od, name, prop_value);
 	}
@@ -451,6 +586,11 @@ static void update_from_service_list(struct ofono_wan_data *od, GVariant *servic
 
 		if (found)
 			break;
+	}
+
+	if (!found) {
+		g_message("[WAN] Didn't found a cellular service");
+		assign_current_cellular_service(od, NULL, NULL);
 	}
 }
 

@@ -40,6 +40,7 @@ struct wan_service {
 	LSPalmService *palm_service;
 	LSHandle *private_service;
 	struct wan_configuration configuration;
+	bool initialized;
 };
 
 bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -324,6 +325,7 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = create_status_update_reply(status);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
 	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
@@ -380,10 +382,15 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 	return true;
 }
 
+#define is_flag_set(flags, flag) \
+	((flags & flag) == flag)
+
 void _service_set_finish(const struct wan_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
+	struct wan_service *service = req_data->user_data;
 	jvalue_ref reply_obj = NULL;
+	const char *config_value = NULL;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
