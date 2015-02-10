@@ -184,27 +184,27 @@ struct telephony_service* telephony_service_create()
 	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
 		g_error("Failed to initialize the Luna Palm service: %s", error.message);
 		LSErrorFree(&error);
-		return -EIO;
+		goto failed;
 	}
 
 	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
 		g_error("Failed to attach to glib mainloop for palm service: %s", error.message);
 		LSErrorFree(&error);
-		return -EIO;
+		goto failed;
 	}
 
 	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
 			NULL, service, &error)) {
 		g_warning("Could not register service category");
 		LSErrorFree(&error);
-		return -EIO;
+		goto failed;
 	}
 
 	if (!LSPalmServiceRegisterCategory(service->palm_service, "/internal", NULL, _telephony_service_internal_methods,
 			NULL, service, &error)) {
 		g_warning("Could not register internal service category");
 		LSErrorFree(&error);
-		return -EIO;
+		goto failed;
 	}
 
 	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
@@ -212,6 +212,10 @@ struct telephony_service* telephony_service_create()
 	telephonyservice_sms_setup(service);
 
 	return service;
+
+failed:
+	g_free(service);
+	return NULL;
 }
 
 void telephony_service_free(struct telephony_service *service)
@@ -248,8 +252,6 @@ void* telephony_service_get_data(struct telephony_service *service)
 
 void telephony_service_availability_changed_notify(struct telephony_service *service, bool available)
 {
-	LSError error;
-
 	if (!service)
 		return;
 

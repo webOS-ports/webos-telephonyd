@@ -146,13 +146,13 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->signal_strength_query) {
 		g_warning("No implementation available for service signalStrengthQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -231,13 +231,13 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_status_query) {
 		g_warning("No implementation available for service networkStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -330,19 +330,19 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_list_query) {
 		g_warning("No implementation available for service networkListQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	if (service->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message,
 				"Another networkListQuery call is already pending");
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -405,18 +405,18 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_list_query_cancel) {
 		g_warning("No implementation available for service networkListQueryCancel API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	if (!service->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message, "No network list query pending");
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -486,13 +486,13 @@ bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *us
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_id_query) {
 		g_warning("No implementation available for service networkIdQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -551,13 +551,13 @@ bool _service_network_selection_mode_query_cb(LSHandle *handle, LSMessage *messa
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_selection_mode_query) {
 		g_warning("No implementation available for service networkSelectionModeQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -592,12 +592,12 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	raw_buffer id_buf;
-	char *id = NULL;
+	const char *id = NULL;
 	bool automatic = false;
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->network_set) {
@@ -696,13 +696,13 @@ bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->rat_query) {
 		g_warning("No implementation available for service ratQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -739,7 +739,7 @@ bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->rat_set) {

@@ -117,7 +117,7 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->power_set) {
@@ -223,13 +223,13 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -300,7 +300,7 @@ bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->platform_query) {
@@ -374,13 +374,13 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return true;
 	}
 
 	if (!service->driver || !service->driver->subscriber_id_query) {
 		g_warning("No implementation available for service subscriberIdQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return true;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -525,7 +525,6 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
  **/
 bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
-	struct telephony_service *service = user_data;
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref events_obj = NULL;
 	jvalue_ref reply_obj = NULL;
