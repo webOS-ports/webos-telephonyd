@@ -497,11 +497,11 @@ static void current_service_signal_cb(GDBusProxy *proxy, gchar *sender_name, gch
 static void cellular_service_setup_cb(const struct wan_error* error, void *data)
 {
 	if (error) {
-		g_message("[WAN] Failed to connect cellular service");
+		g_message("[WAN] Failed to connect to cellular service");
 		return;
 	}
 
-	g_message("[WAN] Successfully connected celluar service the first time");
+	g_message("[WAN] Successfully connected to celluar service the first time");
 }
 
 static void assign_current_cellular_service(struct ofono_wan_data *od, const gchar *path, GVariant *properties)
@@ -550,7 +550,7 @@ static void assign_current_cellular_service(struct ofono_wan_data *od, const gch
 			favorite = g_variant_get_boolean(g_variant_get_variant(prop_value));
 
 			if (!favorite) {
-				g_message("[WAN] Found a not yet configured cellular service; connecting it the first time");
+				g_message("[WAN] Found a not yet configured cellular service; connecting to it for the first time");
 				switch_current_service_state(od, true, cellular_service_setup_cb, od);
 			}
 		}
@@ -573,7 +573,7 @@ static void update_from_service_list(struct ofono_wan_data *od, GVariant *servic
 		path = g_variant_get_string(object_path, NULL);
 
 		if (g_strrstr(path, "cellular") != 0) {
-			g_message("[WAN] Found cellular service %s", path);
+			g_message("[WAN] Found a cellular service %s", path);
 			/* FIXME we assume here that we only have one cellular service. When
 			 * we come to the point where we support multi-sim modems we have to
 			 * revisit this decision */
@@ -589,7 +589,7 @@ static void update_from_service_list(struct ofono_wan_data *od, GVariant *servic
 	}
 
 	if (!found) {
-		g_message("[WAN] Didn't found a cellular service");
+		g_message("[WAN] Didn't find a cellular service");
 		assign_current_cellular_service(od, NULL, NULL);
 	}
 }
