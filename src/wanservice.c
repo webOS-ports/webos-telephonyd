@@ -265,7 +265,7 @@ static jvalue_ref create_status_update_reply(struct wan_status *status)
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
 				jstring_create(status->state ? "enable" : "disable"));
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("roamGuard"),
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("roamguard"),
 				jstring_create(status->roam_guard ? "enable" : "disable"));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("networktype"),
 				jstring_create(wan_network_type_to_string(status->network_type)));
