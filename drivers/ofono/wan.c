@@ -198,7 +198,7 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 	status.wan_status = WAN_STATUS_TYPE_ENABLE;
 	status.disablewan = od->wan_disabled;
 
-	status.roam_guard = ofono_connection_manager_get_roaming_allowed(od->cm);
+	status.roam_guard = !ofono_connection_manager_get_roaming_allowed(od->cm);
 	status.network_attached = ofono_connection_manager_get_attached(od->cm);
 
 	enum ofono_connection_bearer bearer = ofono_connection_manager_get_bearer(od->cm);
