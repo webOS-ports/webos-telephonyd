@@ -77,7 +77,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		cm->suspended = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Attached"))
 		cm->attached = g_variant_get_boolean(value);
-	else if (g_str_equal(name, "RoaminAllowed"))
+	else if (g_str_equal(name, "RoamingAllowed"))
 		cm->roaming_allowed = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Bearer")) {
 		bearer = g_variant_get_string(value, NULL);

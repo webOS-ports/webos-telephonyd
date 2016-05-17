@@ -158,7 +158,7 @@ struct wan_service* wan_service_create(void)
 
 	memset(&service->configuration, 0, sizeof(struct wan_configuration));
 
-	/* take first driver until we have some machanism to determine the best driver */
+	/* take first driver until we have some mechanism to determine the best driver */
 	service->driver = g_driver_list->data;
 
 	if (service->driver->probe(service) < 0) {
