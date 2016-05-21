@@ -187,12 +187,16 @@ int main(int argc, char **argv)
 	telservice = telephony_service_create();
 	wanservice = wan_service_create();
 
-	g_main_loop_run(event_loop);
+	if(telservice && wanservice) {
+		g_main_loop_run(event_loop);
+	}
 
 	g_message("Cleaning up");
 
-	wan_service_free(wanservice);
-	telephony_service_free(telservice);
+	if(wanservice)
+		wan_service_free(wanservice);
+	if(telservice)
+		telephony_service_free(telservice);
 
 	ofono_exit();
 
