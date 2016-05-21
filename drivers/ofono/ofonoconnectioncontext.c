@@ -158,7 +158,7 @@ struct ofono_connection_context* ofono_connection_context_create(const gchar *pa
 	ctx->remote = ofono_interface_connection_context_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.ConnectionContext interface");
+		g_critical("Unable to initialize proxy for the org.ofono.ConnectionContext interface");
 		g_error_free(error);
 		g_free(ctx);
 		return NULL;

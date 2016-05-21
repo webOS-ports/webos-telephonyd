@@ -131,7 +131,7 @@ struct ofono_voicecall* ofono_voicecall_create(const gchar *path)
 	call->remote = ofono_interface_voice_call_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.VoiceCall interface");
+		g_critical("Unable to initialize proxy for the org.ofono.VoiceCall interface");
 		g_error_free(error);
 		g_free(call);
 		return NULL;

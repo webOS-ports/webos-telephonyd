@@ -93,7 +93,7 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 
 	success = ofono_interface_manager_call_get_modems_finish(manager->remote, &modems, res, &error);
 	if (!success) {
-		g_error("Failed to retrieve list of available modems from manager: %s", error->message);
+		g_critical("Failed to retrieve list of available modems from manager: %s", error->message);
 		g_error_free(error);
 		goto done;
 	}
@@ -131,7 +131,7 @@ struct ofono_manager* ofono_manager_create(void)
 	manager->remote = ofono_interface_manager_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", "/", NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.Manager interface");
+		g_critical("Unable to initialize proxy for the org.ofono.Manager interface");
 		g_error_free(error);
 		g_free(manager);
 		return NULL;

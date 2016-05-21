@@ -182,13 +182,13 @@ struct telephony_service* telephony_service_create()
 	LSErrorInit(&error);
 
 	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
-		g_error("Failed to initialize the Luna Palm service: %s", error.message);
+		g_critical("Failed to initialize the Luna Palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
 
 	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
-		g_error("Failed to attach to glib mainloop for palm service: %s", error.message);
+		g_critical("Failed to attach to glib mainloop for palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
@@ -226,7 +226,7 @@ void telephony_service_free(struct telephony_service *service)
 
 	if (service->palm_service != NULL &&
 		LSUnregisterPalmService(service->palm_service, &error) < 0) {
-		g_error("Could not unregister palm service: %s", error.message);
+		g_critical("Could not unregister palm service: %s", error.message);
 		LSErrorFree(&error);
 	}
 
@@ -259,7 +259,7 @@ void telephony_service_availability_changed_notify(struct telephony_service *ser
 
 	if (!service->initialized && available) {
 		if (configure_service(service) < 0) {
-			g_error("Could not configure service");
+			g_critical("Could not configure service");
 			return;
 		}
 	}

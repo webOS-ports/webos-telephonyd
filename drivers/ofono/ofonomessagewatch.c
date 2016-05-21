@@ -80,7 +80,7 @@ struct ofono_message_watch* ofono_message_watch_create(const char *path)
 	watch->remote = ofono_interface_message_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.Message interface");
+		g_critical("Unable to initialize proxy for the org.ofono.Message interface");
 		g_error_free(error);
 		g_free(watch);
 		return NULL;
