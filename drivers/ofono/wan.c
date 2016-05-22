@@ -141,12 +141,14 @@ static void current_service_enabled_cb(GObject *source, GAsyncResult *res, gpoin
 	GVariant *result = g_dbus_connection_call_finish(conn, res, &error);
 	if (error) {
 		g_warning("Failed to %s current cellular service %s: %s",
-				  !od->pending_configuration->disablewan ? "enable" : "disable",
+				  (!od->pending_configuration || !od->pending_configuration->disablewan) ? "enable" : "disable",
 				  od->current_service_path, error->message);
 		g_error_free(error);
 
-		werror.code = WAN_ERROR_FAILED;
-		cb(&werror, cbd->data);
+		if(cb) {
+			werror.code = WAN_ERROR_FAILED;
+			cb(&werror, cbd->data);
+		}
 
 		g_free(cbd);
 
@@ -551,7 +553,11 @@ static void assign_current_cellular_service(struct ofono_wan_data *od, const gch
 
 			if (!favorite) {
 				g_message("[WAN] Found a not yet configured cellular service; connecting to it for the first time");
-				switch_current_service_state(od, true, cellular_service_setup_cb, od);
+
+				struct cb_data *cbd = NULL;
+				cbd = cb_data_new(NULL, NULL);
+				cbd->user = od;
+				switch_current_service_state(od, true, cellular_service_setup_cb, cbd);
 			}
 		}
 

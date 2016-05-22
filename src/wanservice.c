@@ -169,20 +169,20 @@ struct wan_service* wan_service_create(void)
 	LSErrorInit(&error);
 
 	if (!LSRegisterPalmService("com.palm.wan", &service->palm_service, &error)) {
-		g_error("Failed to initialize the WAN service: %s", error.message);
+		g_critical("Failed to initialize the WAN service: %s", error.message);
 		LSErrorFree(&error);
 		goto error;
 	}
 
 	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
-		g_error("Failed to attach to glib mainloop for WAN service: %s", error.message);
+		g_critical("Failed to attach to glib mainloop for WAN service: %s", error.message);
 		LSErrorFree(&error);
 		goto error;
 	}
 
 	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _wan_service_methods,
 			NULL, service, &error)) {
-		g_warning("Could not register category for WAN service");
+		g_critical("Could not register category for WAN service");
 		LSErrorFree(&error);
 		return NULL;
 	}
@@ -211,7 +211,7 @@ void wan_service_free(struct wan_service *service)
 
 	if (service->palm_service != NULL &&
 		LSUnregisterPalmService(service->palm_service, &error) < 0) {
-		g_error("Could not unregister palm service: %s", error.message);
+		g_critical("Could not unregister palm service: %s", error.message);
 		LSErrorFree(&error);
 	}
 

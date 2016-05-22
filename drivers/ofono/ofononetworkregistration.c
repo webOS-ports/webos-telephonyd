@@ -146,7 +146,7 @@ struct ofono_network_registration* ofono_network_registration_create(const gchar
 	netreg->remote = ofono_interface_network_registration_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.network interface");
+		g_critical("Unable to initialize proxy for the org.ofono.network interface");
 		g_error_free(error);
 		g_free(netreg);
 		return NULL;

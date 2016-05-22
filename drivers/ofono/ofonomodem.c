@@ -147,7 +147,7 @@ struct ofono_modem* ofono_modem_create(const gchar *path)
 	modem->remote = ofono_interface_modem_proxy_new_for_bus_sync(G_BUS_TYPE_SYSTEM,
 							G_DBUS_PROXY_FLAGS_NONE, "org.ofono", path, NULL, &error);
 	if (error) {
-		g_error("Unable to initialize proxy for the org.ofono.modem interface");
+		g_critical("Unable to initialize proxy for the org.ofono.modem interface");
 		g_error_free(error);
 		g_free(modem);
 		return NULL;
