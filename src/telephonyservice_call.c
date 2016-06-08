@@ -64,13 +64,11 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 		goto cleanup;
 	}
 
-	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("blockId"), &block_id_obj)) {
-		luna_service_message_reply_error_bad_json(handle, message);
-		goto cleanup;
+	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("blockId"), &block_id_obj)) {
+		jboolean_get(block_id_obj, &block_id);
 	}
 
 	number_buf = jstring_get(number_obj);
-	jboolean_get(block_id_obj, &block_id);
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
