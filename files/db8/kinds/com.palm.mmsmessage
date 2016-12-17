@@ -1,0 +1,27 @@
+{
+    "id": "com.palm.mmsmessage:1",
+    "extends": [ "com.palm.message:1" ],
+    "owner": "com.palm.telephony",   
+	"indexes": [
+        {
+            "name":"byStatusAndPreProcessed",
+            "props":[
+                { "name": "status" },
+                { "name": "preProcessDone" }
+            ]
+        },
+        {
+            "name":"byRemoteMessageId",
+            "props":[
+                { "name":"remoteMessageId" }
+            ]
+        },
+        {
+            "name":"byIdAndMmsType",
+            "props":[
+                { "name":"_id" },
+                {  "name":"mmsType" }            
+            ]
+        }
+    ]
+}

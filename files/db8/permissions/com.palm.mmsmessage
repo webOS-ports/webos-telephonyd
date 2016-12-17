@@ -1,7 +1,7 @@
 [
 	{
 		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
+		"object": "com.palm.mmsmessage:1",
 		"caller": "org.webosports.*",
 		"operations": {
 			"extend": "allow",
@@ -10,7 +10,7 @@
 	},
 	{
 		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
+		"object": "com.palm.mmsmessage:1",
 		"caller": "org.webosports.app.messaging",
 		"operations": {
 			"create": "allow",
@@ -21,7 +21,7 @@
 	},
 	{
 		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
+		"object": "com.palm.mmsmessage:1",
 		"caller": "org.webosports.service.messaging",
 		"operations": {
 			"create": "allow",
@@ -32,7 +32,7 @@
 	},
 	{
 		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
+		"object": "com.palm.mmsmessage:1",
 		"caller": "com.palm.*",
 		"operations": {
 			"extend": "allow",
@@ -41,7 +41,7 @@
 	},
 	{
 		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
+		"object": "com.palm.mmsmessage:1",
 		"caller": "com.palm.app.messaging",
 		"operations": {
 			"create": "allow",
