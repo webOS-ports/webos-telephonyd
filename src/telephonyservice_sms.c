@@ -1,6 +1,7 @@
 /* @@@LICENSE
 *
 * Copyright (c) 2012 Simon Busch <morphis@gravedo.de>
+* Copyright (c) 2016 Herman van Hazendonk <github.com@herrie.org>
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -31,6 +32,7 @@
 #include "telephonyservice.h"
 #include "utils.h"
 #include "luna_service_utils.h"
+#include <sys/time.h>
 
 GQueue *tx_queue = 0;
 guint tx_timeout = 0;
@@ -91,6 +93,9 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 
 	message_obj = jobject_create();
 
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
 	flags_obj = jobject_create();
 	jobject_put(flags_obj, J_CSTR_TO_JVAL("read"), jboolean_create(false));
 
@@ -100,7 +105,7 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	jobject_put(message_obj, J_CSTR_TO_JVAL("status"), jstring_create("successful"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("serviceName"), jstring_create("sms"));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("messageText"), jstring_create(message->text));
-	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(time(NULL)));
+	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(tv.tv_sec*1000LL+tv.tv_usec/1000));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("timestamp"), jnumber_create_i64(message->sent_time));
 
 	from_obj = jobject_create();
