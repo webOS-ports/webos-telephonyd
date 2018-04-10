@@ -1,7 +1,7 @@
 [Unit]
 Description=webOS telephony daemon
-Requires=ls-hubd_private.service ls-hubd_public.service
-After=ls-hubd_private.service ls-hubd_public.service
+Requires=ls-hubd.service
+After=ls-hubd.service
 
 [Service]
 Type=simple
