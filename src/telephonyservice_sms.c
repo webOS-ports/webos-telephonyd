@@ -135,7 +135,7 @@ static void restart_activity(struct telephony_service *service)
 	jobject_put(req_obj, J_CSTR_TO_JVAL("activityName"), jstring_create("telephony-send-outgoing-sms"));
 	jobject_put(req_obj, J_CSTR_TO_JVAL("restart"), jboolean_create(true));
 
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.activitymanager/complete", req_obj,
+	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.webos.service.activitymanager/complete", req_obj,
 											 NULL, NULL))
 		g_warning("Failed to restart SMS send activity");
 
