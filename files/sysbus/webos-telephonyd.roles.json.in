@@ -1,9 +1,7 @@
 {
-    "role": {
-        "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-telephonyd",
-        "type": "privileged",
-        "allowedNames": ["com.palm.telephony", "com.palm.wan"]
-    },
+    "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-telephonyd",
+    "type": "privileged",
+    "allowedNames": ["com.palm.telephony", "com.palm.wan"],
     "permissions": [
         {
             "service":"com.palm.telephony",
