@@ -1,53 +1,62 @@
 [
-	{
-		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
-		"caller": "org.webosports.*",
-		"operations": {
-			"extend": "allow",
-			"read": "allow"
-		}
-	},
-	{
-		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
-		"caller": "org.webosports.app.messaging",
-		"operations": {
-			"create": "allow",
-			"delete": "allow",
-			"read": "allow",
-			"update": "allow"
-		}
-	},
-	{
-		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
-		"caller": "org.webosports.service.messaging",
-		"operations": {
-			"create": "allow",
-			"delete": "allow",
-			"read": "allow",
-			"update": "allow"
-		}
-	},
-	{
-		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
-		"caller": "com.palm.*",
-		"operations": {
-			"extend": "allow",
-			"read": "allow"
-		}
-	},
-	{
-		"type": "db.kind",
-		"object": "com.palm.smsmessage:1",
-		"caller": "com.palm.app.messaging",
-		"operations": {
-			"create": "allow",
-			"delete": "allow",
-			"read": "allow",
-			"update": "allow"
-		}
-	}
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"org.webosports.*",
+        "operations":{
+            "extend":"allow",
+            "read":"allow"
+        }
+    },
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"org.webosports.app.messaging",
+        "operations":{
+            "create":"allow",
+            "delete":"allow",
+            "read":"allow",
+            "update":"allow"
+        }
+    },
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"org.webosports.service.messaging",
+        "operations":{
+            "create":"allow",
+            "delete":"allow",
+            "read":"allow",
+            "update":"allow"
+        }
+    },
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"com.palm.*",
+        "operations":{
+            "extend":"allow",
+            "read":"allow"
+        }
+    },
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"com.palm.app.messaging",
+        "operations":{
+            "create":"allow",
+            "delete":"allow",
+            "read":"allow",
+            "update":"allow"
+        }
+    },
+    {
+        "type":"db.kind",
+        "object":"com.palm.smsmessage:1",
+        "caller":"com.webos.*",
+        "operations":{
+            "extend":"allow",
+            "read":"allow"
+        }
+    }
 ]
