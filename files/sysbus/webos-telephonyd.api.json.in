@@ -90,10 +90,12 @@
         "com.palm.wan/setHostRoutes",
         "com.palm.wan/getstatus",
         "com.palm.wan/set",
+        "com.palm.telephony/chargeSourceQuery",
         "com.palm.telephony/networkStatusQuery",
         "com.palm.telephony/signalStrengthQuery",
         "com.palm.telephony/powerQuery",
         "com.palm.telephony/isTelephonyReady",
+        "com.palm.telephony/subscribe",
         "com.webos.service.wan/connect",
         "com.webos.service.wan/disconnect",
         "com.webos.service.wan/getStatus",
@@ -105,7 +107,9 @@
         "com.webos.service.telephony/networkStatusQuery",
         "com.webos.service.telephony/signalStrengthQuery",
         "com.webos.service.telephony/powerQuery",
-        "com.webos.service.telephony/isTelephonyReady"
+        "com.webos.service.telephony/isTelephonyReady",
+        "com.webos.service.telephony/chargeSourceQuery",
+        "com.webos.service.telephony/subscribe"
     ],
     "networking.query": [
         "com.palm.wan/getStatus",
