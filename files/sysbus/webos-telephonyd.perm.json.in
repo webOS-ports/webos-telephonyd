@@ -1,26 +1,18 @@
 {
     "com.palm.telephony": [
-        "settings",
-        "devices",
-        "networking.internal", 
-        "public"
+        "database.internal",
+        "activities.manage"
     ],
     "com.webos.service.telephony": [
-        "settings",
-        "devices",
-        "networking.internal", 
-        "public"
+        "database.internal",
+        "activities.manage"
     ],
     "com.palm.wan": [
-        "settings",
-        "devices",
-        "networking.internal",
-        "public"
+        "database.internal",
+        "activities.manage"
     ],
     "com.webos.service.wan": [
-        "settings",
-        "devices",
-        "networking.internal",
-        "public"
+        "database.internal",
+        "activities.manage"
     ]
 }
