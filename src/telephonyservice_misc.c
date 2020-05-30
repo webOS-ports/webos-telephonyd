@@ -194,11 +194,6 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
-	else {
-		/* FIXME better error message */
-		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
-		goto cleanup;
-	}
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
@@ -223,11 +218,7 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	struct telephony_error terr;
 
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
@@ -238,7 +229,15 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	service->driver->power_query(service, _service_power_query_finish, req_data);
+	if (!service->initialized) {
+		// no service -> no power. But still process the subscription and return an answer.
+		terr.code = 1;
+		g_warning("Backend not initialized yet.");
+		_service_power_query_finish(&terr, false, (void*)req_data);
+	}
+	else {
+		service->driver->power_query(service, _service_power_query_finish, req_data);
+	}
 
 	return true;
 }
