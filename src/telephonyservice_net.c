@@ -143,11 +143,7 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	struct telephony_error terr;
 
 	if (!service->driver || !service->driver->signal_strength_query) {
 		g_warning("No implementation available for service signalStrengthQuery API method");
@@ -158,7 +154,15 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data);
+	if (!service->initialized) {
+		// no service -> no signal. But still process the subscription and return an answer.
+		terr.code = 1;
+		g_warning("Backend not initialized yet.");
+		_service_signal_strength_query_finish(&terr, 0, (void*)req_data);
+	}
+	else {
+		service->driver->signal_strength_query(service, _service_signal_strength_query_finish, req_data);
+	}
 
 	return true;
 }
@@ -228,11 +232,7 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	struct telephony_error terr;
 
 	if (!service->driver || !service->driver->network_status_query) {
 		g_warning("No implementation available for service networkStatusQuery API method");
@@ -243,7 +243,15 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
 
-	service->driver->network_status_query(service, _service_network_status_query_finish, req_data);
+	if (!service->initialized) {
+		// no service -> no networks. But still process the subscription and return an answer.
+		g_warning("Backend not initialized yet.");
+		terr.code = 1;
+		_service_network_status_query_finish(&terr, NULL, (void*)req_data);
+	}
+	else {
+		service->driver->network_status_query(service, _service_network_status_query_finish, req_data);
+	}
 
 	return true;
 }
