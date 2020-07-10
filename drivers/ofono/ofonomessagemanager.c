@@ -86,7 +86,7 @@ static time_t decode_iso8601_time(const char *str)
 
 	memset(&t, 0, sizeof(struct tm));
 
-	sscanf(str, "%4d-%2d-%2dT%2d:%2d:%2d+%4d",
+	sscanf(str, "%4d-%2d-%2dT%2d:%2d:%2d+%4u",
 		   &t.tm_year, &t.tm_mon, &t.tm_mday,
 		   &t.tm_hour, &t.tm_min, &t.tm_sec,
 		   &offset);
