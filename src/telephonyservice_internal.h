@@ -22,8 +22,7 @@
 struct telephony_service {
 	struct telephony_driver *driver;
 	void *data;
-	LSPalmService *palm_service;
-	LSHandle *private_service;
+	LSHandle *serviceHandle;
 	bool initialized;
 	bool power_off_pending;
 	bool network_status_query_pending;

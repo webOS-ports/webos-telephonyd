@@ -99,12 +99,8 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "answer", _service_answer_cb },
 	{ "ignore", _service_ignore_cb },
 	{ "hangup", _service_hangup_cb },
+	{ "sendSmsFromDb", _service_internal_send_sms_from_db_cb },
 	{ 0, 0 }
-};
-
-static LSMethod _telephony_service_internal_methods[] = {
-    { "sendSmsFromDb", _service_internal_send_sms_from_db_cb },
-    { 0, 0 }
 };
 
 static bool retrieve_power_state_from_settings(void)
@@ -181,33 +177,29 @@ struct telephony_service* telephony_service_create()
 
 	LSErrorInit(&error);
 
-	if (!LSRegisterPalmService("com.palm.telephony", &service->palm_service, &error)) {
+	if (!LSRegister("com.palm.telephony", &service->serviceHandle, &error)) {
 		g_critical("Failed to initialize the Luna Palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
 
-	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
+	if (!LSGmainAttach(service->serviceHandle, event_loop, &error)) {
 		g_critical("Failed to attach to glib mainloop for palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
 
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _telephony_service_methods,
-			NULL, service, &error)) {
+	if (!LSRegisterCategory(service->serviceHandle, "/", _telephony_service_methods, NULL, NULL, &error)) {
 		g_warning("Could not register service category");
 		LSErrorFree(&error);
 		goto failed;
 	}
-
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/internal", NULL, _telephony_service_internal_methods,
-			NULL, service, &error)) {
-		g_warning("Could not register internal service category");
+	
+	if (!LSCategorySetData(service->serviceHandle, "/", service, &error)) {
+		g_warning("Could not set data for service category");
 		LSErrorFree(&error);
 		goto failed;
 	}
-
-	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
 
 	telephonyservice_sms_setup(service);
 
@@ -224,8 +216,8 @@ void telephony_service_free(struct telephony_service *service)
 
 	LSErrorInit(&error);
 
-	if (service->palm_service != NULL &&
-		LSUnregisterPalmService(service->palm_service, &error) < 0) {
+	if (service->serviceHandle != NULL &&
+		LSUnregister(service->serviceHandle, &error) < 0) {
 		g_critical("Could not unregister palm service: %s", error.message);
 		LSErrorFree(&error);
 	}
