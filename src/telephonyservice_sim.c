@@ -43,7 +43,7 @@ void telephony_service_sim_status_notify(struct telephony_service *service, enum
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("state"), jstring_create(telephony_sim_status_to_string(sim_status)));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
-	luna_service_post_subscription(service->private_service, "/", "simStatusQuery", reply_obj);
+	luna_service_post_subscription(service->serviceHandle, "/", "simStatusQuery", reply_obj);
 
 	j_release(&reply_obj);
 }
@@ -72,7 +72,7 @@ void telephony_service_pin1_status_changed_notify(struct telephony_service *serv
 	reply_obj = jobject_create();
 	create_pin_status_response(reply_obj, pin_status);
 
-	luna_service_post_subscription(service->private_service, "/", "pin1StatusQuery", reply_obj);
+	luna_service_post_subscription(service->serviceHandle, "/", "pin1StatusQuery", reply_obj);
 
 	j_release(&reply_obj);
 }

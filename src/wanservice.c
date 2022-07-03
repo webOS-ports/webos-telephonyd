@@ -37,8 +37,7 @@ static GSList *g_driver_list;
 struct wan_service {
 	struct wan_driver *driver;
 	void *data;
-	LSPalmService *palm_service;
-	LSHandle *private_service;
+	LSHandle *serviceHandle;
 	struct wan_configuration configuration;
 	bool initialized;
 };
@@ -168,33 +167,37 @@ struct wan_service* wan_service_create(void)
 
 	LSErrorInit(&error);
 
-	if (!LSRegisterPalmService("com.palm.wan", &service->palm_service, &error)) {
+	if (!LSRegister("com.palm.wan", &service->serviceHandle, &error)) {
 		g_critical("Failed to initialize the WAN service: %s", error.message);
 		LSErrorFree(&error);
 		goto error;
 	}
 
-	if (!LSGmainAttachPalmService(service->palm_service, event_loop, &error)) {
+	if (!LSGmainAttach(service->serviceHandle, event_loop, &error)) {
 		g_critical("Failed to attach to glib mainloop for WAN service: %s", error.message);
 		LSErrorFree(&error);
 		goto error;
 	}
 
-	if (!LSPalmServiceRegisterCategory(service->palm_service, "/", NULL, _wan_service_methods,
-			NULL, service, &error)) {
+	if (!LSRegisterCategory(service->serviceHandle, "/", _wan_service_methods,
+			NULL, NULL, &error)) {
 		g_critical("Could not register category for WAN service");
 		LSErrorFree(&error);
 		return NULL;
 	}
-
-	service->private_service = LSPalmServiceGetPrivateConnection(service->palm_service);
+    
+	if (!LSCategorySetData(service->serviceHandle, "/", service, &error)) {
+		g_warning("Could not set data for service category");
+		LSErrorFree(&error);
+		goto error;
+	}
 
 	return service;
 
 error:
-	if (service->palm_service &&
-		LSUnregisterPalmService(service->palm_service, &error) < 0) {
-		g_error("Could not unregister palm service: %s", error.message);
+	if (service->serviceHandle &&
+		LSUnregister(service->serviceHandle, &error) < 0) {
+		g_error("Could not unregister service: %s", error.message);
 		LSErrorFree(&error);
 	}
 
@@ -209,9 +212,9 @@ void wan_service_free(struct wan_service *service)
 
 	LSErrorInit(&error);
 
-	if (service->palm_service != NULL &&
-		LSUnregisterPalmService(service->palm_service, &error) < 0) {
-		g_critical("Could not unregister palm service: %s", error.message);
+	if (service->serviceHandle != NULL &&
+		LSUnregister(service->serviceHandle, &error) < 0) {
+		g_critical("Could not unregister service: %s", error.message);
 		LSErrorFree(&error);
 	}
 
@@ -328,7 +331,7 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
-	luna_service_post_subscription(service->private_service, "/", "getstatus", reply_obj);
+	luna_service_post_subscription(service->serviceHandle, "/", "getstatus", reply_obj);
 
 	j_release(&reply_obj);
 }

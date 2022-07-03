@@ -75,7 +75,7 @@ void telephony_service_power_status_notify(struct telephony_service *service, bo
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
-	luna_service_post_subscription(service->private_service, "/", "powerQuery", reply_obj);
+	luna_service_post_subscription(service->serviceHandle, "/", "powerQuery", reply_obj);
 
 	j_release(&reply_obj);
 }

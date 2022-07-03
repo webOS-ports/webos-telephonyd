@@ -117,7 +117,7 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 
 	jobject_put(req_obj, J_CSTR_TO_JVAL("objects"), objects_obj);
 
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/put", req_obj,
+	if (!luna_service_call_validate_and_send(service->serviceHandle, "luna://com.palm.db/put", req_obj,
 	                                         create_message_cb, service))
 		g_warning("Failed to create db8 message object for incoming SMS message");
 
@@ -135,7 +135,7 @@ static void restart_activity(struct telephony_service *service)
 	jobject_put(req_obj, J_CSTR_TO_JVAL("activityName"), jstring_create("telephony-send-outgoing-sms"));
 	jobject_put(req_obj, J_CSTR_TO_JVAL("restart"), jboolean_create(true));
 
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.webos.service.activitymanager/complete", req_obj,
+	if (!luna_service_call_validate_and_send(service->serviceHandle, "luna://com.webos.service.activitymanager/complete", req_obj,
 											 NULL, NULL))
 		g_warning("Failed to restart SMS send activity");
 
@@ -168,7 +168,7 @@ static void update_message_status(struct telephony_service *service, const char 
 
 	jobject_put(req_obj, J_CSTR_TO_JVAL("objects"), objects_obj);
 
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/merge", req_obj,
+	if (!luna_service_call_validate_and_send(service->serviceHandle, "luna://com.palm.db/merge", req_obj,
 											 message_updated_cb, service)) {
 		g_warning("[Telephony:SMS] Failed to update message status");
 		tx_active = FALSE;
@@ -450,7 +450,7 @@ bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message,
 
 	jobject_put(req_obj, J_CSTR_TO_JVAL("query"), query_obj);
 
-	if (!luna_service_call_validate_and_send(service->private_service, "luna://com.palm.db/find",
+	if (!luna_service_call_validate_and_send(service->serviceHandle, "luna://com.palm.db/find",
 	                                         req_obj, query_pending_messages_cb, service))
 		// FIXME eventually add a time to try again a bit later but if this fails
 		// something should be really broken and it doubtfull that a later try will
