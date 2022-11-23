@@ -1,18 +1,18 @@
 {
     "com.palm.telephony": [
-        "database.internal",
-        "activities.manage"
+        "database.operation",
+        "activity.operation"
     ],
     "com.webos.service.telephony": [
-        "database.internal",
-        "activities.manage"
+        "database.operation",
+        "activity.operation"
     ],
     "com.palm.wan": [
-        "database.internal",
-        "activities.manage"
+        "database.operation",
+        "activity.operation"
     ],
     "com.webos.service.wan": [
-        "database.internal",
-        "activities.manage"
+        "database.operation",
+        "activity.operation"
     ]
 }
