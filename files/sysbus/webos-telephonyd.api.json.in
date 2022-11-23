@@ -1,5 +1,5 @@
 {
-    "networking.internal": [
+    "telephony.management": [
         "com.palm.telephony/subscribe",
         "com.palm.telephony/isTelephonyReady",
         "com.palm.telephony/powerSet",
@@ -79,7 +79,7 @@
         "com.webos.service.wan/getContext",
         "com.webos.service.wan/setHostRoutes"
     ],
-    "networking.query": [
+    "telephony.query": [
         "com.palm.wan/getStatus",
         "com.palm.wan/getContexts",
         "com.palm.wan/getContext",

@@ -1,5 +1,6 @@
 {
     "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-telephonyd",
+    "trustLevel": "oem",
     "type": "privileged",
     "allowedNames": ["com.palm.telephony", "com.webos.service.telephony", "com.palm.wan", "com.webos.service.wan"],
     "permissions": [
