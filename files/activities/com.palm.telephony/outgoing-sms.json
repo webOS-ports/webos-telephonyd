@@ -24,7 +24,7 @@
             }
         },
         "callback": {
-            "method": "palm://com.palm.telephony/internal/sendSmsFromDb",
+            "method": "palm://com.palm.telephony/sendSmsFromDb",
             "params": {}
         }
     }
