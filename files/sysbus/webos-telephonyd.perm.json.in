@@ -1,18 +1,22 @@
 {
     "com.palm.telephony": [
+        "activity.operation",
         "database.operation",
-        "activity.operation"
+        "telephony.management"
     ],
     "com.webos.service.telephony": [
+        "activity.operation",
         "database.operation",
-        "activity.operation"
+        "telephony.management"
     ],
     "com.palm.wan": [
+        "activity.operation",
         "database.operation",
-        "activity.operation"
+        "telephony.management"
     ],
     "com.webos.service.wan": [
+        "activity.operation",
         "database.operation",
-        "activity.operation"
+        "telephony.management"
     ]
 }
