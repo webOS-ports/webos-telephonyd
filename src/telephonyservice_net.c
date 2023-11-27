@@ -49,7 +49,7 @@ void telephony_service_signal_strength_changed_notify(struct telephony_service *
 	jobject_put(signal_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), signal_obj);
 
-	luna_service_post_subscription(service->serviceHandle, "/", "signalStrengthQuery", reply_obj);
+	luna_service_post_subscription(service->palmHandle, "/", "signalStrengthQuery", reply_obj);
 
 	j_release(&reply_obj);
 }
@@ -80,7 +80,7 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), network_obj);
 
-	luna_service_post_subscription(service->serviceHandle, "/", "networkStatusQuery", reply_obj);
+	luna_service_post_subscription(service->palmHandle, "/", "networkStatusQuery", reply_obj);
 
 	j_release(&reply_obj);
 }
