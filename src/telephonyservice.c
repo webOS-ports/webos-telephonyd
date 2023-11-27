@@ -177,26 +177,50 @@ struct telephony_service* telephony_service_create()
 
 	LSErrorInit(&error);
 
-	if (!LSRegister("com.palm.telephony", &service->serviceHandle, &error)) {
+	if (!LSRegister("com.palm.telephony", &service->palmHandle, &error)) {
 		g_critical("Failed to initialize the Luna Palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
 
-	if (!LSGmainAttach(service->serviceHandle, event_loop, &error)) {
+	if (!LSGmainAttach(service->palmHandle, event_loop, &error)) {
 		g_critical("Failed to attach to glib mainloop for palm service: %s", error.message);
 		LSErrorFree(&error);
 		goto failed;
 	}
 
-	if (!LSRegisterCategory(service->serviceHandle, "/", _telephony_service_methods, NULL, NULL, &error)) {
-		g_warning("Could not register service category");
+	if (!LSRegisterCategory(service->palmHandle, "/", _telephony_service_methods, NULL, NULL, &error)) {
+		g_warning("Could not register palm service category");
 		LSErrorFree(&error);
 		goto failed;
 	}
 	
-	if (!LSCategorySetData(service->serviceHandle, "/", service, &error)) {
-		g_warning("Could not set data for service category");
+	if (!LSCategorySetData(service->palmHandle, "/", service, &error)) {
+		g_warning("Could not set data for palm service category");
+		LSErrorFree(&error);
+		goto failed;
+	}
+
+	if (!LSRegister("com.webos.service.telephony", &service->webosHandle, &error)) {
+		g_critical("Failed to initialize the Luna webOS service: %s", error.message);
+		LSErrorFree(&error);
+		goto failed;
+	}
+
+	if (!LSGmainAttach(service->webosHandle, event_loop, &error)) {
+		g_critical("Failed to attach to glib mainloop for webos service: %s", error.message);
+		LSErrorFree(&error);
+		goto failed;
+	}
+
+	if (!LSRegisterCategory(service->webosHandle, "/", _telephony_service_methods, NULL, NULL, &error)) {
+		g_warning("Could not register webos service category");
+		LSErrorFree(&error);
+		goto failed;
+	}
+	
+	if (!LSCategorySetData(service->webosHandle, "/", service, &error)) {
+		g_warning("Could not set data for webos service category");
 		LSErrorFree(&error);
 		goto failed;
 	}
@@ -216,11 +240,18 @@ void telephony_service_free(struct telephony_service *service)
 
 	LSErrorInit(&error);
 
-	if (service->serviceHandle != NULL &&
-		LSUnregister(service->serviceHandle, &error) < 0) {
+	if (service->palmHandle != NULL &&
+		LSUnregister(service->palmHandle, &error) < 0) {
 		g_critical("Could not unregister palm service: %s", error.message);
 		LSErrorFree(&error);
 	}
+
+	if (service->webosHandle != NULL &&
+		LSUnregister(service->webosHandle, &error) < 0) {
+		g_critical("Could not unregister webos service: %s", error.message);
+		LSErrorFree(&error);
+	}
+
 
 	if (service->driver) {
 		service->driver->remove(service);
