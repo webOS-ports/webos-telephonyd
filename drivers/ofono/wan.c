@@ -66,6 +66,8 @@ enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum o
 		return WAN_NETWORK_TYPE_HSDPA;
 	case OFONO_CONNECTION_BEARER_UMTS:
 		return WAN_NETWORK_TYPE_UMTS;
+	case OFONO_CONNECTION_BEARER_LTE:
+		return WAN_NETWORK_TYPE_LTE;
 	default:
 		break;
 	}
@@ -83,8 +85,9 @@ enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum 
 	case OFONO_NETWORK_TECHNOLOGOY_UMTS:
 		return WAN_NETWORK_TYPE_UMTS;
 	case OFONO_NETWORK_TECHNOLOGOY_HSPA:
-	case OFONO_NETWORK_TECHNOLOGOY_LTE:
 		return WAN_NETWORK_TYPE_HSDPA;
+	case OFONO_NETWORK_TECHNOLOGOY_LTE:
+		return WAN_NETWORK_TYPE_LTE;
 	default:
 		break;
 	}
