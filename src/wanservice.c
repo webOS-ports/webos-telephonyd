@@ -62,6 +62,8 @@ const char* wan_network_type_to_string(enum wan_network_type type)
 		return "umts";
 	case WAN_NETWORK_TYPE_HSDPA:
 		return "hsdpa";
+	case WAN_NETWORK_TYPE_LTE:
+		return "lte";
 	case WAN_NETWORK_TYPE_1X:
 		return "1x";
 	case WAN_NETWORK_TYPE_EVDO:
