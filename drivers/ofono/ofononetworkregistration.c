@@ -82,17 +82,17 @@ static enum ofono_network_status parse_ofono_network_status(const gchar *status)
 enum ofono_network_technology parse_ofono_network_technology(char *technology)
 {
 	if (g_str_equal(technology, "gsm"))
-		return OFONO_NETWORK_TECHNOLOGOY_GSM;
+		return OFONO_NETWORK_TECHNOLOGY_GSM;
 	else if (g_str_equal(technology, "edge"))
-		return OFONO_NETWORK_TECHNOLOGOY_EDGE;
+		return OFONO_NETWORK_TECHNOLOGY_EDGE;
 	else if (g_str_equal(technology, "umts"))
-		return OFONO_NETWORK_TECHNOLOGOY_UMTS;
+		return OFONO_NETWORK_TECHNOLOGY_UMTS;
 	else if (g_str_equal(technology, "hspa"))
-		return OFONO_NETWORK_TECHNOLOGOY_HSPA;
+		return OFONO_NETWORK_TECHNOLOGY_HSPA;
 	else if (g_str_equal(technology, "lte"))
-		return OFONO_NETWORK_TECHNOLOGOY_LTE;
+		return OFONO_NETWORK_TECHNOLOGY_LTE;
 
-	return OFONO_NETWORK_TECHNOLOGOY_UNKNOWN;
+	return OFONO_NETWORK_TECHNOLOGY_UNKNOWN;
 }
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
@@ -379,7 +379,7 @@ const gchar* ofono_network_registration_get_mnc(struct ofono_network_registratio
 enum ofono_network_technology ofono_network_registration_get_technology(struct ofono_network_registration *netreg)
 {
 	if (!netreg)
-		return OFONO_NETWORK_TECHNOLOGOY_UNKNOWN;
+		return OFONO_NETWORK_TECHNOLOGY_UNKNOWN;
 
 	return netreg->technology;
 }

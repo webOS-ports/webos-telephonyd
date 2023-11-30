@@ -37,7 +37,7 @@ struct ofono_network_operator {
 	char *mcc;
 	char *mnc;
 	enum ofono_network_operator_status status;
-	bool available_technologies[OFONO_NETWORK_TECHNOLOGOY_MAX];
+	bool available_technologies[OFONO_NETWORK_TECHNOLOGY_MAX];
 };
 
 static enum ofono_network_operator_status parse_ofono_network_operator_status(const char *status)
@@ -95,7 +95,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			tech = parse_ofono_network_technology(tech_str);
 			g_free(tech_str);
 
-			netop->available_technologies[tech] = (tech != OFONO_NETWORK_TECHNOLOGOY_UNKNOWN);
+			netop->available_technologies[tech] = (tech != OFONO_NETWORK_TECHNOLOGY_UNKNOWN);
 		}
 	}
 }
