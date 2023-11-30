@@ -78,15 +78,15 @@ enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum o
 enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum ofono_network_technology technology)
 {
 	switch (technology) {
-	case OFONO_NETWORK_TECHNOLOGOY_GSM:
+	case OFONO_NETWORK_TECHNOLOGY_GSM:
 		return WAN_NETWORK_TYPE_GPRS;
-	case OFONO_NETWORK_TECHNOLOGOY_EDGE:
+	case OFONO_NETWORK_TECHNOLOGY_EDGE:
 		return WAN_NETWORK_TYPE_EDGE;
-	case OFONO_NETWORK_TECHNOLOGOY_UMTS:
+	case OFONO_NETWORK_TECHNOLOGY_UMTS:
 		return WAN_NETWORK_TYPE_UMTS;
-	case OFONO_NETWORK_TECHNOLOGOY_HSPA:
+	case OFONO_NETWORK_TECHNOLOGY_HSPA:
 		return WAN_NETWORK_TYPE_HSDPA;
-	case OFONO_NETWORK_TECHNOLOGOY_LTE:
+	case OFONO_NETWORK_TECHNOLOGY_LTE:
 		return WAN_NETWORK_TYPE_LTE;
 	default:
 		break;

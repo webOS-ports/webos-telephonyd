@@ -520,10 +520,10 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 
 enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_network_operator *netop)
 {
-	if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_LTE))
+	if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGY_LTE))
 		return TELEPHONY_RADIO_ACCESS_MODE_LTE;
-	else if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_HSPA) ||
-			 ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGOY_UMTS))
+	else if (ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGY_HSPA) ||
+			 ofono_network_operator_supports_technology(netop, OFONO_NETWORK_TECHNOLOGY_UMTS))
 		return TELEPHONY_RADIO_ACCESS_MODE_UMTS;
 
 	return TELEPHONY_RADIO_ACCESS_MODE_GSM;
