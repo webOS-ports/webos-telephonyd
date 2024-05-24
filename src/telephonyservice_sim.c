@@ -126,13 +126,13 @@ bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->sim_status_query) {
 		g_warning("No implementation available for service simStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return false;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -183,13 +183,13 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin1StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return false;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -210,13 +210,13 @@ bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin2StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return false;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
@@ -241,7 +241,7 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_verify) {
@@ -292,7 +292,7 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_enable) {
@@ -343,7 +343,7 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_disable) {
@@ -395,7 +395,7 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_change) {
@@ -454,7 +454,7 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_unblock) {
@@ -554,13 +554,13 @@ bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service fdnStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return;
+		return false;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
