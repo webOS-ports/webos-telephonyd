@@ -43,7 +43,7 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->dial) {
@@ -93,7 +93,7 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->dial) {
@@ -139,7 +139,7 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->dial) {
@@ -185,7 +185,7 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	if (!service->initialized) {
 		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return;
+		return false;
 	}
 
 	if (!service->driver || !service->driver->dial) {
