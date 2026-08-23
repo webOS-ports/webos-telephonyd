@@ -33,7 +33,6 @@ struct ofono_sim_manager {
 	struct ofono_base *base;
 	int ref_count;
 	bool present;
-	gchar *imsi;
 	gchar *mcc;
 	gchar *mnc;
 	enum ofono_sim_pin pin_required;
@@ -140,12 +139,6 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 	if (g_str_equal(name, "Present"))
 		sim->present = g_variant_get_boolean(value);
-	else if (g_str_equal(name, "SubscriberIdentity"))
-		sim->imsi = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "MobileCountryCode"))
-		sim->mcc = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "MobileNetworkCode"))
-		sim->mnc = g_variant_dup_string(value, NULL);
 	else if (g_str_equal(name, "PinRequired")) {
 		pin_type_str = g_variant_dup_string(value, NULL);
 		sim->pin_required = parse_ofono_sim_pin_type(pin_type_str);
