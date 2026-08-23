@@ -77,7 +77,15 @@
         "com.webos.service.wan/set",
         "com.webos.service.wan/getContexts",
         "com.webos.service.wan/getContext",
-        "com.webos.service.wan/setHostRoutes"
+        "com.webos.service.wan/setHostRoutes",
+        "com.palm.telephony/simListQuery",
+        "com.palm.telephony/defaultSimQuery",
+        "com.palm.telephony/defaultSimSet",
+        "com.palm.telephony/simNameSet",
+        "com.webos.service.telephony/simListQuery",
+        "com.webos.service.telephony/defaultSimQuery",
+        "com.webos.service.telephony/defaultSimSet",
+        "com.webos.service.telephony/simNameSet"
     ],
     "telephony.query": [
         "com.palm.wan/getStatus",
@@ -109,6 +117,10 @@
         "com.webos.service.telephony/ratQuery",
         "com.webos.service.telephony/deviceLockQuery",
         "com.webos.service.telephony/chargeSourceQuery",
-        "com.webos.service.telephony/subscriberIdQuery"
+        "com.webos.service.telephony/subscriberIdQuery",
+        "com.palm.telephony/simListQuery",
+        "com.palm.telephony/defaultSimQuery",
+        "com.webos.service.telephony/simListQuery",
+        "com.webos.service.telephony/defaultSimQuery"
     ]
 }

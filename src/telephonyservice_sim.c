@@ -27,32 +27,52 @@
 
 #include "telephonysettings.h"
 #include "telephonydriver.h"
+#include "telephonyservice.h"
 #include "telephonyservice_internal.h"
 #include "utils.h"
 #include "luna_service_utils.h"
 
-void telephony_service_sim_status_notify(struct telephony_service *service, enum telephony_sim_status sim_status)
+void telephony_service_sim_status_notify(struct telephony_service *service, int sim_id,
+                                         enum telephony_sim_status sim_status)
 {
+	struct telephony_sim_state *sim;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
+
+	sim = telephony_service_sim_state(service, sim_id);
+	if (!sim)
+		return;
+
+	sim->sim_status = sim_status;
+	sim->present = (sim_status != TELEPHONY_SIM_STATUS_SIM_NOT_FOUND &&
+					sim_status != TELEPHONY_SIM_STATUS_SIM_INVALID);
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	telephony_service_add_sim_id(reply_obj, sim_id);
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("state"), jstring_create(telephony_sim_status_to_string(sim_status)));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
-	luna_service_post_subscription(service->palmHandle, "/", "simStatusQuery", reply_obj);
+	telephony_service_post_sim_subscription(service, "simStatusQuery", sim_id,
+											TELEPHONY_SIM_ROLE_VOICE, reply_obj);
 
 	j_release(&reply_obj);
+
+	telephony_service_repost_sim_list(service);
 }
 
 static void create_pin_status_response(jvalue_ref reply_obj, struct telephony_pin_status *pin_status)
 {
 	jvalue_ref extended_obj;
+	jvalue_ref sim_id_obj = NULL;
 
 	extended_obj = jobject_create();
+
+	if (jobject_get_exists(reply_obj, J_CSTR_TO_BUF("simId"), &sim_id_obj))
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jvalue_duplicate(sim_id_obj));
 
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(pin_status->enabled));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("pinrequired"), jboolean_create(pin_status->required));
@@ -65,14 +85,20 @@ static void create_pin_status_response(jvalue_ref reply_obj, struct telephony_pi
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 }
 
-void telephony_service_pin1_status_changed_notify(struct telephony_service *service, struct telephony_pin_status *pin_status)
+void telephony_service_pin1_status_changed_notify(struct telephony_service *service, int sim_id,
+                                                  struct telephony_pin_status *pin_status)
 {
 	jvalue_ref reply_obj = NULL;
 
+	if (!telephony_service_sim_state(service, sim_id))
+		return;
+
 	reply_obj = jobject_create();
+	telephony_service_add_sim_id(reply_obj, sim_id);
 	create_pin_status_response(reply_obj, pin_status);
 
-	luna_service_post_subscription(service->palmHandle, "/", "pin1StatusQuery", reply_obj);
+	telephony_service_post_sim_subscription(service, "pin1StatusQuery", sim_id,
+											TELEPHONY_SIM_ROLE_VOICE, reply_obj);
 
 	j_release(&reply_obj);
 }
@@ -88,12 +114,15 @@ static int _service_sim_status_query_finish(const struct telephony_error *error,
 	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	/* handle possible subscriptions */
 	if (req_data->subscribed)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
 			jstring_create(telephony_sim_status_to_string(sim_status)));
 
@@ -124,21 +153,18 @@ bool _service_sim_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->sim_status_query) {
 		g_warning("No implementation available for service simStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return false;
+		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
-	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+	req_data = telephony_service_begin_request(service, handle, message, "simStatusQuery",
+											   TELEPHONY_SIM_ROLE_VOICE, true, true, NULL);
+	if (!req_data)
+		return true;
 
-	service->driver->sim_status_query(service, _service_sim_status_query_finish, req_data);
+	service->driver->sim_status_query(service, req_data->sim_id, _service_sim_status_query_finish, req_data);
 
 	return true;
 }
@@ -152,6 +178,7 @@ static int _service_pin_status_query_finish(const struct telephony_error *error,
 	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	/* handle possible subscriptions */
 	if (req_data->subscribed)
@@ -181,21 +208,18 @@ bool _service_pin1_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin1StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return false;
+		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
-	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+	req_data = telephony_service_begin_request(service, handle, message, "pin1StatusQuery",
+											   TELEPHONY_SIM_ROLE_VOICE, true, true, NULL);
+	if (!req_data)
+		return true;
 
-	service->driver->pin1_status_query(service, _service_pin_status_query_finish, req_data);
+	service->driver->pin1_status_query(service, req_data->sim_id, _service_pin_status_query_finish, req_data);
 
 	return true;
 }
@@ -208,21 +232,18 @@ bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service pin2StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return false;
+		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
-	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+	req_data = telephony_service_begin_request(service, handle, message, "pin2StatusQuery",
+											   TELEPHONY_SIM_ROLE_VOICE, true, true, NULL);
+	if (!req_data)
+		return true;
 
-	service->driver->pin2_status_query(service, _service_pin_status_query_finish, req_data);
+	service->driver->pin2_status_query(service, req_data->sim_id, _service_pin_status_query_finish, req_data);
 
 	return true;
 }
@@ -238,11 +259,6 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer pin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->pin1_verify) {
 		g_warning("No implementation available for service pin1Verify API method");
@@ -264,9 +280,13 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	pin_buf = jstring_get(pin_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
 
-	service->driver->pin1_verify(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
+
+	service->driver->pin1_verify(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -290,11 +310,6 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 	const char *payload;
 	raw_buffer pin_buf;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->pin1_enable) {
 		g_warning("No implementation available for service pin1Enable API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -315,9 +330,13 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	pin_buf = jstring_get(pin_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
 
-	service->driver->pin1_enable(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
+
+	service->driver->pin1_enable(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -341,11 +360,6 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 	const char *payload;
 	raw_buffer pin_buf;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->pin1_disable) {
 		g_warning("No implementation available for service pin1Disable API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -366,9 +380,13 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	pin_buf = jstring_get(pin_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
 
-	service->driver->pin1_disable(service, pin_buf.m_str, telephonyservice_common_finish, req_data);
+
+	service->driver->pin1_disable(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -392,11 +410,6 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer oldpin_buf, newpin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->pin1_change) {
 		g_warning("No implementation available for service pin1Change API method");
@@ -425,9 +438,13 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 
 	newpin_buf = jstring_get(pin_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
 
-	service->driver->pin1_change(service, oldpin_buf.m_str, newpin_buf.m_str, telephonyservice_common_finish, req_data);
+
+	service->driver->pin1_change(service, req_data->sim_id, oldpin_buf.m_str, newpin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -451,11 +468,6 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
 	raw_buffer puk_buf, newpin_buf;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->pin1_unblock) {
 		g_warning("No implementation available for service pin1Unblock API method");
@@ -484,9 +496,13 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 
 	newpin_buf = jstring_get(pin_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
 
-	service->driver->pin1_unblock(service, puk_buf.m_str, newpin_buf.m_str,
+
+	service->driver->pin1_unblock(service, req_data->sim_id, puk_buf.m_str, newpin_buf.m_str,
 								  telephonyservice_common_finish, req_data);
 
 cleanup:
@@ -507,6 +523,7 @@ static int _service_fdn_status_query_finish(const struct telephony_error *error,
 	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	if (success) {
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
@@ -552,20 +569,18 @@ bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->pin1_status_query) {
 		g_warning("No implementation available for service fdnStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		return false;
+		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_request(service, handle, message, "fdnStatusQuery",
+											   TELEPHONY_SIM_ROLE_VOICE, true, false, NULL);
+	if (!req_data)
+		return true;
 
-	service->driver->fdn_status_query(service, _service_fdn_status_query_finish, req_data);
+	service->driver->fdn_status_query(service, req_data->sim_id, _service_fdn_status_query_finish, req_data);
 
 	return true;
 }

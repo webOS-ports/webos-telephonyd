@@ -32,6 +32,22 @@ const char* telephony_platform_type_to_string(enum telephony_platform_type type)
 	return "unknown";
 }
 
+const char* telephony_sim_role_to_string(enum telephony_sim_role role)
+{
+	switch (role) {
+	case TELEPHONY_SIM_ROLE_VOICE:
+		return "voice";
+	case TELEPHONY_SIM_ROLE_SMS:
+		return "sms";
+	case TELEPHONY_SIM_ROLE_DATA:
+		return "data";
+	default:
+		break;
+	}
+
+	return "unknown";
+}
+
 const char* telephony_sim_status_to_string(enum telephony_sim_status sim_status)
 {
 	switch (sim_status) {

@@ -41,11 +41,6 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	bool block_id = false;
 	raw_buffer number_buf;
 
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
-
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service dial API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -70,10 +65,14 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	number_buf = jstring_get(number_obj);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
+
 	req_data->user_data = service;
 
-	service->driver->dial(service, number_buf.m_str, block_id, telephonyservice_common_finish, req_data);
+	service->driver->dial(service, req_data->sim_id, number_buf.m_str, block_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -90,11 +89,6 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	int call_id = 0;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service answer API method");
@@ -116,10 +110,14 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	jnumber_get_i32(id_obj, &call_id);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
+
 	req_data->user_data = service;
 
-	service->driver->answer(service, call_id, telephonyservice_common_finish, req_data);
+	service->driver->answer(service, req_data->sim_id, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -136,11 +134,6 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	int call_id = 0;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service ignore API method");
@@ -162,10 +155,14 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	jnumber_get_i32(id_obj, &call_id);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
+
 	req_data->user_data = service;
 
-	service->driver->ignore(service, call_id, telephonyservice_common_finish, req_data);
+	service->driver->ignore(service, req_data->sim_id, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -182,11 +179,6 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref id_obj = NULL;
 	const char *payload;
 	int call_id = 0;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return false;
-	}
 
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service hangup API method");
@@ -208,10 +200,14 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 
 	jnumber_get_i32(id_obj, &call_id);
 
-	req_data = luna_service_req_data_new(handle, message);
+	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
+															 TELEPHONY_SIM_ROLE_VOICE, true);
+	if (!req_data)
+		goto cleanup;
+
 	req_data->user_data = service;
 
-	service->driver->hangup(service, call_id, telephonyservice_common_finish, req_data);
+	service->driver->hangup(service, req_data->sim_id, call_id, telephonyservice_common_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))

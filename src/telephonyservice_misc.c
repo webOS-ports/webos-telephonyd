@@ -27,6 +27,7 @@
 
 #include "telephonysettings.h"
 #include "telephonydriver.h"
+#include "telephonyservice.h"
 #include "telephonyservice_internal.h"
 #include "utils.h"
 #include "luna_service_utils.h"
@@ -40,6 +41,7 @@ int telephonyservice_common_finish(const struct telephony_error *error, void *da
 	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 	if (!success)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(error->code));
 
@@ -55,42 +57,55 @@ cleanup:
 	return 0;
 }
 
-void telephony_service_power_status_notify(struct telephony_service *service, bool power)
+void telephony_service_power_status_notify(struct telephony_service *service, int sim_id, bool power)
 {
+	struct telephony_sim_state *sim;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
 
-	service->powered = power;
+	sim = telephony_service_sim_state(service, sim_id);
+	if (!sim)
+		return;
 
-	if (!service->initialized) {
-		g_message("Service not yet successfully initialized. Not sending power status notification");
+	sim->powered = power;
+
+	if (!sim->initialized) {
+		g_message("SIM %d not yet successfully initialized. Not sending power status notification", sim_id);
 		return;
 	}
 
 	reply_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	telephony_service_add_sim_id(reply_obj, sim_id);
 
 	extended_obj = jobject_create();
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on": "off"));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 
-	luna_service_post_subscription(service->palmHandle, "/", "powerQuery", reply_obj);
+	telephony_service_post_sim_subscription(service, "powerQuery", sim_id, TELEPHONY_SIM_ROLE_VOICE, reply_obj);
 
 	j_release(&reply_obj);
+
+	telephony_service_repost_sim_list(service);
 }
 
 int _service_power_set_finish(const struct telephony_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	struct telephony_service *service = req_data->user_data;
+	struct telephony_sim_state *sim;
 	jvalue_ref reply_obj = NULL;
 
 	reply_obj = jobject_create();
 
-	service->power_off_pending = false;
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+	if (sim)
+		sim->power_off_pending = false;
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create((error == NULL)));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj))
 		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
@@ -110,6 +125,7 @@ int _service_power_set_finish(const struct telephony_error *error, void *data)
 bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
 	struct luna_service_req_data *req_data = NULL;
 	bool power = false;
 	jvalue_ref parsed_obj = NULL;
@@ -117,22 +133,31 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	jvalue_ref save_obj = NULL;
 	const char *payload;
 	bool should_save = false;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	bool explicit_sim = false;
+	int sim_id;
 
 	if (!service->driver || !service->driver->power_set) {
 		g_warning("No implementation available for service powerSet API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
-		goto cleanup;
+		return true;
 	}
 
 	payload = LSMessageGetPayload(message);
 	parsed_obj = luna_service_message_parse_and_validate(payload);
 	if (jis_null(parsed_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	sim = telephony_service_sim_state(service, sim_id);
+	if (!sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		goto cleanup;
+	}
+
+	if (!sim->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
 		goto cleanup;
 	}
 
@@ -155,17 +180,25 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("save"), &save_obj)) {
 		jboolean_get(save_obj, &should_save);
-		if (should_save)
-			telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
-									 power ? "{\"state\":true}" : "{\"state\":false}");
+		if (should_save) {
+			telephony_service_store_power_state_for_sim(sim_id, power);
+
+			/* Keep the legacy device wide setting in sync while the default
+			 * voice SIM is the one being switched, so that an older build
+			 * reading it back still sees something sensible. */
+			if (telephony_service_get_default_sim(service, TELEPHONY_SIM_ROLE_VOICE) == sim_id)
+				telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
+										 power ? "{\"state\":true}" : "{\"state\":false}");
+		}
 	}
 
-	service->power_off_pending = !power;
+	sim->power_off_pending = !power;
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
+	req_data->sim_id = sim_id;
 
-	service->driver->power_set(service, power, _service_power_set_finish, req_data);
+	service->driver->power_set(service, sim_id, power, _service_power_set_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
@@ -190,8 +223,11 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	if (req_data->subscribed)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
+
 	if (success) {
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
 
@@ -217,8 +253,13 @@ cleanup:
 bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
 	struct luna_service_req_data *req_data = NULL;
 	struct telephony_error terr;
+	jvalue_ref parsed_obj = NULL;
+	const char *payload;
+	bool explicit_sim = false;
+	int sim_id;
 
 	if (!service->driver || !service->driver->power_query) {
 		g_warning("No implementation available for service powerQuery API method");
@@ -226,18 +267,35 @@ bool _service_power_query_cb(LSHandle *handle, LSMessage *message, void *user_da
 		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
-	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
 
-	if (!service->initialized) {
-		// no service -> no power. But still process the subscription and return an answer.
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	if (sim_id < 0 && explicit_sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+	req_data->sim_id = sim_id;
+	req_data->subscribed = telephony_service_process_sim_subscription(service, handle, message,
+											"powerQuery", sim_id, explicit_sim);
+
+	sim = telephony_service_sim_state(service, sim_id);
+
+	if (!sim || !sim->initialized) {
+		/* no service -> no power. But still process the subscription and return an answer. */
 		terr.code = 1;
 		g_warning("Backend not initialized yet.");
 		_service_power_query_finish(&terr, false, (void*)req_data);
 	}
 	else {
-		service->driver->power_query(service, _service_power_query_finish, req_data);
+		service->driver->power_query(service, sim_id, _service_power_query_finish, req_data);
 	}
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -254,7 +312,10 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
+
 	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 			jstring_create(telephony_platform_type_to_string(platform_info->platform_type)));
 
@@ -298,25 +359,45 @@ cleanup:
 bool _service_platform_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	jvalue_ref parsed_obj = NULL;
+	const char *payload;
+	bool explicit_sim = false;
+	int sim_id;
 
 	if (!service->driver || !service->driver->platform_query) {
 		g_warning("No implementation available for service platformQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
+		return true;
+	}
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	sim = telephony_service_sim_state(service, sim_id);
+	if (!sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		goto cleanup;
+	}
+
+	if (!sim->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
 		goto cleanup;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
-	req_data->subscribed = luna_service_check_for_subscription_and_process(req_data->handle, req_data->message);
+	req_data->sim_id = sim_id;
+	req_data->subscribed = telephony_service_process_sim_subscription(service, handle, message,
+											"platformQuery", sim_id, explicit_sim);
 
-	service->driver->platform_query(service, _service_platform_query_finish, req_data);
+	service->driver->platform_query(service, sim_id, _service_platform_query_finish, req_data);
 
 cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
 	return true;
 }
 
@@ -332,7 +413,10 @@ static int _service_subscriber_id_query_finish(const struct telephony_error *err
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
+
 	if (success) {
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 					jstring_create(telephony_platform_type_to_string(info->platform_type)));
 
@@ -372,12 +456,12 @@ cleanup:
 bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
 	struct luna_service_req_data *req_data = NULL;
-
-	if (!service->initialized) {
-		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
-		return true;
-	}
+	jvalue_ref parsed_obj = NULL;
+	const char *payload;
+	bool explicit_sim = false;
+	int sim_id;
 
 	if (!service->driver || !service->driver->subscriber_id_query) {
 		g_warning("No implementation available for service subscriberIdQuery API method");
@@ -385,9 +469,29 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 		return true;
 	}
 
-	req_data = luna_service_req_data_new(handle, message);
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
 
-	service->driver->subscriber_id_query(service, _service_subscriber_id_query_finish, req_data);
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	sim = telephony_service_sim_state(service, sim_id);
+	if (!sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		goto cleanup;
+	}
+
+	if (!sim->initialized) {
+		luna_service_message_reply_custom_error(handle, message, "Backend not initialized");
+		goto cleanup;
+	}
+
+	req_data = luna_service_req_data_new(handle, message);
+	req_data->sim_id = sim_id;
+
+	service->driver->subscriber_id_query(service, sim_id, _service_subscriber_id_query_finish, req_data);
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }
@@ -411,18 +515,39 @@ bool _service_subscriber_id_query_cb(LSHandle *handle, LSMessage *message, void 
 bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
+	jvalue_ref parsed_obj = NULL;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
+	const char *payload;
 	bool subscribed = false;
+	bool explicit_sim = false;
+	int sim_id;
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	if (sim_id < 0 && explicit_sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		return true;
+	}
+
+	sim = telephony_service_sim_state(service, sim_id);
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
 
-	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+	subscribed = telephony_service_process_sim_subscription(service, handle, message,
+										"deviceLockQuery", sim_id, explicit_sim);
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	telephony_service_add_sim_id(reply_obj, sim_id);
 
-	if (!service->powered) {
+	if (!sim || !sim->powered) {
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(1));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("Phone Radio is off"));
 	}
@@ -485,23 +610,47 @@ bool _service_charge_source_query_cb(LSHandle *handle, LSMessage *message, void 
 bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = NULL;
+	jvalue_ref parsed_obj = NULL;
 	jvalue_ref reply_obj = NULL;
 	jvalue_ref extended_obj = NULL;
+	const char *payload;
 	bool subscribed = false;
+	bool explicit_sim = false;
+	int sim_id;
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	if (sim_id < 0 && explicit_sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		return true;
+	}
+
+	sim = telephony_service_sim_state(service, sim_id);
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
 
-	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+	subscribed = telephony_service_process_sim_subscription(service, handle, message,
+										"isTelephonyReady", sim_id, explicit_sim);
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("radioConnected"), jboolean_create(service->initialized));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("power"), jboolean_create(service->powered));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("ready"), jboolean_create(service->initialized));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("networkRegistered"), jboolean_create(service->network_registered));
-	jobject_put(extended_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(service->data_registered));
+	telephony_service_add_sim_id(reply_obj, sim_id);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("simCount"),
+				jnumber_create_i32(telephony_service_get_sim_count(service)));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("radioConnected"), jboolean_create(sim && sim->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("power"), jboolean_create(sim && sim->powered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("ready"), jboolean_create(sim && sim->initialized));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("networkRegistered"), jboolean_create(sim && sim->network_registered));
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(sim && sim->data_registered));
 
 	/* FIXME check in which situations the three fields below are set and updated */
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("emergency"), jboolean_create(false));
@@ -527,13 +676,15 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
  **/
 bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data)
 {
+	struct telephony_service *service = user_data;
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref events_obj = NULL;
 	jvalue_ref reply_obj = NULL;
-	bool result = false;
-	LSError lserror;
 	const char *payload;
+	const char *method = NULL;
 	bool subscribed = false;
+	bool explicit_sim = false;
+	int sim_id;
 
 	payload = LSMessageGetPayload(message);
 	parsed_obj = luna_service_message_parse_and_validate(payload);
@@ -547,29 +698,33 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
-	if (jstring_equal2(events_obj, J_CSTR_TO_BUF("network"))) {
-		result = LSSubscriptionAdd(handle, "/networkStatusQuery", message, &lserror);
-		if (!result) {
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-
-			luna_service_message_reply_error_internal(handle, message);
-			goto cleanup;
-		}
-
-		subscribed = true;
+	sim_id = telephony_service_resolve_sim_id(service, parsed_obj, TELEPHONY_SIM_ROLE_VOICE, &explicit_sim);
+	if (sim_id < 0 && explicit_sim) {
+		luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
+		goto cleanup;
 	}
-	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signal"))) {
-		result = LSSubscriptionAdd(handle, "/signalStrengthQuery", message, &lserror);
-		if (!result) {
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
 
+	if (jstring_equal2(events_obj, J_CSTR_TO_BUF("network")))
+		method = "networkStatusQuery";
+	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("signal")))
+		method = "signalStrengthQuery";
+	else if (jstring_equal2(events_obj, J_CSTR_TO_BUF("sim")))
+		method = "simListQuery";
+
+	if (method) {
+		if (g_str_equal(method, "simListQuery")) {
+			/* not tied to a slot */
+			subscribed = luna_service_check_for_subscription_with_key(handle, message, "/simListQuery");
+		}
+		else {
+			subscribed = telephony_service_process_sim_subscription(service, handle, message,
+											method, sim_id, explicit_sim);
+		}
+
+		if (!subscribed) {
 			luna_service_message_reply_error_internal(handle, message);
 			goto cleanup;
 		}
-
-		subscribed = true;
 	}
 
 	reply_obj = jobject_create();
@@ -577,6 +732,7 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	telephony_service_add_sim_id(reply_obj, sim_id);
 
 	if (!luna_service_message_validate_and_send(handle, message, reply_obj)) {
 		luna_service_message_reply_error_internal(handle, message);
@@ -584,7 +740,11 @@ bool _service_subscribe_cb(LSHandle *handle, LSMessage *message, void *user_data
 	}
 
 cleanup:
-	j_release(&parsed_obj);
+	if (!jis_null(reply_obj))
+		j_release(&reply_obj);
+
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
 
 	return true;
 }

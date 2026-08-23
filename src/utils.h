@@ -26,6 +26,8 @@ struct luna_service_req_data {
 	LSHandle *handle;
 	LSMessage *message;
 	bool subscribed;
+	/* SIM slot the request was dispatched to, so that the reply can name it */
+	int sim_id;
 	void *user_data;
 };
 
@@ -37,6 +39,7 @@ static inline struct luna_service_req_data *luna_service_req_data_new(LSHandle *
 	req->handle = handle;
 	req->message = message;
 	req->subscribed = false;
+	req->sim_id = 0;
 
 	LSMessageRef(req->message);
 

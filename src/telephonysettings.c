@@ -26,9 +26,12 @@
 
 static const char *setting_keys[] = {
 	"telephonyPowerState",
+	"telephonySimPowerState",
+	"telephonyDefaultSim",
+	"telephonySimNames",
 };
 
-const char* telephony_settings_load(enum telephony_settings_type type)
+char* telephony_settings_load(enum telephony_settings_type type)
 {
 	LPErr lperr = LP_ERR_NONE;
 	LPAppHandle handle;
@@ -68,7 +71,7 @@ bool telephony_settings_store(enum telephony_settings_type type, const char *dat
 		return false;
 	}
 
-	return false;
+	return true;
 }
 
 // vim:ts=4:sw=4:noexpandtab

@@ -33,6 +33,8 @@
 
 extern GMainLoop *event_loop;
 static GSList *g_driver_list;
+/* the process hosts exactly one wan service */
+static struct wan_service *g_wan_service;
 
 struct wan_service {
 	struct wan_driver *driver;
@@ -50,6 +52,22 @@ static LSMethod _wan_service_methods[]  = {
 	{ "set", _wan_service_set_cb },
 	{ 0, 0 }
 };
+
+void wan_service_set_data_sim(int sim_id)
+{
+	if (!g_wan_service || !g_wan_service->driver || !g_wan_service->driver->set_data_sim)
+		return;
+
+	g_wan_service->driver->set_data_sim(g_wan_service, sim_id);
+}
+
+int wan_service_get_data_sim(void)
+{
+	if (!g_wan_service || !g_wan_service->driver || !g_wan_service->driver->get_data_sim)
+		return -1;
+
+	return g_wan_service->driver->get_data_sim(g_wan_service);
+}
 
 const char* wan_network_type_to_string(enum wan_network_type type)
 {
@@ -194,6 +212,8 @@ struct wan_service* wan_service_create(void)
 		goto error;
 	}
 
+	g_wan_service = service;
+
 	return service;
 
 error:
@@ -210,6 +230,9 @@ error:
 
 void wan_service_free(struct wan_service *service)
 {
+	if (g_wan_service == service)
+		g_wan_service = NULL;
+
 	LSError error;
 
 	LSErrorInit(&error);
@@ -268,6 +291,8 @@ static jvalue_ref create_status_update_reply(struct wan_status *status)
 
 	reply_obj = jobject_create();
 
+	/* tell clients which SIM the reported connection belongs to */
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(wan_service_get_data_sim()));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
 				jstring_create(status->state ? "enable" : "disable"));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("roamguard"),

@@ -43,6 +43,8 @@ struct pending_sms {
 	GQueue *to;
 	char *text;
 	bool inhibit_network_send;
+	/* slot the message should be sent from, or -1 for the default SMS SIM */
+	int sim_id;
 };
 
 static void process_message(struct telephony_service *service, struct pending_sms *msg);
@@ -56,7 +58,8 @@ static bool create_message_cb(LSHandle *handle, LSMessage *message, void *user_d
 	return true;
 }
 
-void telephony_service_incoming_message_notify(struct telephony_service *service, struct telephony_message *message)
+void telephony_service_incoming_message_notify(struct telephony_service *service, int sim_id,
+                                               struct telephony_message *message)
 {
 	// We store each message in the db8 database with the com.palm.smsmessage kind which has the following
 	// structure:
@@ -79,7 +82,8 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	//       "_id": <string>, # db8 id
 	//       "addr": <string>
 	//     }
-	//   ]
+	//   ],
+	//   "simId": <int> # slot the message arrived on / has to be sent from
 	// }
 
 	jvalue_ref req_obj = NULL;
@@ -107,6 +111,7 @@ void telephony_service_incoming_message_notify(struct telephony_service *service
 	jobject_put(message_obj, J_CSTR_TO_JVAL("messageText"), jstring_create(message->text));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("localTimestamp"), jnumber_create_i64(tv.tv_sec*1000LL+tv.tv_usec/1000));
 	jobject_put(message_obj, J_CSTR_TO_JVAL("timestamp"), jnumber_create_i64(message->sent_time));
+	jobject_put(message_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
 
 	from_obj = jobject_create();
 	jobject_put(from_obj, J_CSTR_TO_JVAL("addr"), jstring_create(message->sender));
@@ -228,6 +233,14 @@ static gboolean restart_tx_queue_cb(gpointer user_data)
 	return FALSE;
 }
 
+static int resolve_sms_sim_id(struct telephony_service *service, struct pending_sms *msg)
+{
+	if (msg->sim_id >= 0 && telephony_service_sim_state(service, msg->sim_id))
+		return msg->sim_id;
+
+	return telephony_service_get_default_sim(service, TELEPHONY_SIM_ROLE_SMS);
+}
+
 static void process_message(struct telephony_service *service, struct pending_sms *msg)
 {
 	struct cb_data *cbd = 0;
@@ -241,7 +254,8 @@ static void process_message(struct telephony_service *service, struct pending_sm
 
 	to_addr = g_queue_pop_head(msg->to);
 
-	service->driver->send_sms(service, to_addr, msg->text, send_msg_cb, cbd);
+	service->driver->send_sms(service, resolve_sms_sim_id(service, msg), to_addr, msg->text,
+							  send_msg_cb, cbd);
 
 	g_free(to_addr);
 }
@@ -249,6 +263,7 @@ static void process_message(struct telephony_service *service, struct pending_sm
 static gboolean tx_timeout_cb(gpointer user_data)
 {
 	struct telephony_service *service = user_data;
+	struct telephony_sim_state *sim = 0;
 	struct pending_sms *msg = 0;
 
 	if (tx_active) {
@@ -262,9 +277,12 @@ static gboolean tx_timeout_cb(gpointer user_data)
 		return FALSE;
 	}
 
-	if (!service->initialized) {
-		/* if service isn't initialized yet we have to wait a bit before trying
-		 * again to send all messages */
+	msg = g_queue_peek_head(tx_queue);
+	sim = telephony_service_sim_state(service, resolve_sms_sim_id(service, msg));
+
+	if (!sim || !sim->initialized) {
+		/* the SIM this message has to go out on isn't ready yet, so wait a bit
+		 * before trying again */
 		tx_timeout = g_timeout_add_seconds(5, restart_tx_queue_cb, service);
 		restart_activity(service);
 		return FALSE;
@@ -316,6 +334,7 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		jvalue_ref text_obj = 0;
 		jvalue_ref addr_obj = 0;
 		jvalue_ref inhibit_network_send_obj = 0;
+		jvalue_ref sim_id_obj = 0;
 		raw_buffer id_buf;
 		raw_buffer addr_buf;
 		raw_buffer text_buf;
@@ -386,9 +405,16 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		msg->to = recipients;
 		msg->text = g_strdup(text_buf.m_str);
 		msg->inhibit_network_send = false;
+		msg->sim_id = -1;
 
 		if (jobject_get_exists(result_obj, J_CSTR_TO_BUF("inhibitNetworkSend"), &inhibit_network_send_obj))
 			jboolean_get(inhibit_network_send_obj, &msg->inhibit_network_send);
+
+		/* Messaging can pin a message to a slot; without that we use whichever
+		 * SIM is currently the default for outgoing messages. */
+		if (jobject_get_exists(result_obj, J_CSTR_TO_BUF("simId"), &sim_id_obj) &&
+			jis_number(sim_id_obj))
+			jnumber_get_i32(sim_id_obj, &msg->sim_id);
 
 		/* if we're the first one using it then create the queue */
 		if (!tx_queue)

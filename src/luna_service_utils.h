@@ -35,6 +35,11 @@ bool luna_service_message_validate_and_send(LSHandle *handle, LSMessage *message
 bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage *message);
 void luna_service_post_subscription(LSHandle *handle, const char *path, const char *method, jvalue_ref reply_obj);
 
+/* Subscription variants that use an explicit key instead of category+method, so
+ * that updates can be routed per SIM slot. */
+bool luna_service_check_for_subscription_with_key(LSHandle *handle, LSMessage *message, const char *key);
+void luna_service_post_subscription_with_key(LSHandle *handle, const char *key, jvalue_ref reply_obj);
+
 bool luna_service_call_validate_and_send(LSHandle *handle, const char *uri, jvalue_ref req_obj,
                                          LSFilterFunc callback, void *user_data);
 
