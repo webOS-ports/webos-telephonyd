@@ -178,6 +178,7 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 	struct telephony_error terr;
+	struct telephony_sim_state *sim = NULL;
 
 	if (!service->driver || !service->driver->signal_strength_query) {
 		g_warning("No implementation available for service signalStrengthQuery API method");
@@ -190,7 +191,9 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	if (!req_data)
 		return true;
 
-	if (!telephony_service_sim_state(service, req_data->sim_id)->initialized) {
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+
+	if (!sim || !sim->initialized) {
 		// no service -> no signal. But still process the subscription and return an answer.
 		terr.code = 1;
 		g_warning("Backend not initialized yet.");
@@ -272,6 +275,7 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 	struct telephony_error terr;
+	struct telephony_sim_state *sim = NULL;
 
 	if (!service->driver || !service->driver->network_status_query) {
 		g_warning("No implementation available for service networkStatusQuery API method");
@@ -284,7 +288,9 @@ bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void
 	if (!req_data)
 		return true;
 
-	if (!telephony_service_sim_state(service, req_data->sim_id)->initialized) {
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+
+	if (!sim || !sim->initialized) {
 		// no service -> no networks. But still process the subscription and return an answer.
 		g_warning("Backend not initialized yet.");
 		terr.code = 1;
@@ -308,6 +314,7 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 	bool success = (error == NULL);
 	struct telephony_network *current_network = NULL;
 	int n;
+	struct telephony_sim_state *sim = NULL;
 
 	reply_obj = jobject_create();
 	extended_obj = jobject_create();
@@ -341,8 +348,9 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 	}
 
 cleanup:
-	if (telephony_service_sim_state(service, req_data->sim_id))
-		telephony_service_sim_state(service, req_data->sim_id)->network_status_query_pending = false;
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+	if (sim)
+		sim->network_status_query_pending = false;
 
 	j_release(&reply_obj);
 	luna_service_req_data_free(req_data);
@@ -378,6 +386,7 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
+	struct telephony_sim_state *sim = NULL;
 
 	if (!service->driver || !service->driver->network_list_query) {
 		g_warning("No implementation available for service networkListQuery API method");
@@ -391,15 +400,17 @@ bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *
 		return true;
 	req_data->user_data = service;
 
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+
 	/* A scan occupies the modem it runs on, but the other SIM stays usable. */
-	if (telephony_service_sim_state(service, req_data->sim_id)->network_status_query_pending) {
+	if (!sim || sim->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message,
 				"Another networkListQuery call is already pending");
 		luna_service_req_data_free(req_data);
 		return true;
 	}
 
-	telephony_service_sim_state(service, req_data->sim_id)->network_status_query_pending = true;
+	sim->network_status_query_pending = true;
 
 	service->driver->network_list_query(service, req_data->sim_id, _service_network_list_query_finish, req_data);
 
@@ -412,6 +423,7 @@ static int _service_network_list_query_cancel_finish(const struct telephony_erro
 	struct telephony_service *service = req_data->user_data;
 	jvalue_ref reply_obj = NULL;
 	bool success = (error == NULL);
+	struct telephony_sim_state *sim = NULL;
 
 	if (!success) {
 		luna_service_message_reply_error_unknown(req_data->handle, req_data->message);
@@ -429,8 +441,9 @@ static int _service_network_list_query_cancel_finish(const struct telephony_erro
 		goto cleanup;
 	}
 
-	if (telephony_service_sim_state(service, req_data->sim_id))
-		telephony_service_sim_state(service, req_data->sim_id)->network_status_query_pending = false;
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+	if (sim)
+		sim->network_status_query_pending = false;
 
 cleanup:
 	j_release(&reply_obj);
@@ -455,6 +468,7 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 {
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
+	struct telephony_sim_state *sim = NULL;
 
 	if (!service->driver || !service->driver->network_list_query_cancel) {
 		g_warning("No implementation available for service networkListQueryCancel API method");
@@ -468,7 +482,9 @@ bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message,
 		return true;
 	req_data->user_data = service;
 
-	if (!telephony_service_sim_state(service, req_data->sim_id)->network_status_query_pending) {
+	sim = telephony_service_sim_state(service, req_data->sim_id);
+
+	if (!sim || !sim->network_status_query_pending) {
 		luna_service_message_reply_custom_error(handle, message, "No network list query pending");
 		luna_service_req_data_free(req_data);
 		return true;
