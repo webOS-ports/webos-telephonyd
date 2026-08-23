@@ -159,6 +159,45 @@ bool luna_service_check_for_subscription_and_process(LSHandle *handle, LSMessage
 	return subscribed;
 }
 
+bool luna_service_check_for_subscription_with_key(LSHandle *handle, LSMessage *message, const char *key)
+{
+	LSError lserror;
+	bool subscribed = false;
+
+	LSErrorInit(&lserror);
+
+	if (LSMessageIsSubscription(message)) {
+		if (!LSSubscriptionAdd(handle, key, message, &lserror)) {
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
+		else {
+			subscribed = true;
+		}
+	}
+
+	return subscribed;
+}
+
+void luna_service_post_subscription_with_key(LSHandle *handle, const char *key, jvalue_ref reply_obj)
+{
+	jschema_ref response_schema = NULL;
+	LSError lserror;
+
+	LSErrorInit(&lserror);
+
+	response_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
+	if (!response_schema)
+		return;
+
+	if (!LSSubscriptionReply(handle, key, jvalue_tostring(reply_obj, response_schema), &lserror)) {
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+	}
+
+	jschema_release(&response_schema);
+}
+
 void luna_service_post_subscription(LSHandle *handle, const char *path, const char *method, jvalue_ref reply_obj)
 {
 	jschema_ref response_schema = NULL;

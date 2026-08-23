@@ -19,11 +19,22 @@
 #ifndef TELEPHONY_SETTINGS_H_
 #define TELEPHONY_SETTINGS_H_
 
+#include <stdbool.h>
+
 enum telephony_settings_type {
+	/* legacy, device wide radio power state: {"state":<bool>} */
 	TELEPHONY_SETTINGS_TYPE_POWER_STATE = 0,
+	/* per slot radio power state: {"<simId>":<bool>, ...} */
+	TELEPHONY_SETTINGS_TYPE_SIM_POWER_STATE,
+	/* default slot per role: {"voice":"<iccid>","sms":"<iccid>","data":"<iccid>"} */
+	TELEPHONY_SETTINGS_TYPE_DEFAULT_SIM,
+	/* user supplied slot labels: {"<iccid>":"<name>", ...} */
+	TELEPHONY_SETTINGS_TYPE_SIM_NAMES,
+	TELEPHONY_SETTINGS_TYPE_MAX
 };
 
-const char* telephony_settings_load(enum telephony_settings_type type);
+/* Returns a newly allocated string the caller has to free, or NULL. */
+char* telephony_settings_load(enum telephony_settings_type type);
 bool telephony_settings_store(enum telephony_settings_type type, const char *data);
 
 #endif

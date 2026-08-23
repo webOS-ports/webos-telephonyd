@@ -32,13 +32,36 @@ void* telephony_service_get_data(struct telephony_service *service);
 void telephony_service_register_driver(struct telephony_service *service, struct telephony_driver *driver);
 void telephony_service_unregister_driver(struct telephony_service *service, struct telephony_driver *driver);
 
-void telephony_service_availability_changed_notify(struct telephony_service *service, bool available);
-void telephony_service_power_status_notify(struct telephony_service *service, bool power);
-void telephony_service_pin1_status_changed_notify(struct telephony_service *service, struct telephony_pin_status *pin_status);
-void telephony_service_sim_status_notify(struct telephony_service *service, enum telephony_sim_status sim_status);
+/**
+ * Called by the driver whenever the set of usable modems changes. The service
+ * grows/shrinks its per-SIM state to match and re-resolves the default SIM for
+ * every role.
+ */
+void telephony_service_sim_count_changed_notify(struct telephony_service *service, int sim_count);
 
-void telephony_service_network_status_changed_notify(struct telephony_service *service, struct telephony_network_status *net_status);
-void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int bars);
+/**
+ * Called by the driver when the descriptive data of a slot (ICCID, IMSI,
+ * operator, ...) became available or changed.
+ */
+void telephony_service_sim_info_changed_notify(struct telephony_service *service, int sim_id,
+                                               struct telephony_sim_info *info);
+
+/* Number of SIM slots the service currently knows about. */
+int telephony_service_get_sim_count(struct telephony_service *service);
+
+/* Slot currently acting as the default for the given role, or -1 if there is none. */
+int telephony_service_get_default_sim(struct telephony_service *service, enum telephony_sim_role role);
+
+/* Change the default slot for a role and persist/notify the change. */
+bool telephony_service_set_default_sim(struct telephony_service *service, enum telephony_sim_role role, int sim_id);
+
+void telephony_service_availability_changed_notify(struct telephony_service *service, int sim_id, bool available);
+void telephony_service_power_status_notify(struct telephony_service *service, int sim_id, bool power);
+void telephony_service_pin1_status_changed_notify(struct telephony_service *service, int sim_id, struct telephony_pin_status *pin_status);
+void telephony_service_sim_status_notify(struct telephony_service *service, int sim_id, enum telephony_sim_status sim_status);
+
+void telephony_service_network_status_changed_notify(struct telephony_service *service, int sim_id, struct telephony_network_status *net_status);
+void telephony_service_signal_strength_changed_notify(struct telephony_service *service, int sim_id, int bars);
 
 enum telephony_message_type {
 	TELEPHONY_MESSAGE_TYPE_UNKNOWN,
@@ -54,7 +77,7 @@ struct telephony_message {
 	time_t local_sent_time;
 };
 
-void telephony_service_incoming_message_notify(struct telephony_service *service, struct telephony_message *message);
+void telephony_service_incoming_message_notify(struct telephony_service *service, int sim_id, struct telephony_message *message);
 
 #endif
 

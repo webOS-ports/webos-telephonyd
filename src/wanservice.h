@@ -35,6 +35,15 @@ void wan_service_unregister_driver(struct wan_service *service, struct wan_drive
 
 void wan_service_status_changed_notify(struct wan_service *service, struct wan_status *status);
 
+/**
+ * Follow the SIM the telephony service designated for packet data.
+ *
+ * There is only ever one wan service instance, so the telephony service reaches
+ * it through this rather than having a pointer threaded through to it.
+ */
+void wan_service_set_data_sim(int sim_id);
+int wan_service_get_data_sim(void);
+
 #endif
 
 // vim:ts=4:sw=4:noexpandtab

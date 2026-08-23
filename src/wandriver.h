@@ -118,6 +118,9 @@ struct wan_driver {
 	void (*remove)(struct wan_service *service);
 
 	void (*get_status)(struct wan_service *service, wan_get_status_cb cb, void *data);
+	/* Move packet data to the given SIM slot. */
+	void (*set_data_sim)(struct wan_service *service, int sim_id);
+	int (*get_data_sim)(struct wan_service *service);
 	void (*set_configuration)(struct wan_service *service, struct wan_configuration *configuration,
 							 wan_result_cb cb, void *data);
 };
