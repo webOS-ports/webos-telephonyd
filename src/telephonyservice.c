@@ -899,6 +899,31 @@ void telephony_service_sim_info_changed_notify(struct telephony_service *service
 	telephony_service_repost_sim_list(service);
 }
 
+/**
+ * Release everything telephony_service_create() allocated before the luna
+ * handles. Shared by the failure paths and by telephony_service_free() so the
+ * two cannot drift apart.
+ */
+static void free_service_resources(struct telephony_service *service)
+{
+	int role;
+
+	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++) {
+		g_free(service->default_sim_iccid[role]);
+		service->default_sim_iccid[role] = NULL;
+	}
+
+	if (service->sims) {
+		g_ptr_array_free(service->sims, TRUE);
+		service->sims = NULL;
+	}
+
+	if (service->sim_names) {
+		g_hash_table_destroy(service->sim_names);
+		service->sim_names = NULL;
+	}
+}
+
 struct telephony_service* telephony_service_create()
 {
 	struct telephony_service *service;
@@ -926,8 +951,7 @@ struct telephony_service* telephony_service_create()
 	service->driver = g_driver_list->data;
 
 	if (service->driver->probe(service) < 0) {
-		g_ptr_array_free(service->sims, TRUE);
-		g_hash_table_destroy(service->sim_names);
+		free_service_resources(service);
 		g_free(service);
 		return NULL;
 	}
@@ -989,8 +1013,12 @@ struct telephony_service* telephony_service_create()
 	return service;
 
 failed:
-	g_ptr_array_free(service->sims, TRUE);
-	g_hash_table_destroy(service->sim_names);
+	/* probe() already ran at this point, so its private data and bus watch
+	 * have to go back as well */
+	if (service->driver && service->driver->remove)
+		service->driver->remove(service);
+
+	free_service_resources(service);
 	g_free(service);
 	return NULL;
 }
@@ -998,7 +1026,6 @@ failed:
 void telephony_service_free(struct telephony_service *service)
 {
 	LSError error;
-	int role;
 
 	LSErrorInit(&error);
 
@@ -1019,14 +1046,7 @@ void telephony_service_free(struct telephony_service *service)
 		service->driver = NULL;
 	}
 
-	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++)
-		g_free(service->default_sim_iccid[role]);
-
-	if (service->sims)
-		g_ptr_array_free(service->sims, TRUE);
-
-	if (service->sim_names)
-		g_hash_table_destroy(service->sim_names);
+	free_service_resources(service);
 
 	g_free(service);
 }

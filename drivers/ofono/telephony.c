@@ -141,7 +141,7 @@ cleanup:
 
 void ofono_power_set(struct telephony_service *service, int sim_id, bool power, telephony_result_cb cb, void *data)
 {
-	struct cb_data *cbd = cb_data_new(cb, data);
+	struct cb_data *cbd = NULL;
 	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	bool powered = false;
 	struct telephony_error error;
@@ -161,6 +161,9 @@ void ofono_power_set(struct telephony_service *service, int sim_id, bool power, 
 	od->power_set_pending = true;
 	od->power_target = power;
 
+	/* allocated only once we know the call will actually be issued, so that
+	 * the early returns above cannot leak it */
+	cbd = cb_data_new(cb, data);
 	cbd->user = od;
 
 	powered = ofono_modem_get_powered(od->modem);
