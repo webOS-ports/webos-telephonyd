@@ -420,14 +420,21 @@ static int _service_subscriber_id_query_finish(const struct telephony_error *err
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 					jstring_create(telephony_platform_type_to_string(info->platform_type)));
 
+		/* Any of these can be absent - ofono reports an empty
+		 * SubscriberNumbers list on plenty of cards - and jstring_create()
+		 * does not accept NULL, so only report what we actually have. */
 		switch (info->platform_type) {
 		case TELEPHONY_PLATFORM_TYPE_GSM:
-			jobject_put(extended_obj, J_CSTR_TO_JVAL("imsi"), jstring_create(info->imsi));
-			jobject_put(extended_obj, J_CSTR_TO_JVAL("msisdn"), jstring_create(info->msisdn));
+			if (info->imsi)
+				jobject_put(extended_obj, J_CSTR_TO_JVAL("imsi"), jstring_create(info->imsi));
+			if (info->msisdn)
+				jobject_put(extended_obj, J_CSTR_TO_JVAL("msisdn"), jstring_create(info->msisdn));
 			break;
 		case TELEPHONY_PLATFORM_TYPE_CDMA:
-			jobject_put(extended_obj, J_CSTR_TO_JVAL("min"), jstring_create(info->min));
-			jobject_put(extended_obj, J_CSTR_TO_JVAL("mdn"), jstring_create(info->mdn));
+			if (info->min)
+				jobject_put(extended_obj, J_CSTR_TO_JVAL("min"), jstring_create(info->min));
+			if (info->mdn)
+				jobject_put(extended_obj, J_CSTR_TO_JVAL("mdn"), jstring_create(info->mdn));
 			break;
 		}
 
