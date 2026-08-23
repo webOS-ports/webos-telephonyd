@@ -39,6 +39,12 @@ struct ofono_wan_data {
 	struct wan_service *service;
 	guint service_watch;
 	struct ofono_manager *manager;
+	/**
+	 * Packet data runs on one SIM at a time, so rather than tracking contexts
+	 * for every modem we simply follow whichever slot the user picked as the
+	 * data SIM.
+	 */
+	int data_sim_id;
 	struct ofono_modem *modem;
 	struct ofono_connection_manager *cm;
 	struct ofono_network_registration *netreg;
@@ -412,26 +418,89 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 	}
 }
 
-static void modems_changed_cb(gpointer user_data)
+static void detach_from_modem(struct ofono_wan_data *od)
 {
-	struct ofono_wan_data *data = user_data;
+	if (od->cm) {
+		ofono_connection_manager_free(od->cm);
+		od->cm = NULL;
+	}
+
+	if (od->netreg) {
+		ofono_network_registration_free(od->netreg);
+		od->netreg = NULL;
+	}
+
+	if (od->modem) {
+		ofono_modem_unref(od->modem);
+		od->modem = NULL;
+	}
+}
+
+static void select_data_modem(struct ofono_wan_data *data)
+{
 	const GList *modems = NULL;
+	struct ofono_modem *modem = NULL;
+
+	if (!data->manager)
+		return;
 
 	modems = ofono_manager_get_modems(data->manager);
 
-	/* select first modem from the list as default for now */
-	if (modems) {
-		ofono_modem_ref(modems->data);
-		data->modem = modems->data;
+	if (data->data_sim_id >= 0)
+		modem = g_list_nth_data((GList*) modems, data->data_sim_id);
 
-		ofono_modem_register_prop_changed_handler(data->modem, modem_prop_changed_cb, data);
-	}
-	else {
-		if (data->modem)
-			ofono_modem_unref(data->modem);
+	/* fall back to the first modem when the configured slot is not there */
+	if (!modem && modems)
+		modem = modems->data;
 
-		data->modem = NULL;
+	if (modem && data->modem &&
+		g_strcmp0(ofono_modem_get_path(modem), ofono_modem_get_path(data->modem)) == 0)
+		return;
+
+	detach_from_modem(data);
+
+	if (!modem) {
+		send_status_update_cb(data);
+		return;
 	}
+
+	ofono_modem_ref(modem);
+	data->modem = modem;
+
+	ofono_modem_register_prop_changed_handler(data->modem, modem_prop_changed_cb, data);
+
+	/* the Interfaces property handler does the rest once ofono reports it */
+	send_status_update_cb(data);
+}
+
+static void modems_changed_cb(gpointer user_data)
+{
+	select_data_modem(user_data);
+}
+
+/**
+ * The user (or the telephony service) moved packet data to another SIM: drop
+ * the contexts of the old modem and follow the new one.
+ */
+void ofono_wan_set_data_sim(struct wan_service *service, int sim_id)
+{
+	struct ofono_wan_data *od = wan_service_get_data(service);
+
+	if (!od || od->data_sim_id == sim_id)
+		return;
+
+	g_message("[WAN] moving packet data to SIM %d", sim_id);
+
+	od->data_sim_id = sim_id;
+
+	select_data_modem(od);
+}
+
+int ofono_wan_get_data_sim(struct wan_service *service)
+{
+	struct ofono_wan_data *od = wan_service_get_data(service);
+
+	return od ? od->data_sim_id : -1;
 }
 
 static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const gchar *name_owner,
@@ -454,6 +523,7 @@ static void service_vanished_cb(GDBusConnection *conn, const gchar *name, gpoint
 
 	g_message("ofono dbus service disappeared");
 
+	detach_from_modem(od);
 	free_used_instances(od);
 }
 
@@ -732,6 +802,7 @@ int ofono_wan_probe(struct wan_service *service)
 
 	wan_service_set_data(service, data);
 	data->service = service;
+	data->data_sim_id = 0;
 
 	data->service_watch = g_bus_watch_name(G_BUS_TYPE_SYSTEM, "org.ofono", G_BUS_NAME_WATCHER_FLAGS_NONE,
 					 service_appeared_cb, service_vanished_cb, data, NULL);
@@ -750,6 +821,7 @@ void ofono_wan_remove(struct wan_service *service)
 
 	g_bus_unwatch_name(data->service_watch);
 
+	detach_from_modem(data);
 	free_used_instances(data);
 
 	g_free(data);
@@ -761,6 +833,8 @@ struct wan_driver ofono_wan_driver = {
 	.probe =		ofono_wan_probe,
 	.remove =		ofono_wan_remove,
 	.get_status = 		ofono_wan_get_status,
+	.set_data_sim =		ofono_wan_set_data_sim,
+	.get_data_sim =		ofono_wan_get_data_sim,
 	.set_configuration = 		ofono_wan_set_configuration,
 };
 

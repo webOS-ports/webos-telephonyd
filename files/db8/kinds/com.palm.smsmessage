@@ -11,6 +11,14 @@
                 { "name": "status" },
                 { "name": "localTimestamp" }
             ]
+        },
+        {
+            "name": "sim",
+            "props": [
+                { "name": "simId" },
+                { "name": "folder" },
+                { "name": "localTimestamp" }
+            ]
         }
     ]
 }

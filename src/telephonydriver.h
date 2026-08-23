@@ -27,6 +27,33 @@ struct telephony_error {
 	int code;
 };
 
+/**
+ * Identifies one SIM slot / modem. Slots are numbered from 0 in the order
+ * ofono reports the corresponding modems.
+ *
+ * TELEPHONY_SIM_ID_DEFAULT is what a client gets when it does not pass a
+ * "simId" parameter: the service resolves it to the SIM configured as the
+ * default for the role the called method belongs to.
+ */
+#define TELEPHONY_SIM_ID_DEFAULT	(-1)
+
+/* Upper bound on the number of SIM slots we are willing to track. */
+#define TELEPHONY_MAX_SIMS		8
+
+/**
+ * The role a SIM can be the default for. webOS/LuneOS lets the user pick a
+ * different SIM for outgoing calls, outgoing messages and packet data, which
+ * mirrors what other multi-SIM platforms do.
+ */
+enum telephony_sim_role {
+	TELEPHONY_SIM_ROLE_VOICE = 0,
+	TELEPHONY_SIM_ROLE_SMS,
+	TELEPHONY_SIM_ROLE_DATA,
+	TELEPHONY_SIM_ROLE_MAX
+};
+
+const char* telephony_sim_role_to_string(enum telephony_sim_role role);
+
 enum telephony_error_type {
 	TELEPHONY_ERROR_NOT_IMPLEMENTED = 0,
 	TELEPHONY_ERROR_INTERNAL,
@@ -124,6 +151,22 @@ struct telephony_network {
 	enum telephony_radio_access_mode radio_access_mode;
 };
 
+/**
+ * Static-ish description of a single SIM slot, used to enumerate the SIMs
+ * present in the device.
+ */
+struct telephony_sim_info {
+	int sim_id;
+	bool present;
+	const gchar *iccid;
+	const gchar *imsi;
+	const gchar *msisdn;
+	const gchar *operator_name;
+	const gchar *modem_path;
+	enum telephony_sim_status sim_status;
+	bool powered;
+};
+
 struct telephony_subscriber_info {
 	enum telephony_platform_type platform_type;
 	const gchar *imsi;
@@ -146,48 +189,58 @@ typedef int (*telephony_network_id_query_cb)(const struct telephony_error *error
 typedef int (*telephony_network_selection_mode_query_cb)(const struct telephony_error *error, bool automatic, void *data);
 typedef int (*telephony_fdn_status_query_cb)(const struct telephony_error* error, struct telephony_fdn_status *status, void *data);
 typedef int (*telephony_rat_query_cb)(const struct telephony_error *error, enum telephony_radio_access_mode mode, void *data);
+typedef int (*telephony_sim_info_query_cb)(const struct telephony_error *error, struct telephony_sim_info *info, void *data);
 typedef int (*telephony_subscriber_id_query_cb)(const struct telephony_error *error, struct telephony_subscriber_info *info, void *data);
 
 struct telephony_driver {
 	int (*probe)(struct telephony_service *service);
 	void (*remove)(struct telephony_service *service);
 
-	void (*platform_query)(struct telephony_service *service, telephony_platform_query_cb cb, void *data);
-	void (*subscriber_id_query)(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data);
+	/**
+	 * Every operation below is scoped to a single SIM slot. sim_id is always a
+	 * concrete slot index by the time the driver sees it; the service layer
+	 * resolves TELEPHONY_SIM_ID_DEFAULT before dispatching.
+	 */
+	void (*platform_query)(struct telephony_service *service, int sim_id, telephony_platform_query_cb cb, void *data);
+	void (*subscriber_id_query)(struct telephony_service *service, int sim_id, telephony_subscriber_id_query_cb cb, void *data);
+
+	/* SIM slot enumeration */
+	void (*sim_info_query)(struct telephony_service *service, int sim_id, telephony_sim_info_query_cb cb, void *data);
+
 	/* power management */
-	void (*power_query)(struct telephony_service *service, telephony_power_query_cb cb, void *data);
-	void (*power_set)(struct telephony_service *service, bool power, telephony_result_cb cb, void *data);
+	void (*power_query)(struct telephony_service *service, int sim_id, telephony_power_query_cb cb, void *data);
+	void (*power_set)(struct telephony_service *service, int sim_id, bool power, telephony_result_cb cb, void *data);
 
 	/* SIM */
-	void (*sim_status_query)(struct telephony_service *service, telephony_sim_status_query_cb, void *data);
-	void (*pin1_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
-	void (*pin1_verify)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	void (*pin1_change)(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
-	void (*pin1_enable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	void (*pin1_disable)(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data);
-	void (*pin1_unblock)(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
-	void (*pin2_status_query)(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data);
-	void (*fdn_status_query)(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data);
+	void (*sim_status_query)(struct telephony_service *service, int sim_id, telephony_sim_status_query_cb, void *data);
+	void (*pin1_status_query)(struct telephony_service *service, int sim_id, telephony_pin_status_query_cb cb, void *data);
+	void (*pin1_verify)(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_change)(struct telephony_service *service, int sim_id, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data);
+	void (*pin1_enable)(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_disable)(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data);
+	void (*pin1_unblock)(struct telephony_service *service, int sim_id, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data);
+	void (*pin2_status_query)(struct telephony_service *service, int sim_id, telephony_pin_status_query_cb cb, void *data);
+	void (*fdn_status_query)(struct telephony_service *service, int sim_id, telephony_fdn_status_query_cb cb, void *data);
 
 	/* network */
-	void (*network_status_query)(struct telephony_service *service, telephony_network_status_query_cb cb, void *data);
-	void (*signal_strength_query)(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data);
-	void (*network_list_query)(struct telephony_service *service, telephony_network_list_query_cb cb, void *data);
-	void (*network_list_query_cancel)(struct telephony_service *service, telephony_result_cb cb, void *data);
-	void (*network_set)(struct telephony_service *service, bool automatic, const char *id, telephony_result_cb cb, void *data);
-	void (*network_id_query)(struct telephony_service *service, telephony_network_id_query_cb cb, void *data);
-	void (*network_selection_mode_query)(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data);
-	void (*rat_query)(struct telephony_service *service, telephony_rat_query_cb cb, void *data);
-	void (*rat_set)(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
+	void (*network_status_query)(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data);
+	void (*signal_strength_query)(struct telephony_service *service, int sim_id, telephony_signal_strength_query_cb cb, void *data);
+	void (*network_list_query)(struct telephony_service *service, int sim_id, telephony_network_list_query_cb cb, void *data);
+	void (*network_list_query_cancel)(struct telephony_service *service, int sim_id, telephony_result_cb cb, void *data);
+	void (*network_set)(struct telephony_service *service, int sim_id, bool automatic, const char *id, telephony_result_cb cb, void *data);
+	void (*network_id_query)(struct telephony_service *service, int sim_id, telephony_network_id_query_cb cb, void *data);
+	void (*network_selection_mode_query)(struct telephony_service *service, int sim_id, telephony_network_selection_mode_query_cb cb, void *data);
+	void (*rat_query)(struct telephony_service *service, int sim_id, telephony_rat_query_cb cb, void *data);
+	void (*rat_set)(struct telephony_service *service, int sim_id, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data);
 
 	/* call control */
-	void (*dial)(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb, void *data);
-	void (*answer)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
-	void (*ignore)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
-	void (*hangup)(struct telephony_service *service, int id, telephony_result_cb cb, void *data);
+	void (*dial)(struct telephony_service *service, int sim_id, const char *number, bool block_id, telephony_result_cb, void *data);
+	void (*answer)(struct telephony_service *service, int sim_id, int id, telephony_result_cb cb, void *data);
+	void (*ignore)(struct telephony_service *service, int sim_id, int id, telephony_result_cb cb, void *data);
+	void (*hangup)(struct telephony_service *service, int sim_id, int id, telephony_result_cb cb, void *data);
 
 	/* sms */
-	void (*send_sms)(struct telephony_service *service, const char *to, const char *text, telephony_result_cb cb, void *data);
+	void (*send_sms)(struct telephony_service *service, int sim_id, const char *to, const char *text, telephony_result_cb cb, void *data);
 };
 
 #endif

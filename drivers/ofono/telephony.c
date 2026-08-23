@@ -36,9 +36,20 @@
 #include "ofonomessagewatch.h"
 #include "utils.h"
 
-struct ofono_data {
+struct ofono_data;
+
+/**
+ * Everything that belongs to one modem. Before dual SIM support these fields
+ * lived directly in struct ofono_data and there was exactly one modem; now
+ * there is one of these per slot and struct ofono_data only holds the set.
+ *
+ * The service back pointer is kept here so that the many callbacks which are
+ * handed this struct can notify the service about their own slot.
+ */
+struct ofono_sim_data {
 	struct telephony_service *service;
-	struct ofono_manager *manager;
+	struct ofono_data *parent;
+	int sim_id;
 	struct ofono_modem *modem;
 	struct ofono_sim_manager *sim;
 	struct ofono_network_registration *netreg;
@@ -49,21 +60,41 @@ struct ofono_data {
 	bool initializing;
 	bool power_set_pending;
 	bool power_target;
-	guint service_watch;
 	GCancellable *network_scan_cancellable;
 	GHashTable *calls;
 	unsigned int next_call_id;
 };
+
+struct ofono_data {
+	struct telephony_service *service;
+	struct ofono_manager *manager;
+	/* struct ofono_sim_data*, index == sim_id */
+	GPtrArray *sims;
+	guint service_watch;
+};
+
+/* Look up the per modem state the service is asking us to act on. */
+static struct ofono_sim_data* get_sim_data(struct telephony_service *service, int sim_id)
+{
+	struct ofono_data *od = telephony_service_get_data(service);
+
+	if (!od || !od->sims || sim_id < 0 || sim_id >= (int) od->sims->len)
+		return NULL;
+
+	return g_ptr_array_index(od->sims, sim_id);
+}
 
 struct call_info {
 	int id;
 	struct ofono_voicecall *call;
 };
 
+static void notify_sim_info(struct ofono_sim_data *od);
+
 void set_online_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_data *od = cbd->user;
+	struct ofono_sim_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
 
@@ -83,7 +114,7 @@ cleanup:
 void set_powered_cb(struct ofono_error *error, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_data *od = cbd->user;
+	struct ofono_sim_data *od = cbd->user;
 	telephony_result_cb cb = cbd->cb;
 	struct telephony_error terr;
 
@@ -108,12 +139,18 @@ cleanup:
 	g_free(cbd);
 }
 
-void ofono_power_set(struct telephony_service *service, bool power, telephony_result_cb cb, void *data)
+void ofono_power_set(struct telephony_service *service, int sim_id, bool power, telephony_result_cb cb, void *data)
 {
 	struct cb_data *cbd = cb_data_new(cb, data);
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	bool powered = false;
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (od->power_set_pending) {
 		error.code = TELEPHONY_ERROR_ALREADY_INPROGRESS;
@@ -135,11 +172,17 @@ void ofono_power_set(struct telephony_service *service, bool power, telephony_re
 	}
 }
 
-void ofono_power_query(struct telephony_service *service, telephony_power_query_cb cb, void *data)
+void ofono_power_query(struct telephony_service *service, int sim_id, telephony_power_query_cb cb, void *data)
 {
 	bool powered = false;
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, false, data);
+		return;
+	}
 
 	if (!od->modem) {
 		error.code = TELEPHONY_ERROR_INTERNAL;
@@ -153,13 +196,19 @@ void ofono_power_query(struct telephony_service *service, telephony_power_query_
 	cb(NULL, powered, data);
 }
 
-void ofono_platform_query(struct telephony_service *service, telephony_platform_query_cb cb, void *data)
+void ofono_platform_query(struct telephony_service *service, int sim_id, telephony_platform_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_platform_info pinfo;
 	const char *mnc = NULL;
 	const char *mcc = NULL;
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (!od->modem) {
 		error.code = TELEPHONY_ERROR_INTERNAL;
@@ -185,7 +234,7 @@ void ofono_platform_query(struct telephony_service *service, telephony_platform_
 	cb(NULL, &pinfo, data);
 }
 
-static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
+static enum telephony_sim_status determine_sim_status(struct ofono_sim_data *od)
 {
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 
@@ -205,7 +254,7 @@ static enum telephony_sim_status determine_sim_status(struct ofono_data *od)
 	return sim_status;
 }
 
-static void determine_pin_status(struct ofono_data *od, struct telephony_pin_status *pin_status,
+static void determine_pin_status(struct ofono_sim_data *od, struct telephony_pin_status *pin_status,
 								  enum ofono_sim_pin pin_type, enum ofono_sim_pin puk_type)
 {
 	enum ofono_sim_pin pin_required;
@@ -226,7 +275,7 @@ static void determine_pin_status(struct ofono_data *od, struct telephony_pin_sta
 
 static void sim_prop_changed_cb(const gchar *name, void *data)
 {
-	struct ofono_data *od = data;
+	struct ofono_sim_data *od = data;
 	enum telephony_sim_status sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
 	struct telephony_pin_status pin_status;
 
@@ -234,17 +283,27 @@ static void sim_prop_changed_cb(const gchar *name, void *data)
 
 	if (sim_status != od->sim_status) {
 		od->sim_status = sim_status;
-		telephony_service_sim_status_notify(od->service, sim_status);
+		telephony_service_sim_status_notify(od->service, od->sim_id, sim_status);
 
 		determine_pin_status(od, &pin_status, OFONO_SIM_PIN_TYPE_PIN, OFONO_SIM_PIN_TYPE_PUK);
-		telephony_service_pin1_status_changed_notify(od->service, &pin_status);
+		telephony_service_pin1_status_changed_notify(od->service, od->sim_id, &pin_status);
 	}
+
+	/* CardIdentifier/SubscriberIdentity only turn up once the SIM is readable,
+	 * and the stored default SIM is matched on the ICCID, so republish. */
+	notify_sim_info(od);
 }
 
-void ofono_sim_status_query(struct telephony_service *service, telephony_sim_status_query_cb cb, void *data)
+void ofono_sim_status_query(struct telephony_service *service, int sim_id, telephony_sim_status_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, TELEPHONY_SIM_STATUS_SIM_NOT_FOUND, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
@@ -256,11 +315,17 @@ void ofono_sim_status_query(struct telephony_service *service, telephony_sim_sta
 	cb(NULL, od->sim_status, data);
 }
 
-void ofono_pin1_status_query(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data)
+void ofono_pin1_status_query(struct telephony_service *service, int sim_id, telephony_pin_status_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_pin_status pin_status;
 	struct telephony_error err;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
@@ -281,11 +346,17 @@ void ofono_pin1_status_query(struct telephony_service *service, telephony_pin_st
 	}
 }
 
-void ofono_pin2_status_query(struct telephony_service *service, telephony_pin_status_query_cb cb, void *data)
+void ofono_pin2_status_query(struct telephony_service *service, int sim_id, telephony_pin_status_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_pin_status pin_status;
 	struct telephony_error err;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
@@ -323,11 +394,17 @@ void pin1_common_cb(struct ofono_error *error, gpointer user_data)
 	g_free(cbd);
 }
 
-void ofono_pin1_verify(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data)
+void ofono_pin1_verify(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -340,11 +417,17 @@ void ofono_pin1_verify(struct telephony_service *service, const gchar *pin, tele
 	ofono_sim_manager_enter_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, pin, pin1_common_cb, cbd);
 }
 
-void ofono_pin1_enable(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data)
+void ofono_pin1_enable(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -357,11 +440,17 @@ void ofono_pin1_enable(struct telephony_service *service, const gchar *pin, tele
 	ofono_sim_manager_lock_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, pin, pin1_common_cb, cbd);
 }
 
-void ofono_pin1_disable(struct telephony_service *service, const gchar *pin, telephony_result_cb cb, void *data)
+void ofono_pin1_disable(struct telephony_service *service, int sim_id, const gchar *pin, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -374,11 +463,17 @@ void ofono_pin1_disable(struct telephony_service *service, const gchar *pin, tel
 	ofono_sim_manager_unlock_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, pin, pin1_common_cb, cbd);
 }
 
-void ofono_pin1_change(struct telephony_service *service, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data)
+void ofono_pin1_change(struct telephony_service *service, int sim_id, const gchar *old_pin, const gchar *new_pin, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -391,11 +486,17 @@ void ofono_pin1_change(struct telephony_service *service, const gchar *old_pin, 
 	ofono_sim_manager_change_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, old_pin, new_pin, pin1_common_cb, cbd);
 }
 
-void ofono_pin1_unblock(struct telephony_service *service, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data)
+void ofono_pin1_unblock(struct telephony_service *service, int sim_id, const gchar *puk, const gchar *new_pin, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error err;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -408,11 +509,17 @@ void ofono_pin1_unblock(struct telephony_service *service, const gchar *puk, con
 	ofono_sim_manager_reset_pin(od->sim, OFONO_SIM_PIN_TYPE_PIN, puk, new_pin, pin1_common_cb, cbd);
 }
 
-void ofono_fdn_status_query(struct telephony_service *service, telephony_fdn_status_query_cb cb, void *data)
+void ofono_fdn_status_query(struct telephony_service *service, int sim_id, telephony_fdn_status_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_fdn_status fdn_status;
 	struct telephony_error err;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (!ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
 		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -426,7 +533,7 @@ void ofono_fdn_status_query(struct telephony_service *service, telephony_fdn_sta
 	cb(NULL, &fdn_status, data);
 }
 
-static int retrieve_network_status(struct ofono_data *od, struct telephony_network_status *status)
+static int retrieve_network_status(struct ofono_sim_data *od, struct telephony_network_status *status)
 {
 	enum ofono_network_status net_status;
 
@@ -461,11 +568,17 @@ static int retrieve_network_status(struct ofono_data *od, struct telephony_netwo
 	return 0;
 }
 
-void ofono_network_status_query(struct telephony_service *service, telephony_network_status_query_cb cb, void *data)
+void ofono_network_status_query(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_network_status status;
 	struct telephony_error err;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (od->netreg) {
 		if (retrieve_network_status(od, &status) < 0) {
@@ -489,10 +602,16 @@ static int convert_strength_to_bars(int rssi)
 	return (rssi * 5) / 100;
 }
 
-void ofono_signal_strength_query(struct telephony_service *service, telephony_signal_strength_query_cb cb, void *data)
+void ofono_signal_strength_query(struct telephony_service *service, int sim_id, telephony_signal_strength_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	unsigned int strength = 0;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, 0, data);
+		return;
+	}
 
 	if (od->netreg)
 		strength = convert_strength_to_bars(ofono_network_registration_get_strength(od->netreg));
@@ -502,7 +621,7 @@ void ofono_signal_strength_query(struct telephony_service *service, telephony_si
 
 static void network_prop_changed_cb(const gchar *name, void *data)
 {
-	struct ofono_data *od = data;
+	struct ofono_sim_data *od = data;
 	struct telephony_network_status net_status;
 	int strength;
 
@@ -510,11 +629,11 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 		if (retrieve_network_status(od, &net_status) < 0)
 			return;
 
-		telephony_service_network_status_changed_notify(od->service, &net_status);
+		telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 	}
 	else if (g_str_equal(name, "Strength")) {
 		strength = ofono_network_registration_get_strength(od->netreg);
-		telephony_service_signal_strength_changed_notify(od->service, convert_strength_to_bars(strength));
+		telephony_service_signal_strength_changed_notify(od->service, od->sim_id, convert_strength_to_bars(strength));
 	}
 }
 
@@ -532,7 +651,7 @@ enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_netw
 void scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 {
 	struct cb_data *cbd = data;
-	struct ofono_data *od = cbd->user;
+	struct ofono_sim_data *od = cbd->user;
 	struct telephony_error terr;
 	telephony_network_list_query_cb cb = cbd->cb;
 	GList *networks = NULL;
@@ -564,12 +683,18 @@ void scan_operators_cb(struct ofono_error *error, GList *operators, void *data)
 	od->network_scan_cancellable = 0;
 }
 
-void ofono_network_list_query(struct telephony_service *service, telephony_network_list_query_cb cb,
+void ofono_network_list_query(struct telephony_service *service, int sim_id, telephony_network_list_query_cb cb,
 							 void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct cb_data *cbd;
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (od->netreg) {
 		od->network_scan_cancellable = g_cancellable_new();
@@ -584,10 +709,16 @@ void ofono_network_list_query(struct telephony_service *service, telephony_netwo
 	}
 }
 
-void ofono_network_list_query_cancel(struct telephony_service *service, telephony_result_cb cb, void *data)
+void ofono_network_list_query_cancel(struct telephony_service *service, int sim_id, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (od->network_scan_cancellable) {
 		g_cancellable_cancel(od->network_scan_cancellable);
@@ -599,11 +730,17 @@ void ofono_network_list_query_cancel(struct telephony_service *service, telephon
 	}
 }
 
-void ofono_network_id_query(struct telephony_service *service, telephony_network_id_query_cb cb, void *data)
+void ofono_network_id_query(struct telephony_service *service, int sim_id, telephony_network_id_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	char netid[6];
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (od->netreg) {
 		snprintf(netid, 6, "%s%s",
@@ -618,12 +755,18 @@ void ofono_network_id_query(struct telephony_service *service, telephony_network
 	}
 }
 
-void ofono_network_selection_mode_query(struct telephony_service *service, telephony_network_selection_mode_query_cb cb, void *data)
+void ofono_network_selection_mode_query(struct telephony_service *service, int sim_id, telephony_network_selection_mode_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	enum ofono_network_registration_mode mode;
 	bool automatic = false;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, false, data);
+		return;
+	}
 
 	if (od->netreg) {
 		mode = ofono_network_registration_get_mode(od->netreg);
@@ -705,12 +848,18 @@ void register_automatically_cb(struct ofono_error *error, void *data)
 	g_free(cbd);
 }
 
-void ofono_network_set(struct telephony_service *service, bool automatic, const char *id,
+void ofono_network_set(struct telephony_service *service, int sim_id, bool automatic, const char *id,
 					  telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (od->netreg) {
 		cbd = cb_data_new(cb, data);
@@ -729,11 +878,17 @@ void ofono_network_set(struct telephony_service *service, bool automatic, const 
 	}
 }
 
-void ofono_rat_query(struct telephony_service *service, telephony_rat_query_cb cb, void *data)
+void ofono_rat_query(struct telephony_service *service, int sim_id, telephony_rat_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	enum telephony_radio_access_mode mode;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, -1, data);
+		return;
+	}
 
 	if (od->rs) {
 		mode = ofono_radio_settings_get_technology_preference(od->rs);
@@ -762,11 +917,17 @@ void rat_set_cb(struct ofono_error *error, void *data)
 	g_free(cbd);
 }
 
-void ofono_rat_set(struct telephony_service *service, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data)
+void ofono_rat_set(struct telephony_service *service, int sim_id, enum telephony_radio_access_mode mode, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (od->rs) {
 		cbd = cb_data_new(cb, data);
@@ -778,12 +939,18 @@ void ofono_rat_set(struct telephony_service *service, enum telephony_radio_acces
 	}
 }
 
-void ofono_subscriber_id_query(struct telephony_service *service, telephony_subscriber_id_query_cb cb, void *data)
+void ofono_subscriber_id_query(struct telephony_service *service, int sim_id, telephony_subscriber_id_query_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	struct telephony_subscriber_info info;
 	GSList *subscriber_numbers;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, data);
+		return;
+	}
 
 	if (od->sim) {
 		memset(&info, 0, sizeof(struct telephony_subscriber_info));
@@ -822,11 +989,17 @@ cleanup:
 	g_free(cbd);
 }
 
-void ofono_dial(struct telephony_service *service, const char *number, bool block_id, telephony_result_cb cb, void *data)
+void ofono_dial(struct telephony_service *service, int sim_id, const char *number, bool block_id, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!od->vm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -841,10 +1014,16 @@ void ofono_dial(struct telephony_service *service, const char *number, bool bloc
 		dial_cb, cbd);
 }
 
-void ofono_answer(struct telephony_service *service, int call_id, telephony_result_cb cb, void *data)
+void ofono_answer(struct telephony_service *service, int sim_id, int call_id, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!od->vm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -897,11 +1076,17 @@ static void send_sms_cb(struct ofono_error *error, const char *path, void *data)
 	ofono_message_watch_set_status_callback(watch, message_status_cb, cbd);
 }
 
-void ofono_send_sms(struct telephony_service *service, const char *to, const char *text, telephony_result_cb cb, void *data)
+void ofono_send_sms(struct telephony_service *service, int sim_id, const char *to, const char *text, telephony_result_cb cb, void *data)
 {
-	struct ofono_data *od = telephony_service_get_data(service);
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
 	struct cb_data *cbd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, data);
+		return;
+	}
 
 	if (!od->mm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
@@ -916,7 +1101,7 @@ void ofono_send_sms(struct telephony_service *service, const char *to, const cha
 
 static void incoming_message_cb(struct ofono_message *message, void *data)
 {
-	struct ofono_data *od = data;
+	struct ofono_sim_data *od = data;
 
 	struct telephony_message msg;
 
@@ -936,31 +1121,34 @@ static void incoming_message_cb(struct ofono_message *message, void *data)
 		break;
 	}
 
-	telephony_service_incoming_message_notify(od->service, &msg);
+	telephony_service_incoming_message_notify(od->service, od->sim_id, &msg);
 }
 
-static void notify_no_network_registration(struct telephony_service *service)
+static void notify_no_network_registration(struct ofono_sim_data *od)
 {
 	/* notify possible network status subscribers about us having no connectivity
 	 * anymore */
 	struct telephony_network_status net_status;
 
+	memset(&net_status, 0, sizeof(net_status));
+
 	net_status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
 	net_status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
 	net_status.name = 0;
 
-	telephony_service_network_status_changed_notify(service, &net_status);
+	telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 }
 
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
-	struct ofono_data *od = data;
+	struct ofono_sim_data *od = data;
 	bool powered = false, online = false;
 	const char *path = ofono_modem_get_path(od->modem);
 
 	if (g_str_equal(name, "Online")) {
 		online = ofono_modem_get_online(od->modem);
-		telephony_service_power_status_notify(od->service, online);
+		telephony_service_power_status_notify(od->service, od->sim_id, online);
+		notify_sim_info(od);
 	}
 	else if (g_str_equal(name, "Interfaces")) {
 		if (!od->sim && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_MANAGER)) {
@@ -979,7 +1167,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->netreg && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_NETWORK_REGISTRATION)) {
 			ofono_network_registration_free(od->netreg);
 			od->netreg = NULL;
-			notify_no_network_registration(od->service);
+			notify_no_network_registration(od);
 		}
 
 		if (!od->rs && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_RADIO_SETTINGS)) {
@@ -1006,50 +1194,95 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 			ofono_message_manager_free(od->mm);
 			od->mm = NULL;
 		}
+
+		notify_sim_info(od);
 	}
 	else if (g_str_equal(name, "Powered")) {
 		powered = ofono_modem_get_powered(od->modem);
 		/* We need to handle power status changes differently when in initialization phase */
 		if (od->initializing && powered) {
-			telephony_service_availability_changed_notify(od->service, true);
+			telephony_service_availability_changed_notify(od->service, od->sim_id, true);
 			od->initializing = false;
 		}
 
-		telephony_service_power_status_notify(od->service, powered);
+		telephony_service_power_status_notify(od->service, od->sim_id, powered);
+		notify_sim_info(od);
 	}
 }
 
-static void modems_changed_cb(gpointer user_data)
+/**
+ * Push the descriptive data of this slot (ICCID, IMSI, number, operator) up to
+ * the service so it can enumerate the SIMs and match stored preferences.
+ */
+static void notify_sim_info(struct ofono_sim_data *od)
 {
-	struct ofono_data *data = user_data;
-	const GList *modems = NULL;
+	struct telephony_sim_info info;
+	GSList *subscriber_numbers;
 
-	modems = ofono_manager_get_modems(data->manager);
+	memset(&info, 0, sizeof(info));
 
-	/* select first modem from the list as default for now */
-	if (modems) {
-		ofono_modem_ref(modems->data);
-		data->modem = modems->data;
+	info.sim_id = od->sim_id;
+	info.sim_status = determine_sim_status(od);
+	info.present = (od->sim && ofono_sim_manager_get_present(od->sim));
+	info.modem_path = od->modem ? ofono_modem_get_path(od->modem) : NULL;
+	info.powered = od->modem ? (ofono_modem_get_powered(od->modem) &&
+								ofono_modem_get_online(od->modem)) : false;
 
-		data->initializing = true;
+	if (od->sim) {
+		info.iccid = ofono_sim_manager_get_card_identifier(od->sim);
+		info.imsi = ofono_sim_manager_get_subscriber_identity(od->sim);
 
-		ofono_modem_register_prop_changed_handler(data->modem, modem_prop_changed_cb, data);
+		subscriber_numbers = ofono_sim_manager_get_subscriber_numbers(od->sim);
+		if (subscriber_numbers)
+			info.msisdn = subscriber_numbers->data;
 	}
-	else {
-		if (data->sim)
-			ofono_sim_manager_free(data->sim);
 
-		if (data->modem)
-			ofono_modem_unref(data->modem);
+	if (od->netreg)
+		info.operator_name = ofono_network_registration_get_operator_name(od->netreg);
 
-		data->sim = NULL;
-		data->modem = NULL;
-
-		telephony_service_availability_changed_notify(data->service, false);
-	}
+	telephony_service_sim_info_changed_notify(od->service, od->sim_id, &info);
 }
 
-static void free_used_instances(struct ofono_data *od)
+void ofono_sim_info_query(struct telephony_service *service, int sim_id,
+                          telephony_sim_info_query_cb cb, void *data)
+{
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
+	struct telephony_sim_info info;
+	struct telephony_error err;
+	GSList *subscriber_numbers;
+
+	if (!od) {
+		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&err, NULL, data);
+		return;
+	}
+
+	memset(&info, 0, sizeof(info));
+
+	info.sim_id = sim_id;
+	info.sim_status = determine_sim_status(od);
+	info.present = (od->sim && ofono_sim_manager_get_present(od->sim));
+	info.modem_path = od->modem ? ofono_modem_get_path(od->modem) : NULL;
+	info.powered = od->modem ? (ofono_modem_get_powered(od->modem) &&
+								ofono_modem_get_online(od->modem)) : false;
+
+	if (od->sim) {
+		info.iccid = ofono_sim_manager_get_card_identifier(od->sim);
+		info.imsi = ofono_sim_manager_get_subscriber_identity(od->sim);
+
+		subscriber_numbers = ofono_sim_manager_get_subscriber_numbers(od->sim);
+		if (subscriber_numbers)
+			info.msisdn = subscriber_numbers->data;
+	}
+
+	if (od->netreg)
+		info.operator_name = ofono_network_registration_get_operator_name(od->netreg);
+
+	cb(NULL, &info, data);
+}
+
+/* Release the per interface proxies of one modem. */
+static void free_used_instances(struct ofono_sim_data *od)
 {
 	if (od->mm) {
 		ofono_message_manager_free(od->mm);
@@ -1075,14 +1308,110 @@ static void free_used_instances(struct ofono_data *od)
 		ofono_sim_manager_free(od->sim);
 		od->sim = NULL;
 	}
+}
 
-	if (od->manager) {
-		ofono_manager_free(od->manager);
-		od->manager = NULL;
+static void sim_data_detach(struct ofono_sim_data *od)
+{
+	free_used_instances(od);
+
+	if (od->network_scan_cancellable) {
+		g_cancellable_cancel(od->network_scan_cancellable);
+		od->network_scan_cancellable = NULL;
 	}
 
-	/* The manager already takes care about releasing the modem instances */
-	od->modem = NULL;
+	if (od->modem) {
+		ofono_modem_unref(od->modem);
+		od->modem = NULL;
+	}
+}
+
+static void sim_data_free(gpointer data)
+{
+	struct ofono_sim_data *od = data;
+
+	if (!od)
+		return;
+
+	sim_data_detach(od);
+
+	if (od->calls)
+		g_hash_table_destroy(od->calls);
+
+	g_free(od);
+}
+
+static struct ofono_sim_data* sim_data_new(struct ofono_data *parent, int sim_id)
+{
+	struct ofono_sim_data *od;
+
+	od = g_new0(struct ofono_sim_data, 1);
+	od->parent = parent;
+	od->service = parent->service;
+	od->sim_id = sim_id;
+	od->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
+	od->initializing = false;
+	od->calls = g_hash_table_new_full(g_str_hash, g_str_equal,
+									  g_free, (GDestroyNotify) g_hash_table_destroy);
+
+	return od;
+}
+
+/**
+ * ofono hands us the full modem list on every change, so rebuild our slots from
+ * it. A modem which is still at the same object path keeps its slot (and with
+ * it any state we already gathered); everything else is torn down and set up
+ * again.
+ */
+static void modems_changed_cb(gpointer user_data)
+{
+	struct ofono_data *data = user_data;
+	const GList *modems = NULL;
+	const GList *iter = NULL;
+	struct ofono_sim_data *od = NULL;
+	struct ofono_modem *modem = NULL;
+	const gchar *path = NULL;
+	int sim_id = 0;
+	int n;
+
+	modems = ofono_manager_get_modems(data->manager);
+
+	for (iter = modems; iter != NULL && sim_id < TELEPHONY_MAX_SIMS; iter = iter->next, sim_id++) {
+		modem = iter->data;
+		path = ofono_modem_get_path(modem);
+
+		if (sim_id < (int) data->sims->len) {
+			od = g_ptr_array_index(data->sims, sim_id);
+
+			if (od->modem && g_strcmp0(ofono_modem_get_path(od->modem), path) == 0) {
+				/* same modem as before, nothing to re-attach */
+				continue;
+			}
+
+			sim_data_detach(od);
+		}
+		else {
+			od = sim_data_new(data, sim_id);
+			g_ptr_array_add(data->sims, od);
+		}
+
+		ofono_modem_ref(modem);
+		od->modem = modem;
+		od->initializing = true;
+
+		ofono_modem_register_prop_changed_handler(od->modem, modem_prop_changed_cb, od);
+	}
+
+	/* drop the slots ofono no longer reports */
+	for (n = (int) data->sims->len - 1; n >= sim_id; n--) {
+		od = g_ptr_array_index(data->sims, n);
+		telephony_service_availability_changed_notify(od->service, od->sim_id, false);
+		g_ptr_array_remove_index(data->sims, n);
+	}
+
+	telephony_service_sim_count_changed_notify(data->service, (int) data->sims->len);
+
+	for (n = 0; n < (int) data->sims->len; n++)
+		notify_sim_info(g_ptr_array_index(data->sims, n));
 }
 
 static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const gchar *name_owner,
@@ -1102,12 +1431,24 @@ static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const 
 static void service_vanished_cb(GDBusConnection *conn, const gchar *name, gpointer user_data)
 {
 	struct ofono_data *od = user_data;
+	struct ofono_sim_data *sd = NULL;
+	int n;
 
 	g_message("ofono dbus service disappeared");
 
-	free_used_instances(od);
+	for (n = 0; n < (int) od->sims->len; n++) {
+		sd = g_ptr_array_index(od->sims, n);
+		telephony_service_availability_changed_notify(sd->service, sd->sim_id, false);
+	}
 
-	telephony_service_availability_changed_notify(od->service, false);
+	g_ptr_array_set_size(od->sims, 0);
+
+	if (od->manager) {
+		ofono_manager_free(od->manager);
+		od->manager = NULL;
+	}
+
+	telephony_service_sim_count_changed_notify(od->service, 0);
 }
 
 int ofono_probe(struct telephony_service *service)
@@ -1120,11 +1461,7 @@ int ofono_probe(struct telephony_service *service)
 
 	telephony_service_set_data(service, data);
 	data->service = service;
-
-	data->sim_status = TELEPHONY_SIM_STATUS_SIM_INVALID;
-	data->initializing = false;
-	data->calls = g_hash_table_new_full(g_str_hash, g_str_equal,
-										g_free, (GDestroyNotify) g_hash_table_destroy);
+	data->sims = g_ptr_array_new_with_free_func(sim_data_free);
 
 	data->service_watch = g_bus_watch_name(G_BUS_TYPE_SYSTEM, "org.ofono", G_BUS_NAME_WATCHER_FLAGS_NONE,
 					 service_appeared_cb, service_vanished_cb, data, NULL);
@@ -1137,10 +1474,15 @@ void ofono_remove(struct telephony_service *service)
 	struct ofono_data *data = 0;
 
 	data = telephony_service_get_data(service);
+	if (!data)
+		return;
 
-	g_hash_table_destroy(data->calls);
+	g_ptr_array_free(data->sims, TRUE);
 
-	free_used_instances(data);
+	if (data->manager) {
+		ofono_manager_free(data->manager);
+		data->manager = NULL;
+	}
 
 	g_bus_unwatch_name(data->service_watch);
 
@@ -1153,6 +1495,7 @@ struct telephony_driver ofono_telephony_driver = {
 	.probe =		ofono_probe,
 	.remove =		ofono_remove,
 	.platform_query		= ofono_platform_query,
+	.sim_info_query = ofono_sim_info_query,
 	.power_set =	ofono_power_set,
 	.power_query =	ofono_power_query,
 	.sim_status_query = ofono_sim_status_query,
