@@ -42,15 +42,53 @@ static void notify_modems_changed(struct ofono_manager *manager)
 		manager->modems_changed_cb(manager->modems_changed_data);
 }
 
+/* Keep the modem list ordered by object path.
+ *
+ * A slot index has to mean the same thing on every boot: ofono numbers its
+ * modems /ril_0, /ril_1, ... and telephonyd hands out slot N as the Nth entry
+ * of this list. Arrival order cannot carry that, because the ModemAdded
+ * handlers below used to be connected only once the GetModems reply had landed
+ * and the ril plugin drops and re-registers a modem on radio state changes. On
+ * a dual-SIM device that left /ril_1 at the head of the list, so every query
+ * for SIM 1 was answered for the second slot: an unlocked, registered SIM
+ * reported "pinrequired" and no service because the PIN-locked slot was
+ * standing in for it.
+ */
+static gint compare_modem_path(gconstpointer a, gconstpointer b)
+{
+	return g_strcmp0(ofono_modem_get_path((struct ofono_modem *) a),
+			 ofono_modem_get_path((struct ofono_modem *) b));
+}
+
+static struct ofono_modem* find_modem_by_path(struct ofono_manager *manager, const gchar *path)
+{
+	GList *iter = NULL;
+
+	for (iter = manager->modems; iter != NULL; iter = iter->next) {
+		struct ofono_modem *modem = (struct ofono_modem*)(iter->data);
+
+		if (g_strcmp0(ofono_modem_get_path(modem), path) == 0)
+			return modem;
+	}
+
+	return NULL;
+}
+
 static void modem_added_cb(OfonoInterfaceManager *object, const gchar *path, GVariant *properties, gpointer user_data)
 {
 	struct ofono_manager *manager = user_data;
 	struct ofono_modem *modem = NULL;
 
+	/* The GetModems reply and this signal can both report the same modem. */
+	if (find_modem_by_path(manager, path))
+		return;
+
 	modem = ofono_modem_create(path);
+	if (!modem)
+		return;
 
 	ofono_modem_ref(modem);
-	manager->modems = g_list_append(manager->modems, modem);
+	manager->modems = g_list_insert_sorted(manager->modems, modem, compare_modem_path);
 
 	notify_modems_changed(manager);
 }
@@ -103,18 +141,24 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 
 		path = g_variant_dup_string(g_variant_get_child_value(child, 0), NULL);
 
-		modem = ofono_modem_create(path);
-		manager->modems = g_list_append(manager->modems, modem);
+		/* A ModemAdded that arrived while this call was in flight has
+		 * already put the modem on the list. */
+		if (!find_modem_by_path(manager, path)) {
+			modem = ofono_modem_create(path);
+			if (modem) {
+				ofono_modem_ref(modem);
+				manager->modems = g_list_insert_sorted(manager->modems, modem,
+					compare_modem_path);
+			}
+		}
+
+		g_free(path);
 	}
 
 	notify_modems_changed(manager);
 
 done:
-	manager->modem_added_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-added",
-		G_CALLBACK(modem_added_cb), manager);
-
-	manager->modem_removed_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-removed",
-		G_CALLBACK(modem_removed_cb), manager);
+	return;
 }
 
 struct ofono_manager* ofono_manager_create(void)
@@ -136,6 +180,15 @@ struct ofono_manager* ofono_manager_create(void)
 		g_free(manager);
 		return NULL;
 	}
+
+	/* Subscribe before asking for the current list, or a modem registered
+	 * while the call is in flight is announced to nobody and never learned:
+	 * the reply predates it and the handler does not exist yet. */
+	manager->modem_added_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-added",
+		G_CALLBACK(modem_added_cb), manager);
+
+	manager->modem_removed_signal = g_signal_connect(G_OBJECT(manager->remote), "modem-removed",
+		G_CALLBACK(modem_removed_cb), manager);
 
 	ofono_interface_manager_call_get_modems(manager->remote, NULL, get_modems_cb, manager);
 
