@@ -31,7 +31,38 @@ struct ofono_base {
 	void *user_data;
 	gulong property_changed_signal;
 	struct ofono_base_funcs *funcs;
+	GCancellable *cancellable;
+	int ref_count;
+	gboolean dead;
 };
+
+/* An ofono interface can disappear while one of its D-Bus calls is still in
+ * flight: a PIN-locked modem publishes SimManager and VoiceCallManager only,
+ * and grows the rest of its interfaces the moment the PIN is accepted, so the
+ * objects backing them are created and destroyed as Interfaces changes arrive.
+ * The reply then landed on a freed base and dereferenced its funcs pointer,
+ * which killed telephonyd with SIGSEGV in get_properties_cb.
+ *
+ * Keep the base alive for as long as a call can still call back, and let the
+ * last one drop it. The cancellable makes the pending calls fail fast rather
+ * than waiting out the D-Bus timeout; the dead flag is what the callbacks
+ * check, since a cancelled call still gets its callback.
+ */
+static void ofono_base_ref(struct ofono_base *base)
+{
+	base->ref_count++;
+}
+
+static void ofono_base_unref(struct ofono_base *base)
+{
+	if (--base->ref_count > 0)
+		return;
+
+	if (base->cancellable)
+		g_object_unref(base->cancellable);
+
+	g_free(base);
+}
 
 static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
@@ -41,6 +72,12 @@ static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer 
 	gboolean success = FALSE;
 	GError *error = NULL;
 	struct ofono_error oerr;
+
+	if (base->dead) {
+		g_free(cbd);
+		ofono_base_unref(base);
+		return;
+	}
 
 	success = base->funcs->set_property_finish(base->remote, res, &error);
 	if (!success) {
@@ -53,6 +90,7 @@ static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer 
 	}
 
 	g_free(cbd);
+	ofono_base_unref(base);
 }
 
 void ofono_base_set_property(struct ofono_base *base, const gchar *name, GVariant *value,
@@ -61,7 +99,8 @@ void ofono_base_set_property(struct ofono_base *base, const gchar *name, GVarian
 	struct cb_data *cbd = cb_data_new(cb, user_data);
 	cbd->user = base;
 
-	base->funcs->set_property(base->remote, name, value, NULL, set_property_cb, cbd);
+	ofono_base_ref(base);
+	base->funcs->set_property(base->remote, name, value, base->cancellable, set_property_cb, cbd);
 }
 
 static void handle_get_properties_result(struct ofono_base *base, GVariant *properties)
@@ -83,14 +122,21 @@ static void get_properties_cb(GObject *source_object, GAsyncResult *res, gpointe
 	gboolean success = FALSE;
 	GVariant *properties = NULL;
 
+	if (base->dead) {
+		ofono_base_unref(base);
+		return;
+	}
+
 	success = base->funcs->get_properties_finish(base->remote, &properties, res, &error);
 	if (!success) {
 		g_warning("Failed to retrieve properties from base: %s", error->message);
 		g_error_free(error);
+		ofono_base_unref(base);
 		return;
 	}
 
 	handle_get_properties_result(base, properties);
+	ofono_base_unref(base);
 }
 
 static void property_changed_cb(void *object, const gchar *name, GVariant *value, gpointer user_data)
@@ -113,12 +159,15 @@ struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remot
 	base->remote = remote;
 	base->user_data = user_data;
 	base->funcs = funcs;
+	base->cancellable = g_cancellable_new();
+	base->ref_count = 1;
 
 	base->property_changed_signal = g_signal_connect(G_OBJECT(base->remote), "property-changed",
 		G_CALLBACK(property_changed_cb), base);
 
 	if (base->funcs->get_properties) {
-		base->funcs->get_properties(base->remote, NULL, get_properties_cb, base);
+		ofono_base_ref(base);
+		base->funcs->get_properties(base->remote, base->cancellable, get_properties_cb, base);
 	}
 	else {
 		base->funcs->get_properties_sync(base->remote, &properties, NULL, &error);
@@ -141,7 +190,10 @@ void ofono_base_free(struct ofono_base *base)
 
 	g_signal_handler_disconnect(G_OBJECT(base->remote), base->property_changed_signal);
 
-	g_free(base);
+	base->dead = TRUE;
+	g_cancellable_cancel(base->cancellable);
+
+	ofono_base_unref(base);
 }
 
 // vim:ts=4:sw=4:noexpandtab
