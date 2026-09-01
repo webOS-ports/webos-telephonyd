@@ -69,6 +69,8 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 bool _service_internal_send_sms_from_db_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_airplane_mode_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_airplane_mode_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 static LSMethod _telephony_service_methods[]  = {
 	{ "subscribe", _service_subscribe_cb },
@@ -106,6 +108,8 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "defaultSimQuery", _service_default_sim_query_cb },
 	{ "defaultSimSet", _service_default_sim_set_cb },
 	{ "simNameSet", _service_sim_name_set_cb },
+	{ "airplaneModeSet", _service_airplane_mode_set_cb },
+	{ "airplaneModeQuery", _service_airplane_mode_query_cb },
 	{ 0, 0 }
 };
 
@@ -223,6 +227,51 @@ void telephony_service_store_power_state_for_sim(int sim_id, bool power)
 	store_setting_object(TELEPHONY_SETTINGS_TYPE_SIM_POWER_STATE, parsed_obj);
 
 	j_release(&parsed_obj);
+}
+
+/**
+ * Airplane mode is stored on its own and layered over the per slot state, so
+ * that turning it off restores exactly the slots which were on before, rather
+ * than powering everything up.
+ */
+static bool retrieve_airplane_mode_from_settings(void)
+{
+	jvalue_ref parsed_obj = jinvalid();
+	jvalue_ref state_obj = NULL;
+	bool airplane_mode = false;
+
+	parsed_obj = load_setting_object(TELEPHONY_SETTINGS_TYPE_AIRPLANE_MODE);
+	if (jis_null(parsed_obj))
+		return false;
+
+	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("state"), &state_obj))
+		jboolean_get(state_obj, &airplane_mode);
+
+	j_release(&parsed_obj);
+
+	return airplane_mode;
+}
+
+void telephony_service_store_airplane_mode(bool airplane_mode)
+{
+	jvalue_ref obj = jobject_create();
+
+	jobject_put(obj, J_CSTR_TO_JVAL("state"), jboolean_create(airplane_mode));
+	store_setting_object(TELEPHONY_SETTINGS_TYPE_AIRPLANE_MODE, obj);
+
+	j_release(&obj);
+}
+
+/**
+ * The power state a slot should actually be in: what the user last asked for,
+ * unless airplane mode overrides it.
+ */
+bool telephony_service_effective_power_state(struct telephony_service *service, int sim_id)
+{
+	if (service->airplane_mode)
+		return false;
+
+	return retrieve_power_state_for_sim(sim_id);
 }
 
 static void load_default_sim_preferences(struct telephony_service *service)
@@ -817,7 +866,7 @@ static int configure_sim(struct telephony_service *service, int sim_id)
 		return -EINVAL;
 	}
 
-	power_state = retrieve_power_state_for_sim(sim_id);
+	power_state = telephony_service_effective_power_state(service, sim_id);
 
 	service->driver->power_set(service, sim_id, power_state, _service_initial_power_set_finish, service);
 
@@ -943,6 +992,8 @@ struct telephony_service* telephony_service_create()
 
 	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++)
 		service->default_sim[role] = -1;
+
+	service->airplane_mode = retrieve_airplane_mode_from_settings();
 
 	load_default_sim_preferences(service);
 	load_sim_names(service);

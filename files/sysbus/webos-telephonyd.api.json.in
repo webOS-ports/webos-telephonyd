@@ -82,10 +82,14 @@
         "com.palm.telephony/defaultSimQuery",
         "com.palm.telephony/defaultSimSet",
         "com.palm.telephony/simNameSet",
+        "com.palm.telephony/airplaneModeSet",
+        "com.palm.telephony/airplaneModeQuery",
         "com.webos.service.telephony/simListQuery",
         "com.webos.service.telephony/defaultSimQuery",
         "com.webos.service.telephony/defaultSimSet",
-        "com.webos.service.telephony/simNameSet"
+        "com.webos.service.telephony/simNameSet",
+        "com.webos.service.telephony/airplaneModeSet",
+        "com.webos.service.telephony/airplaneModeQuery"
     ],
     "telephony.query": [
         "com.palm.wan/getStatus",
@@ -120,7 +124,9 @@
         "com.webos.service.telephony/subscriberIdQuery",
         "com.palm.telephony/simListQuery",
         "com.palm.telephony/defaultSimQuery",
+        "com.palm.telephony/airplaneModeQuery",
         "com.webos.service.telephony/simListQuery",
-        "com.webos.service.telephony/defaultSimQuery"
+        "com.webos.service.telephony/defaultSimQuery",
+        "com.webos.service.telephony/airplaneModeQuery"
     ]
 }
