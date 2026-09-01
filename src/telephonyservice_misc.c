@@ -178,6 +178,17 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 		goto cleanup;
 	}
 
+	/*
+	 * Airplane mode owns the radios while it is on. Refuse rather than quietly
+	 * accepting and doing nothing, so a caller can tell the two apart; the
+	 * stored per slot state is left alone and takes effect again when airplane
+	 * mode is turned off.
+	 */
+	if (power && service->airplane_mode) {
+		luna_service_message_reply_custom_error(handle, message, "Airplane mode is enabled");
+		goto cleanup;
+	}
+
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("save"), &save_obj)) {
 		jboolean_get(save_obj, &should_save);
 		if (should_save) {
@@ -752,6 +763,197 @@ cleanup:
 
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------
+ * Airplane mode
+ *
+ * A persisted flag layered over the per slot power state rather than a
+ * rewrite of it: turning airplane mode off restores exactly the slots which
+ * were on beforehand, and a slot the user had deliberately switched off stays
+ * off. telephonyd owns this because it owns Modem.Online and reapplies it at
+ * startup; anything else driving the modem would disagree after a reboot.
+ * ------------------------------------------------------------------------ */
+
+struct airplane_mode_req {
+	struct telephony_service *service;
+	struct luna_service_req_data *req_data;
+	int pending;
+	bool failed;
+	bool target;
+};
+
+struct airplane_sim_req {
+	struct airplane_mode_req *parent;
+	int sim_id;
+};
+
+static void telephony_service_post_airplane_mode(struct telephony_service *service)
+{
+	jvalue_ref reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
+				jstring_create(service->airplane_mode ? "on" : "off"));
+
+	telephony_service_post_subscription(service, "airplaneModeQuery", reply_obj);
+
+	j_release(&reply_obj);
+}
+
+static void _airplane_mode_set_reply(struct airplane_mode_req *req)
+{
+	jvalue_ref reply_obj = jobject_create();
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(!req->failed));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
+				jstring_create(req->service->airplane_mode ? "on" : "off"));
+
+	if (req->failed)
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"),
+					jstring_create("Not every radio could be switched"));
+
+	if (!luna_service_message_validate_and_send(req->req_data->handle,
+												req->req_data->message, reply_obj))
+		luna_service_message_reply_error_internal(req->req_data->handle,
+												  req->req_data->message);
+
+	j_release(&reply_obj);
+	luna_service_req_data_free(req->req_data);
+	g_free(req);
+}
+
+static int _airplane_sim_power_set_finish(const struct telephony_error *error, void *data)
+{
+	struct airplane_sim_req *sreq = data;
+	struct airplane_mode_req *req = sreq->parent;
+	struct telephony_sim_state *sim;
+
+	if (error)
+		req->failed = true;
+
+	sim = telephony_service_sim_state(req->service, sreq->sim_id);
+	if (sim)
+		sim->power_off_pending = false;
+
+	g_free(sreq);
+
+	if (--req->pending > 0)
+		return 0;
+
+	_airplane_mode_set_reply(req);
+
+	return 0;
+}
+
+bool _service_airplane_mode_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct airplane_mode_req *req = NULL;
+	jvalue_ref parsed_obj = NULL;
+	jvalue_ref state_obj = NULL;
+	const char *payload;
+	bool airplane_mode;
+	int n;
+
+	if (!service->driver || !service->driver->power_set) {
+		g_warning("No implementation available for service airplaneModeSet API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		return true;
+	}
+
+	payload = LSMessageGetPayload(message);
+	parsed_obj = luna_service_message_parse_and_validate(payload);
+	if (jis_null(parsed_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		return true;
+	}
+
+	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("state"), &state_obj)) {
+		luna_service_message_reply_error_bad_json(handle, message);
+		goto cleanup;
+	}
+
+	if (jstring_equal2(state_obj, J_CSTR_TO_BUF("on")))
+		airplane_mode = true;
+	else if (jstring_equal2(state_obj, J_CSTR_TO_BUF("off")))
+		airplane_mode = false;
+	else {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
+
+	service->airplane_mode = airplane_mode;
+	telephony_service_store_airplane_mode(airplane_mode);
+
+	req = g_new0(struct airplane_mode_req, 1);
+	req->service = service;
+	req->req_data = luna_service_req_data_new(handle, message);
+	req->target = airplane_mode;
+	/*
+	 * Held while the calls below are still being issued, so that a driver
+	 * answering on the spot cannot make the count reach zero and reply before
+	 * the remaining slots have even been asked.
+	 */
+	req->pending = 1;
+
+	for (n = 0; n < telephony_service_get_sim_count(service); n++) {
+		struct telephony_sim_state *sim = telephony_service_sim_state(service, n);
+		struct airplane_sim_req *sreq;
+		bool wanted;
+
+		if (!sim || !sim->initialized)
+			continue;
+
+		wanted = telephony_service_effective_power_state(service, n);
+		if (sim->powered == wanted)
+			continue;
+
+		sim->power_off_pending = !wanted;
+
+		sreq = g_new0(struct airplane_sim_req, 1);
+		sreq->parent = req;
+		sreq->sim_id = n;
+
+		req->pending++;
+
+		service->driver->power_set(service, n, wanted,
+								   _airplane_sim_power_set_finish, sreq);
+	}
+
+	telephony_service_post_airplane_mode(service);
+
+	if (--req->pending == 0)
+		_airplane_mode_set_reply(req);
+
+cleanup:
+	if (!jis_null(parsed_obj))
+		j_release(&parsed_obj);
+
+	return true;
+}
+
+bool _service_airplane_mode_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	jvalue_ref reply_obj = NULL;
+	bool subscribed;
+
+	subscribed = luna_service_check_for_subscription_with_key(handle, message,
+															  "/airplaneModeQuery");
+
+	reply_obj = jobject_create();
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("state"),
+				jstring_create(service->airplane_mode ? "on" : "off"));
+
+	if (!luna_service_message_validate_and_send(handle, message, reply_obj))
+		luna_service_message_reply_error_internal(handle, message);
+
+	j_release(&reply_obj);
 
 	return true;
 }

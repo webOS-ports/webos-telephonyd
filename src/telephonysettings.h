@@ -30,6 +30,12 @@ enum telephony_settings_type {
 	TELEPHONY_SETTINGS_TYPE_DEFAULT_SIM,
 	/* user supplied slot labels: {"<iccid>":"<name>", ...} */
 	TELEPHONY_SETTINGS_TYPE_SIM_NAMES,
+	/*
+	 * Airplane mode: {"state":<bool>}. This is layered over the per slot power
+	 * state rather than replacing it - a slot the user switched off stays off
+	 * when airplane mode ends.
+	 */
+	TELEPHONY_SETTINGS_TYPE_AIRPLANE_MODE,
 	TELEPHONY_SETTINGS_TYPE_MAX
 };
 
