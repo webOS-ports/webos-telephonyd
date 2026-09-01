@@ -29,6 +29,7 @@ static const char *setting_keys[] = {
 	"telephonySimPowerState",
 	"telephonyDefaultSim",
 	"telephonySimNames",
+	"telephonyAirplaneMode",
 };
 
 char* telephony_settings_load(enum telephony_settings_type type)

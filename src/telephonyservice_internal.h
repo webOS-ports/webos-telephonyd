@@ -72,6 +72,11 @@ struct telephony_service {
 	gchar *default_sim_iccid[TELEPHONY_SIM_ROLE_MAX];
 	/* ICCID -> user supplied label, loaded from the settings store */
 	GHashTable *sim_names;
+	/*
+	 * Airplane mode. Persisted, and layered over the per slot power state: a
+	 * modem is online only when its own stored state says so AND this is off.
+	 */
+	bool airplane_mode;
 };
 
 int telephonyservice_common_finish(const struct telephony_error *error, void *data);
@@ -155,6 +160,8 @@ jvalue_ref telephony_service_build_default_sims(struct telephony_service *servic
 
 /* Remember the radio power state a slot should come up with after a restart. */
 void telephony_service_store_power_state_for_sim(int sim_id, bool power);
+void telephony_service_store_airplane_mode(bool airplane_mode);
+bool telephony_service_effective_power_state(struct telephony_service *service, int sim_id);
 
 /* Persist and apply a user supplied label for a slot. */
 bool telephony_service_set_sim_name(struct telephony_service *service, int sim_id, const char *name);
@@ -163,6 +170,8 @@ bool telephony_service_set_sim_name(struct telephony_service *service, int sim_i
 void telephony_service_add_sim_id(jvalue_ref reply_obj, int sim_id);
 
 /* Implemented in telephonyservice_simmgmt.c */
+bool _service_airplane_mode_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_airplane_mode_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_sim_list_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_default_sim_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_default_sim_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
