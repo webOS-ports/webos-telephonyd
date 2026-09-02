@@ -93,6 +93,26 @@ const char* wan_network_type_to_string(enum wan_network_type type)
 	return "none";
 }
 
+static const char* wan_error_to_string(int code)
+{
+	switch (code) {
+	case WAN_ERROR_NOT_IMPLEMENTED:
+		return "Not implemented";
+	case WAN_ERROR_INTERNAL:
+		return "Internal error";
+	case WAN_ERROR_INVALID_ARGUMENT:
+		return "Invalid argument";
+	case WAN_ERROR_NOT_AVAILABLE:
+		return "Not available";
+	case WAN_ERROR_ALREADY_INPROGRESS:
+		return "Already in progress";
+	default:
+		break;
+	}
+
+	return "Failed";
+}
+
 const char* wan_status_type_to_string(enum wan_status_type status)
 {
 	switch (status) {
@@ -418,17 +438,18 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 void _service_set_finish(const struct wan_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
-	struct wan_service *service = req_data->user_data;
 	jvalue_ref reply_obj = NULL;
-	const char *config_value = NULL;
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	if (!success) {
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
-		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
+		/* This used to answer errorCode 0 with an empty errorText, which told a
+		 * caller nothing about why its set was refused. */
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(error->code));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"),
+					jstring_create(wan_error_to_string(error->code)));
 	}
 
 	if(!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj)) {
