@@ -154,17 +154,20 @@ static jvalue_ref load_setting_object(enum telephony_settings_type type)
 	return parsed_obj;
 }
 
-static void store_setting_object(enum telephony_settings_type type, jvalue_ref obj)
+static bool store_setting_object(enum telephony_settings_type type, jvalue_ref obj)
 {
 	jschema_ref schema = NULL;
+	bool stored;
 
 	schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
 	if (!schema)
-		return;
+		return false;
 
-	telephony_settings_store(type, jvalue_tostring(obj, schema));
+	stored = telephony_settings_store(type, jvalue_tostring(obj, schema));
 
 	jschema_release(&schema);
+
+	return stored;
 }
 
 /**
@@ -212,10 +215,11 @@ static bool retrieve_power_state_for_sim(int sim_id)
 	return power_state;
 }
 
-void telephony_service_store_power_state_for_sim(int sim_id, bool power)
+bool telephony_service_store_power_state_for_sim(int sim_id, bool power)
 {
 	jvalue_ref parsed_obj = jinvalid();
 	char key[16];
+	bool stored;
 
 	parsed_obj = load_setting_object(TELEPHONY_SETTINGS_TYPE_SIM_POWER_STATE);
 	if (jis_null(parsed_obj))
@@ -224,9 +228,11 @@ void telephony_service_store_power_state_for_sim(int sim_id, bool power)
 	snprintf(key, sizeof(key), "%d", sim_id);
 	jobject_put(parsed_obj, jstring_create(key), jboolean_create(power));
 
-	store_setting_object(TELEPHONY_SETTINGS_TYPE_SIM_POWER_STATE, parsed_obj);
+	stored = store_setting_object(TELEPHONY_SETTINGS_TYPE_SIM_POWER_STATE, parsed_obj);
 
 	j_release(&parsed_obj);
+
+	return stored;
 }
 
 /**
@@ -252,14 +258,17 @@ static bool retrieve_airplane_mode_from_settings(void)
 	return airplane_mode;
 }
 
-void telephony_service_store_airplane_mode(bool airplane_mode)
+bool telephony_service_store_airplane_mode(bool airplane_mode)
 {
 	jvalue_ref obj = jobject_create();
+	bool stored;
 
 	jobject_put(obj, J_CSTR_TO_JVAL("state"), jboolean_create(airplane_mode));
-	store_setting_object(TELEPHONY_SETTINGS_TYPE_AIRPLANE_MODE, obj);
+	stored = store_setting_object(TELEPHONY_SETTINGS_TYPE_AIRPLANE_MODE, obj);
 
 	j_release(&obj);
+
+	return stored;
 }
 
 /**
