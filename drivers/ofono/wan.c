@@ -109,12 +109,44 @@ static void free_used_instances(struct ofono_wan_data *od)
 	}
 }
 
+/*
+ * Every path through set_configuration ends here exactly once: the caller in
+ * wanservice.c is holding an LSMessage that has to be answered, so a branch
+ * that quietly returns without calling back leaves the client waiting forever
+ * and leaks the request data.
+ */
+static void finish_set_configuration(struct cb_data *cbd, const struct wan_error *error)
+{
+	struct ofono_wan_data *od = cbd->user;
+	wan_result_cb cb = cbd->cb;
+
+	od->pending_configuration = NULL;
+
+	if (cb)
+		cb(error, cbd->data);
+
+	g_free(cbd);
+}
+
+static void finish_set_configuration_ok(struct cb_data *cbd)
+{
+	finish_set_configuration(cbd, NULL);
+}
+
+static void finish_set_configuration_error(struct cb_data *cbd, int code)
+{
+	struct wan_error error;
+
+	error.code = code;
+	finish_set_configuration(cbd, &error);
+}
+
+static void apply_pending_roamguard(struct cb_data *cbd);
+
 static void current_service_autoconnect_set_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_wan_data *od = cbd->user;
-	wan_result_cb cb = cbd->cb;
-	struct wan_error werror;
 	GError *error = 0;
 	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
@@ -124,57 +156,59 @@ static void current_service_autoconnect_set_cb(GObject *source, GAsyncResult *re
 				  od->current_service_path, error->message);
 		g_error_free(error);
 
-		werror.code = WAN_ERROR_FAILED;
-		cb(&werror, cbd->data);
-
-		goto cleanup;
+		finish_set_configuration_error(cbd, WAN_ERROR_FAILED);
+		return;
 	}
 
 	g_variant_unref(result);
 
-	cb(NULL, cbd->data);
-
-cleanup:
-	g_free(cbd);
+	/* A single set may carry both halves of the configuration. */
+	apply_pending_roamguard(cbd);
 }
 
 static void current_service_enabled_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct ofono_wan_data *od = cbd->user;
-	wan_result_cb cb = cbd->cb;
-	struct wan_error werror;
+	/* No pending configuration means this is the one off connect that
+	 * configures a cellular service the first time it shows up. */
+	bool enable_wanted = !od->pending_configuration || !od->pending_configuration->disablewan;
 	GError *error = 0;
 	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
 	GVariant *result = g_dbus_connection_call_finish(conn, res, &error);
 	if (error) {
 		g_warning("Failed to %s current cellular service %s: %s",
-				  (!od->pending_configuration || !od->pending_configuration->disablewan) ? "enable" : "disable",
+				  enable_wanted ? "enable" : "disable",
 				  od->current_service_path, error->message);
 		g_error_free(error);
 
-		if(cb) {
-			werror.code = WAN_ERROR_FAILED;
-			cb(&werror, cbd->data);
-		}
-
-		g_free(cbd);
+		finish_set_configuration_error(cbd, WAN_ERROR_FAILED);
 
 		return;
 	}
 
 	g_variant_unref(result);
 
+	/*
+	 * The follow up call gets the same cb_data as this one. It used to be
+	 * handed the driver data instead, which the AutoConnect callback then read
+	 * as a cb_data - so it called whatever pointer sat at the start of struct
+	 * ofono_wan_data. Setting disablewan took that path on every success.
+	 */
 	g_dbus_connection_call(conn, "net.connman", od->current_service_path,
 						   "net.connman.Service", "SetProperty",
-						   g_variant_new("(sv)", "AutoConnect", g_variant_new_boolean(!od->pending_configuration->disablewan)), NULL,
+						   g_variant_new("(sv)", "AutoConnect", g_variant_new_boolean(enable_wanted)), NULL,
 						   G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-						   current_service_autoconnect_set_cb, od);
+						   current_service_autoconnect_set_cb, cbd);
 }
 
+/*
+ * The cb_data carries the callback the whole sequence has to end on, so it is
+ * what gets passed down the chain; the callbacks below pick it up from there.
+ */
 static void switch_current_service_state(struct ofono_wan_data *od, bool enable,
-										 wan_result_cb cb, void *data)
+										 struct cb_data *cbd)
 {
 	GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
@@ -183,7 +217,7 @@ static void switch_current_service_state(struct ofono_wan_data *od, bool enable,
 	g_dbus_connection_call(conn, "net.connman", od->current_service_path,
 						   "net.connman.Service", enable ? "Connect" : "Disconnect", NULL, NULL,
 						   G_DBUS_CALL_FLAGS_NONE, -1, NULL,
-						   (GAsyncReadyCallback) current_service_enabled_cb, data);
+						   (GAsyncReadyCallback) current_service_enabled_cb, cbd);
 }
 
 static void context_prop_changed_cb(const char *name, void *data);
@@ -271,50 +305,51 @@ void ofono_wan_get_status(struct wan_service *service, wan_get_status_cb cb, voi
 	ofono_connection_manager_get_contexts(od->cm, get_contexts_cb, cbd);
 }
 
-static void roamguard_set_cb(const struct wan_error* error, void *data)
+/* Registered as an ofono_base_result_cb, so the error it gets is an ofono one:
+ * it used to be declared taking a struct wan_error and passed that straight on
+ * to the wan layer, which then read an ofono_error as if it were a wan_error. */
+static void roamguard_set_cb(struct ofono_error *error, void *data)
 {
 	struct cb_data *cbd = data;
-	struct ofono_wan_data *od = cbd->user;
-	wan_result_cb cb = cbd->cb;
 
-	if (error) {
-		cb(error, cbd->data);
-		goto cleanup;
-	}
-
-	od->pending_configuration = NULL;
-
-	cb(NULL, cbd->data);
-
-cleanup:
-	g_free(cbd);
+	if (error)
+		finish_set_configuration_error(cbd, WAN_ERROR_FAILED);
+	else
+		finish_set_configuration_ok(cbd);
 }
 
-static void disablewan_set_cb(struct ofono_error *error, void *data)
+/*
+ * Second half of a set: RoamingAllowed is a property of ofono's
+ * ConnectionManager and has nothing to do with the ConnMan cellular service
+ * the disablewan half drives, so it is applied on its own terms.
+ */
+static void apply_pending_roamguard(struct cb_data *cbd)
 {
-	struct cb_data *cbd = data;
 	struct ofono_wan_data *od = cbd->user;
-	wan_result_cb cb = cbd->cb;
-	struct wan_error werror;
+	struct wan_configuration *configuration = od->pending_configuration;
 
-	if (error) {
-		werror.code = WAN_ERROR_FAILED;
-		cb(&werror, cbd->data);
-		goto cleanup;
+	if (!configuration ||
+		!is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
+		finish_set_configuration_ok(cbd);
+		return;
 	}
 
-	if (is_flag_set(od->pending_configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
-		if (od->pending_configuration->roamguard == ofono_connection_manager_get_roaming_allowed(od->cm)) {
-			ofono_connection_manager_set_roaming_allowed(od->cm, !od->pending_configuration->roamguard,
-														 roamguard_set_cb, cbd);
-			return;
-		}
+	if (!od->cm) {
+		g_warning("[WAN] No connection manager to set the roam guard on");
+		finish_set_configuration_error(cbd, WAN_ERROR_NOT_AVAILABLE);
+		return;
 	}
 
-	cb(NULL, cbd->data);
+	/* Guarding against roaming is the opposite of allowing it, so these being
+	 * equal is what says the guard is not applied yet. */
+	if (configuration->roamguard != ofono_connection_manager_get_roaming_allowed(od->cm)) {
+		/* Already where the caller wants it. Still an answered request. */
+		finish_set_configuration_ok(cbd);
+		return;
+	}
 
-cleanup:
-	g_free(cbd);
+	ofono_connection_manager_set_roaming_allowed(od->cm, !configuration->roamguard,
+												 roamguard_set_cb, cbd);
 }
 
 void ofono_wan_set_configuration(struct wan_service *service, struct wan_configuration *configuration,
@@ -322,37 +357,33 @@ void ofono_wan_set_configuration(struct wan_service *service, struct wan_configu
 {
 	struct ofono_wan_data *od = wan_service_get_data(service);
 	struct cb_data *cbd = NULL;
-	struct wan_error error;
 
-	if (!od->current_service_path) {
-		error.code = WAN_ERROR_NOT_AVAILABLE;
-		cb(&error, data);
-		return;
-	}
+	cbd = cb_data_new(cb, data);
+	cbd->user = od;
 
 	od->pending_configuration = configuration;
 
-	if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_DISABLEWAN)) {
-		if (configuration->disablewan != od->wan_disabled) {
-			cbd = cb_data_new(cb, data);
-			cbd->user = od;
-
-			switch_current_service_state(od, !configuration->disablewan,
-										 disablewan_set_cb, cbd);
+	if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_DISABLEWAN) &&
+		configuration->disablewan != od->wan_disabled) {
+		/*
+		 * Only this half needs a ConnMan cellular service: it connects and
+		 * disconnects one. Refusing the whole call without it meant a plain
+		 * roamguard write was answered "not available" whenever no cellular
+		 * service was registered, which is most of the time on a device
+		 * running off WiFi.
+		 */
+		if (!od->current_service_path) {
+			finish_set_configuration_error(cbd, WAN_ERROR_NOT_AVAILABLE);
+			return;
 		}
-	}
-	else if (is_flag_set(configuration->flags, WAN_CONFIGURATION_TYPE_ROAMGUARD)) {
-		if (configuration->roamguard == ofono_connection_manager_get_roaming_allowed(od->cm)) {
-			cbd = cb_data_new(cb, data);
-			cbd->user = od;
 
-			ofono_connection_manager_set_roaming_allowed(od->cm, !configuration->roamguard,
-														 roamguard_set_cb, cbd);
-		}
+		switch_current_service_state(od, !configuration->disablewan, cbd);
+		return;
 	}
-	else {
-		cb (NULL, data);
-	}
+
+	/* Nothing to do for disablewan, so go straight to the roamguard half;
+	 * it answers the request whether or not it has anything to apply. */
+	apply_pending_roamguard(cbd);
 }
 
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
@@ -628,9 +659,9 @@ static void assign_current_cellular_service(struct ofono_wan_data *od, const gch
 				g_message("[WAN] Found a not yet configured cellular service; connecting to it for the first time");
 
 				struct cb_data *cbd = NULL;
-				cbd = cb_data_new(NULL, NULL);
+				cbd = cb_data_new(cellular_service_setup_cb, NULL);
 				cbd->user = od;
-				switch_current_service_state(od, true, cellular_service_setup_cb, cbd);
+				switch_current_service_state(od, true, cbd);
 			}
 		}
 
