@@ -192,14 +192,24 @@ bool _service_power_set_cb(LSHandle *handle, LSMessage *message, void *user_data
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("save"), &save_obj)) {
 		jboolean_get(save_obj, &should_save);
 		if (should_save) {
-			telephony_service_store_power_state_for_sim(sim_id, power);
+			/*
+			 * Saving here has always been best effort, so a failure does not
+			 * fail the call the way it does for airplaneModeSet - but it must
+			 * not pass unnoticed either, because the slot then comes back in
+			 * the opposite state after a reboot.
+			 */
+			if (!telephony_service_store_power_state_for_sim(sim_id, power))
+				g_warning("Failed to store power state for SIM %d; it will not survive a restart",
+						  sim_id);
 
 			/* Keep the legacy device wide setting in sync while the default
 			 * voice SIM is the one being switched, so that an older build
 			 * reading it back still sees something sensible. */
-			if (telephony_service_get_default_sim(service, TELEPHONY_SIM_ROLE_VOICE) == sim_id)
-				telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
-										 power ? "{\"state\":true}" : "{\"state\":false}");
+			if (telephony_service_get_default_sim(service, TELEPHONY_SIM_ROLE_VOICE) == sim_id) {
+				if (!telephony_settings_store(TELEPHONY_SETTINGS_TYPE_POWER_STATE,
+											  power ? "{\"state\":true}" : "{\"state\":false}"))
+					g_warning("Failed to store the device wide power state");
+			}
 		}
 	}
 
@@ -885,8 +895,21 @@ bool _service_airplane_mode_set_cb(LSHandle *handle, LSMessage *message, void *u
 		goto cleanup;
 	}
 
+	/*
+	 * Persist before applying. If the flag cannot be stored, the radios and
+	 * the stored state disagree at the next boot: the caller is told airplane
+	 * mode is off while configure_sim() faithfully powers the modem down again
+	 * on every boot. Refusing outright is far easier to recover from than a
+	 * device that keeps coming back with no cellular for no visible reason.
+	 */
+	if (!telephony_service_store_airplane_mode(airplane_mode)) {
+		g_warning("Failed to store airplane mode, not applying it");
+		luna_service_message_reply_custom_error(handle, message,
+												"Failed to store airplane mode");
+		goto cleanup;
+	}
+
 	service->airplane_mode = airplane_mode;
-	telephony_service_store_airplane_mode(airplane_mode);
 
 	req = g_new0(struct airplane_mode_req, 1);
 	req->service = service;
