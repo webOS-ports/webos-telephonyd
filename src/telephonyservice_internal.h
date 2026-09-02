@@ -159,8 +159,8 @@ jvalue_ref telephony_service_build_sim_list(struct telephony_service *service);
 jvalue_ref telephony_service_build_default_sims(struct telephony_service *service);
 
 /* Remember the radio power state a slot should come up with after a restart. */
-void telephony_service_store_power_state_for_sim(int sim_id, bool power);
-void telephony_service_store_airplane_mode(bool airplane_mode);
+bool telephony_service_store_power_state_for_sim(int sim_id, bool power);
+bool telephony_service_store_airplane_mode(bool airplane_mode);
 bool telephony_service_effective_power_state(struct telephony_service *service, int sim_id);
 
 /* Persist and apply a user supplied label for a slot. */
