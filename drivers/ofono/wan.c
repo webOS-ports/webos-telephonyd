@@ -772,7 +772,7 @@ static void connman_manager_get_services_cb(GObject *source, GAsyncResult *res, 
 
 	service_list = g_variant_get_child_value(response, 0);
 
-	g_message("[WAN] got %d services from connman", g_variant_n_children(service_list));
+	g_message("[WAN] got %" G_GSIZE_FORMAT " services from connman", g_variant_n_children(service_list));
 
 	update_from_service_list(od, service_list);
 }
