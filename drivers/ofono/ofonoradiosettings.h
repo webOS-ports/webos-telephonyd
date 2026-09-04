@@ -16,7 +16,7 @@
 *
 * LICENSE@@@ */
 
-#ifndef OFONO_RADIO_SETTING_H_
+#ifndef OFONO_RADIO_SETTINGS_H_
 #define OFONO_RADIO_SETTINGS_H_
 
 #include <glib.h>

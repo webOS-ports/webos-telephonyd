@@ -38,12 +38,12 @@ struct ofono_radio_settings {
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_radio_settings *ras = user_data;
-	char *technology_preference_str;
+	const char *technology_preference_str;
 
 	g_message("[RadioSettings:%s] property %s changed", ras->path, name);
 
 	if (g_str_equal(name, "TechnologyPreference")) {
-		technology_preference_str = g_variant_dup_string(value, NULL);
+		technology_preference_str = g_variant_get_string(value, NULL);
 
 		if (g_str_equal(technology_preference_str, "any"))
 			ras->technology_preference = OFONO_RADIO_ACCESS_MODE_ANY;
@@ -55,17 +55,15 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			ras->technology_preference = OFONO_RADIO_ACCESS_MODE_LTE;
 		else
 			ras->technology_preference = OFONO_RADIO_ACCESS_MODE_UNKNOWN;
-
-		g_free(technology_preference_str);
 	}
 }
 
 struct ofono_base_funcs ras_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_radio_settings_call_set_property,
-	.set_property_finish = ofono_interface_radio_settings_call_set_property_finish,
-	.get_properties = ofono_interface_radio_settings_call_get_properties,
-	.get_properties_finish = ofono_interface_radio_settings_call_get_properties_finish,
+	.set_property = (ofono_base_set_property_fn) ofono_interface_radio_settings_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_radio_settings_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_radio_settings_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_radio_settings_call_get_properties_finish,
 	.get_properties_sync = NULL,
 };
 
@@ -106,10 +104,11 @@ void ofono_radio_settings_free(struct ofono_radio_settings *ras)
 	if (ras->remote)
 		g_object_unref(ras->remote);
 
+	g_free(ras->path);
 	g_free(ras);
 }
 
-void set_technology_preference_cb(struct ofono_error *error, void *data)
+static void set_technology_preference_cb(struct ofono_error *error, void *data)
 {
 	struct cb_data *cbd = data;
 	ofono_base_result_cb cb = cbd->cb;
@@ -122,41 +121,42 @@ void ofono_radio_settings_set_technology_preference(struct ofono_radio_settings 
 													ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd = NULL;
-	char *mode_str;
+	const char *mode_str;
 	struct ofono_error error;
 	GVariant *value = NULL;
 
-	if (!ras)
+	if (!ras) {
+		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		error.message = "No radio settings available";
+		cb(&error, data);
 		return;
-
-	cbd = cb_data_new(cb, data);
+	}
 
 	switch (mode) {
 	case OFONO_RADIO_ACCESS_MODE_ANY:
-		mode_str = g_strdup("any");
+		mode_str = "any";
 		break;
 	case OFONO_RADIO_ACCESS_MODE_GSM:
-		mode_str = g_strdup("gsm");
+		mode_str = "gsm";
 		break;
 	case OFONO_RADIO_ACCESS_MODE_LTE:
-		mode_str = g_strdup("lte");
+		mode_str = "lte";
 		break;
 	case OFONO_RADIO_ACCESS_MODE_UMTS:
-		mode_str = g_strdup("umts");
+		mode_str = "umts";
 		break;
 	default:
 		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		error.message = "Unsupported technology preference";
 		cb(&error, data);
-		g_free(cbd);
 		return;
 	}
+
+	cbd = cb_data_new(cb, data);
 
 	value = g_variant_new_variant(g_variant_new_string(mode_str));
 	ofono_base_set_property(ras->base, "TechnologyPreference",
 							value, set_technology_preference_cb, cbd);
-	g_free(mode_str);
-
-	return;
 }
 
 enum ofono_radio_access_mode ofono_radio_settings_get_technology_preference(struct ofono_radio_settings *ras)
