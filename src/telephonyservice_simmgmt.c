@@ -133,6 +133,7 @@ bool _service_default_sim_set_cb(LSHandle *handle, LSMessage *message, void *use
 	const char *payload;
 	int role;
 	int sim_id;
+	int roles_to_set[TELEPHONY_SIM_ROLE_MAX];
 	bool any_set = false;
 
 	payload = LSMessageGetPayload(message);
@@ -142,7 +143,12 @@ bool _service_default_sim_set_cb(LSHandle *handle, LSMessage *message, void *use
 		return true;
 	}
 
+	/* Validate the whole request before applying any of it, so that e.g.
+	 * {"voice":0,"sms":9} cannot persist a new voice default and then fail;
+	 * a request either applies completely or not at all. */
 	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++) {
+		roles_to_set[role] = -1;
+
 		if (!jobject_get_exists(parsed_obj, j_cstr_to_buffer(telephony_sim_role_to_string(role)), &value_obj))
 			continue;
 
@@ -151,17 +157,23 @@ bool _service_default_sim_set_cb(LSHandle *handle, LSMessage *message, void *use
 			goto cleanup;
 		}
 
-		if (!telephony_service_set_default_sim(service, role, sim_id)) {
+		if (!telephony_service_sim_state(service, sim_id)) {
 			luna_service_message_reply_custom_error(handle, message, "Unknown SIM slot");
 			goto cleanup;
 		}
 
+		roles_to_set[role] = sim_id;
 		any_set = true;
 	}
 
 	if (!any_set) {
 		luna_service_message_reply_error_invalid_params(handle, message);
 		goto cleanup;
+	}
+
+	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++) {
+		if (roles_to_set[role] >= 0)
+			telephony_service_set_default_sim(service, role, roles_to_set[role]);
 	}
 
 	/* Everything that keyed off the old default has to be told about the swap. */

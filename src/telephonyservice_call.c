@@ -39,7 +39,7 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref block_id_obj = NULL;
 	const char *payload;
 	bool block_id = false;
-	raw_buffer number_buf;
+	raw_buffer number_buf = { 0 };
 
 	if (!service->driver || !service->driver->dial) {
 		g_warning("No implementation available for service dial API method");
@@ -64,6 +64,10 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	}
 
 	number_buf = jstring_get(number_obj);
+	if (!number_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -75,6 +79,8 @@ bool _service_dial_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	service->driver->dial(service, req_data->sim_id, number_buf.m_str, block_id, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (number_buf.m_str)
+		jstring_free_buffer(number_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -90,7 +96,7 @@ bool _service_answer_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	int call_id = 0;
 
-	if (!service->driver || !service->driver->dial) {
+	if (!service->driver || !service->driver->answer) {
 		g_warning("No implementation available for service answer API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
@@ -135,7 +141,7 @@ bool _service_ignore_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	int call_id = 0;
 
-	if (!service->driver || !service->driver->dial) {
+	if (!service->driver || !service->driver->ignore) {
 		g_warning("No implementation available for service ignore API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
@@ -180,7 +186,7 @@ bool _service_hangup_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	const char *payload;
 	int call_id = 0;
 
-	if (!service->driver || !service->driver->dial) {
+	if (!service->driver || !service->driver->hangup) {
 		g_warning("No implementation available for service hangup API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		goto cleanup;
