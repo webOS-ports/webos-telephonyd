@@ -48,10 +48,11 @@ void telephony_service_sim_status_notify(struct telephony_service *service, int 
 					sim_status != TELEPHONY_SIM_STATUS_SIM_INVALID);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	telephony_service_add_sim_id(reply_obj, sim_id);
+
+	extended_obj = jobject_create();
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("state"), jstring_create(telephony_sim_status_to_string(sim_status)));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
@@ -111,7 +112,6 @@ static int _service_sim_status_query_finish(const struct telephony_error *error,
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
@@ -122,6 +122,7 @@ static int _service_sim_status_query_finish(const struct telephony_error *error,
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
 			jstring_create(telephony_sim_status_to_string(sim_status)));
@@ -232,7 +233,7 @@ bool _service_pin2_status_query_cb(LSHandle *handle, LSMessage *message, void *u
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->driver || !service->driver->pin1_status_query) {
+	if (!service->driver || !service->driver->pin2_status_query) {
 		g_warning("No implementation available for service pin2StatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		return true;
@@ -258,7 +259,7 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer pin_buf;
+	raw_buffer pin_buf = { 0 };
 
 	if (!service->driver || !service->driver->pin1_verify) {
 		g_warning("No implementation available for service pin1Verify API method");
@@ -279,6 +280,10 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	pin_buf = jstring_get(pin_obj);
+	if (!pin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -289,6 +294,8 @@ bool _service_pin1_verify_cb(LSHandle *handle, LSMessage *message, void *user_da
 	service->driver->pin1_verify(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (pin_buf.m_str)
+		jstring_free_buffer(pin_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -308,7 +315,7 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer pin_buf;
+	raw_buffer pin_buf = { 0 };
 
 	if (!service->driver || !service->driver->pin1_enable) {
 		g_warning("No implementation available for service pin1Enable API method");
@@ -329,6 +336,10 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	pin_buf = jstring_get(pin_obj);
+	if (!pin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -339,6 +350,8 @@ bool _service_pin1_enable_cb(LSHandle *handle, LSMessage *message, void *user_da
 	service->driver->pin1_enable(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (pin_buf.m_str)
+		jstring_free_buffer(pin_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -358,7 +371,7 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer pin_buf;
+	raw_buffer pin_buf = { 0 };
 
 	if (!service->driver || !service->driver->pin1_disable) {
 		g_warning("No implementation available for service pin1Disable API method");
@@ -379,6 +392,10 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 	}
 
 	pin_buf = jstring_get(pin_obj);
+	if (!pin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -389,6 +406,8 @@ bool _service_pin1_disable_cb(LSHandle *handle, LSMessage *message, void *user_d
 	service->driver->pin1_disable(service, req_data->sim_id, pin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (pin_buf.m_str)
+		jstring_free_buffer(pin_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -409,7 +428,8 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer oldpin_buf, newpin_buf;
+	raw_buffer oldpin_buf = { 0 };
+	raw_buffer newpin_buf = { 0 };
 
 	if (!service->driver || !service->driver->pin1_change) {
 		g_warning("No implementation available for service pin1Change API method");
@@ -430,6 +450,10 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	oldpin_buf = jstring_get(pin_obj);
+	if (!oldpin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("newPin"), &pin_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
@@ -437,6 +461,10 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	}
 
 	newpin_buf = jstring_get(pin_obj);
+	if (!newpin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -447,6 +475,10 @@ bool _service_pin1_change_cb(LSHandle *handle, LSMessage *message, void *user_da
 	service->driver->pin1_change(service, req_data->sim_id, oldpin_buf.m_str, newpin_buf.m_str, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (oldpin_buf.m_str)
+		jstring_free_buffer(oldpin_buf);
+	if (newpin_buf.m_str)
+		jstring_free_buffer(newpin_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -467,7 +499,8 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 	jvalue_ref parsed_obj = NULL;
 	jvalue_ref pin_obj = NULL;
 	const char *payload;
-	raw_buffer puk_buf, newpin_buf;
+	raw_buffer puk_buf = { 0 };
+	raw_buffer newpin_buf = { 0 };
 
 	if (!service->driver || !service->driver->pin1_unblock) {
 		g_warning("No implementation available for service pin1Unblock API method");
@@ -488,6 +521,10 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 	}
 
 	puk_buf = jstring_get(pin_obj);
+	if (!puk_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	if (!jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("newPin"), &pin_obj)) {
 		luna_service_message_reply_error_bad_json(handle, message);
@@ -495,6 +532,10 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 	}
 
 	newpin_buf = jstring_get(pin_obj);
+	if (!newpin_buf.m_str) {
+		luna_service_message_reply_error_invalid_params(handle, message);
+		goto cleanup;
+	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
 															 TELEPHONY_SIM_ROLE_VOICE, true);
@@ -506,6 +547,10 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 								  telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (puk_buf.m_str)
+		jstring_free_buffer(puk_buf);
+	if (newpin_buf.m_str)
+		jstring_free_buffer(newpin_buf);
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -520,7 +565,6 @@ static int _service_fdn_status_query_finish(const struct telephony_error *error,
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
@@ -529,6 +573,7 @@ static int _service_fdn_status_query_finish(const struct telephony_error *error,
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create("success"));
 
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("enabled"), jboolean_create(status->enabled));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("permanentblock"), jboolean_create(status->permanent_block));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
@@ -569,7 +614,7 @@ bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *us
 	struct telephony_service *service = user_data;
 	struct luna_service_req_data *req_data = NULL;
 
-	if (!service->driver || !service->driver->pin1_status_query) {
+	if (!service->driver || !service->driver->fdn_status_query) {
 		g_warning("No implementation available for service fdnStatusQuery API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
 		return true;

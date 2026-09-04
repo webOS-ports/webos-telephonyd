@@ -88,6 +88,8 @@ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 
 		__terminated = 1;
 		break;
+	default:
+		break;
 	}
 
 	return TRUE;
@@ -144,8 +146,6 @@ int main(int argc, char **argv)
 	struct telephony_service *telservice;
 	struct wan_service *wanservice;
 
-	g_type_init();
-
 	g_log_set_handler (NULL, G_LOG_LEVEL_MASK, log_handler, NULL);
 
 	g_message("Telephony Interface Layer Daemon %s", VERSION);
@@ -200,7 +200,8 @@ int main(int argc, char **argv)
 
 	ofono_exit();
 
-	g_source_remove(signal);
+	if (signal > 0)
+		g_source_remove(signal);
 
 	g_main_loop_unref(event_loop);
 
