@@ -23,6 +23,7 @@
 #include <gio/gio.h>
 
 #include "utils.h"
+#include "timeutils.h"
 #include "ofonomessagemanager.h"
 #include "ofonomessage.h"
 #include "ofono-interface.h"
@@ -49,66 +50,11 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs mm_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_message_manager_call_set_property,
-	.set_property_finish = ofono_interface_message_manager_call_set_property_finish,
-	.get_properties = ofono_interface_message_manager_call_get_properties,
-	.get_properties_finish = ofono_interface_message_manager_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_message_manager_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_message_manager_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_message_manager_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_message_manager_call_get_properties_finish
 };
-
-/**
- * Taken from https://github.com/cmende/libmpdclient/blob/master/src/iso8601.c
- */
-static time_t timezone_offset(void)
-{
-	const time_t t0 = 1234567890;
-	time_t t = t0;
-	struct tm tm_buffer, *tm;
-
-	tm = gmtime_r(&t, &tm_buffer);
-	if (tm == NULL)
-		return 0;
-
-	/* force the daylight saving time to be off; gmtime_r() should
-	   have set this already */
-	tm->tm_isdst = 0;
-
-	t = mktime(tm);
-	if (t == -1)
-		return 0;
-
-	return t0 - t;
-}
-
-static time_t decode_iso8601_time(const char *str)
-{
-	struct tm t;
-	unsigned int offset = 0;
-
-	memset(&t, 0, sizeof(struct tm));
-
-	sscanf(str, "%4d-%2d-%2dT%2d:%2d:%2d+%4u",
-		   &t.tm_year, &t.tm_mon, &t.tm_mday,
-		   &t.tm_hour, &t.tm_min, &t.tm_sec,
-		   &offset);
-
-	t.tm_year = abs(t.tm_year - 1900);
-
-	if (t.tm_mon > 0)
-		t.tm_mon -= 1;
-	if (t.tm_hour > 0)
-		t.tm_hour -= 1;
-	if (t.tm_min > 0)
-		t.tm_min -= 1;
-	if (t.tm_sec > 0)
-		t.tm_sec -= 1;
-
-	t.tm_isdst = 0;
-
-	time_t tres = mktime(&t);
-
-	return tres + timezone_offset();
-}
-
 
 static void incoming_message_cb(OfonoInterfaceMessageManager *source, gchar *text, GVariant *properties, gpointer user_data)
 {
@@ -137,11 +83,11 @@ static void incoming_message_cb(OfonoInterfaceMessageManager *source, gchar *tex
 			ofono_message_set_sender(message, g_variant_get_string(property_value, NULL));
 		}
 		else if (g_strcmp0(property_name, "SentTime") == 0) {
-			time_t sent_time = decode_iso8601_time(g_variant_get_string(property_value, NULL));
+			time_t sent_time = telephony_decode_iso8601_time(g_variant_get_string(property_value, NULL));
 			ofono_message_set_sent_time(message, sent_time);
 		}
 		else if (g_strcmp0(property_name, "LocalSentTime") == 0) {
-			time_t local_sent_time = decode_iso8601_time(g_variant_get_string(property_value, NULL));
+			time_t local_sent_time = telephony_decode_iso8601_time(g_variant_get_string(property_value, NULL));
 			ofono_message_set_local_sent_time(message, local_sent_time);
 		}
 	}
@@ -183,12 +129,18 @@ void ofono_message_manager_free(struct ofono_message_manager *manager)
 	if (!manager)
 		return;
 
+	/* In-flight async replies still hold a proxy ref, so the signal
+	 * handler does not die with our unref below and must go explicitly. */
+	if (manager->remote)
+		g_signal_handlers_disconnect_by_data(manager->remote, manager);
+
 	if (manager->base)
 		ofono_base_free(manager->base);
 
 	if (manager->remote)
 		g_object_unref(manager->remote);
 
+	g_free(manager->path);
 	g_free(manager);
 }
 
@@ -215,14 +167,16 @@ void ofono_message_manager_set_incoming_message_callback(struct ofono_message_ma
 static void send_message_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_message_manager *manager = cbd->user;
 	ofono_message_manager_send_message_cb cb = cbd->cb;
 	struct ofono_error oerr;
 	GError *error = NULL;
 	gboolean success = FALSE;
 	gchar *path = NULL;
 
-	success = ofono_interface_message_manager_call_send_message_finish(manager->remote, &path, res, &error);
+	/* Finish against the proxy GIO hands back; the manager can already be
+	 * gone when the reply lands. */
+	success = ofono_interface_message_manager_call_send_message_finish(
+		OFONO_INTERFACE_MESSAGE_MANAGER(source), &path, res, &error);
 	if (!success) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -232,6 +186,7 @@ static void send_message_cb(GObject *source, GAsyncResult *res, gpointer user_da
 	}
 
 	cb(NULL, path, cbd->data);
+	g_free(path);
 
 cleanup:
 	g_free(cbd);
@@ -244,14 +199,14 @@ void ofono_message_manager_send_message(struct ofono_message_manager *manager, c
 	struct cb_data *cbd;
 	struct ofono_error error;
 
-	g_message("[MessageManager:%s] sending SMS to '%s'' with text '%s'", manager->path, to, text);
-
 	if (!manager) {
 		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
-		error.message = NULL;
+		error.message = "No message manager available";
 		cb(&error, NULL, data);
 		return;
 	}
+
+	g_message("[MessageManager:%s] sending SMS to '%s'", manager->path, to);
 
 	cbd = cb_data_new(cb, data);
 	cbd->user = manager;
