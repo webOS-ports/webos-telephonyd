@@ -64,8 +64,8 @@ struct ofono_base_funcs watch_base_funcs = {
 	.update_property = update_property,
 	.set_property = NULL,
 	.set_property_finish = NULL,
-	.get_properties = ofono_interface_message_call_get_properties,
-	.get_properties_finish = ofono_interface_message_manager_call_get_properties_finish
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_message_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_message_call_get_properties_finish
 };
 
 struct ofono_message_watch* ofono_message_watch_create(const char *path)
@@ -103,6 +103,7 @@ void ofono_message_watch_free(struct ofono_message_watch *watch)
 	if (watch->remote)
 		g_object_unref(watch->remote);
 
+	g_free(watch->path);
 	g_free(watch);
 }
 
