@@ -129,9 +129,8 @@ const gchar* ofono_sim_pin_to_string(enum ofono_sim_pin type)
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_sim_manager *sim = user_data;
-	gchar *pin_type_str = NULL;
 	gchar *subscriber_number = NULL;
-	int n;
+	gsize n;
 	GVariant *child, *prop_value, *prop_key;
 	enum ofono_sim_pin pin_type;
 
@@ -140,19 +139,21 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	if (g_str_equal(name, "Present"))
 		sim->present = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "PinRequired")) {
-		pin_type_str = g_variant_dup_string(value, NULL);
-		sim->pin_required = parse_ofono_sim_pin_type(pin_type_str);
-		g_free(pin_type_str);
+		sim->pin_required = parse_ofono_sim_pin_type(g_variant_get_string(value, NULL));
 	}
 	else if (g_str_equal(name, "LockedPins")) {
+		/* The property carries the full list, so a pin missing from it is
+		 * no longer locked and its flag has to be dropped here. */
+		memset(sim->locked_pins, 0, sizeof(sim->locked_pins));
+
 		for (n = 0; n < g_variant_n_children(value); n++) {
 			child = g_variant_get_child_value(value, n);
 
-			pin_type_str = g_variant_dup_string(child, NULL);
-			pin_type = parse_ofono_sim_pin_type(pin_type_str);
-			g_free(pin_type_str);
+			pin_type = parse_ofono_sim_pin_type(g_variant_get_string(child, NULL));
+			if (pin_type != OFONO_SIM_PIN_TYPE_INVALID)
+				sim->locked_pins[pin_type] = true;
 
-			sim->locked_pins[pin_type] = (pin_type != OFONO_SIM_PIN_TYPE_INVALID);
+			g_variant_unref(child);
 		}
 	}
 	else if (g_str_equal(name, "Retries")) {
@@ -164,11 +165,13 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			prop_key = g_variant_get_child_value(child, 0);
 			prop_value = g_variant_get_child_value(child, 1);
 
-			pin_type_str = g_variant_dup_string(prop_key, NULL);
-			pin_type = parse_ofono_sim_pin_type(pin_type_str);
-			g_free(pin_type_str);
+			pin_type = parse_ofono_sim_pin_type(g_variant_get_string(prop_key, NULL));
+			if (pin_type != OFONO_SIM_PIN_TYPE_INVALID)
+				sim->pin_retries[pin_type] = (int) g_variant_get_byte(prop_value);
 
-			sim->pin_retries[pin_type] = (int) g_variant_get_byte(prop_value);
+			g_variant_unref(prop_key);
+			g_variant_unref(prop_value);
+			g_variant_unref(child);
 		}
 	}
 	else if (g_str_equal(name, "FixedDialing")) {
@@ -204,6 +207,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 			child = g_variant_get_child_value(value, n);
 			subscriber_number = g_variant_dup_string(child, NULL);
 			sim->subscriber_numbers = g_slist_append(sim->subscriber_numbers, subscriber_number);
+			g_variant_unref(child);
 		}
 	}
 
@@ -213,10 +217,10 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs sim_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_sim_manager_call_set_property,
-	.set_property_finish = ofono_interface_sim_manager_call_set_property_finish,
-	.get_properties = ofono_interface_sim_manager_call_get_properties,
-	.get_properties_finish = ofono_interface_sim_manager_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_sim_manager_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_sim_manager_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_sim_manager_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_sim_manager_call_get_properties_finish
 };
 
 struct ofono_sim_manager* ofono_sim_manager_create(const gchar *path)
@@ -285,6 +289,12 @@ void ofono_sim_manager_free(struct ofono_sim_manager *sim)
 	if (sim->remote)
 		g_object_unref(sim->remote);
 
+	g_slist_free_full(sim->subscriber_numbers, g_free);
+	g_free(sim->path);
+	g_free(sim->mcc);
+	g_free(sim->mnc);
+	g_free(sim->subscriber_identity);
+	g_free(sim->card_identifier);
 	g_free(sim);
 }
 
@@ -293,14 +303,16 @@ static void common_pin_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	struct cb_data *cbd = user_data;
 	struct cb_data *cbd2 = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
-	struct ofono_sim_manager *sim = cbd2->data;
 	glib_common_async_finish_cb finish_cb = cbd2->cb;
 	struct ofono_error oerr;
 	gboolean success;
 	GError *error = NULL;
 
-	success = finish_cb(sim->remote, res, &error);
+	/* Finish against the proxy GIO hands back; the SIM manager can already
+	 * be gone when the reply lands (interfaces regrow on PIN unlock). */
+	success = finish_cb(source_object, res, &error);
 	if (!success) {
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -317,9 +329,12 @@ void ofono_sim_manager_enter_pin(struct ofono_sim_manager *sim, enum ofono_sim_p
 						ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
 	if (!sim) {
-		cb(NULL, data);
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No SIM manager available";
+		cb(&oerr, data);
 		return;
 	}
 
@@ -334,9 +349,12 @@ void ofono_sim_manager_lock_pin(struct ofono_sim_manager *sim, enum ofono_sim_pi
 						ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
 	if (!sim) {
-		cb(NULL, data);
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No SIM manager available";
+		cb(&oerr, data);
 		return;
 	}
 
@@ -351,9 +369,12 @@ void ofono_sim_manager_unlock_pin(struct ofono_sim_manager *sim, enum ofono_sim_
 						ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
 	if (!sim) {
-		cb(NULL, data);
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No SIM manager available";
+		cb(&oerr, data);
 		return;
 	}
 
@@ -369,9 +390,12 @@ void ofono_sim_manager_change_pin(struct ofono_sim_manager *sim, enum ofono_sim_
 						const gchar *new_pin, ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
 	if (!sim) {
-		cb(NULL, data);
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No SIM manager available";
+		cb(&oerr, data);
 		return;
 	}
 
@@ -386,9 +410,12 @@ void ofono_sim_manager_reset_pin(struct ofono_sim_manager *sim, enum ofono_sim_p
 						const gchar *new_pin, ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
 	if (!sim) {
-		cb(NULL, data);
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No SIM manager available";
+		cb(&oerr, data);
 		return;
 	}
 
