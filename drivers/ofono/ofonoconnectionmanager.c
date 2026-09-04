@@ -31,7 +31,9 @@ struct ofono_connection_manager {
 	gchar *path;
 	OfonoInterfaceConnectionManager *remote;
 	struct ofono_base *base;
+	GCancellable *cancellable;
 	int ref_count;
+	gboolean contexts_fetched;
 	bool attached;
 	bool powered;
 	bool suspended;
@@ -90,11 +92,16 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs cm_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_connection_manager_call_set_property,
-	.set_property_finish = ofono_interface_connection_manager_call_set_property_finish,
-	.get_properties = ofono_interface_connection_manager_call_get_properties,
-	.get_properties_finish = ofono_interface_connection_manager_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_connection_manager_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_connection_manager_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_connection_manager_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_connection_manager_call_get_properties_finish
 };
+
+static void context_added_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
+							 GVariant *properties, gpointer user_data);
+static void context_removed_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
+							   gpointer user_data);
 
 struct ofono_connection_manager* ofono_connection_manager_create(const gchar *path)
 {
@@ -115,7 +122,15 @@ struct ofono_connection_manager* ofono_connection_manager_create(const gchar *pa
 	}
 
 	cm->path = g_strdup(path);
+	cm->cancellable = g_cancellable_new();
 	cm->base = ofono_base_create(&cm_base_funcs, cm->remote, cm);
+
+	/* Connect once here; connecting from get_contexts_cb stacked one handler
+	 * per GetContexts round trip since an empty context list is re-queried. */
+	g_signal_connect(G_OBJECT(cm->remote), "context-added",
+		G_CALLBACK(context_added_cb), cm);
+	g_signal_connect(G_OBJECT(cm->remote), "context-removed",
+		G_CALLBACK(context_removed_cb), cm);
 
 	return cm;
 }
@@ -144,12 +159,22 @@ void ofono_connection_manager_free(struct ofono_connection_manager *cm)
 	if (!cm)
 		return;
 
+	/* In-flight async replies still hold a proxy ref, so the signal
+	 * handlers do not die with our unref below and must go explicitly. */
+	if (cm->remote)
+		g_signal_handlers_disconnect_by_data(cm->remote, cm);
+
+	g_cancellable_cancel(cm->cancellable);
+	g_object_unref(cm->cancellable);
+
 	if (cm->base)
 		ofono_base_free(cm->base);
 
 	if (cm->remote)
 		g_object_unref(cm->remote);
 
+	g_slist_free_full(cm->contexts, (GDestroyNotify) ofono_connection_context_free);
+	g_free(cm->path);
 	g_free(cm);
 }
 
@@ -173,16 +198,18 @@ void ofono_connection_manager_register_contexts_changed_cb(struct ofono_connecti
 	cm->contexts_changed_data = data;
 }
 
-void deactivate_all_cb(GObject *source, GAsyncResult *res, gpointer user_data)
+static void deactivate_all_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_connection_manager *cm = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	struct ofono_error oerr;
 	gboolean success = FALSE;
-	GError *error;
+	GError *error = NULL;
 
-	success = ofono_interface_connection_manager_call_deactivate_all_finish(cm->remote, res, &error);
+	/* Finish against the proxy GIO hands back; the manager can already be
+	 * gone when the reply lands. */
+	success = ofono_interface_connection_manager_call_deactivate_all_finish(
+		OFONO_INTERFACE_CONNECTION_MANAGER(source), res, &error);
 	if (!success) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -204,7 +231,7 @@ void ofono_connection_manager_deactivate_all(struct ofono_connection_manager *cm
 
 	if (!cm) {
 		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
-		error.message = NULL;
+		error.message = "No connection manager available";
 		cb(&error, data);
 		return;
 	}
@@ -259,11 +286,24 @@ static void context_removed_cb(OfonoInterfaceConnectionManager *source, const gc
 	if (removable) {
 		context = removable->data;
 		ofono_connection_context_free(context);
-		cm->contexts = g_slist_remove(cm->contexts, removable);
+		/* g_slist_remove() matches on data; removable is the link itself */
+		cm->contexts = g_slist_delete_link(cm->contexts, removable);
 	}
 
 	if (cm->contexts_changed_cb)
 		cm->contexts_changed_cb(cm->contexts_changed_data);
+}
+
+static gboolean connection_manager_has_context(struct ofono_connection_manager *cm, const char *path)
+{
+	GSList *iter;
+
+	for (iter = cm->contexts; iter != NULL; iter = g_slist_next(iter)) {
+		if (g_strcmp0(ofono_connection_context_get_path(iter->data), path) == 0)
+			return TRUE;
+	}
+
+	return FALSE;
 }
 
 static void get_contexts_cb(GObject *source, GAsyncResult *res, gpointer user_data)
@@ -274,17 +314,21 @@ static void get_contexts_cb(GObject *source, GAsyncResult *res, gpointer user_da
 	struct ofono_error oerr;
 	GError *error = NULL;
 	gboolean success = FALSE;
-	GVariant *contexts_v, *context_v, *path_v;
+	GVariant *contexts_v = NULL, *context_v, *path_v;
 	const char *path = NULL;
-	int n;
+	gsize n;
 	struct ofono_connection_context *context;
 
-	success = ofono_interface_connection_manager_call_get_contexts_finish(cm->remote, &contexts_v,
-																		  res, &error);
+	success = ofono_interface_connection_manager_call_get_contexts_finish(
+		OFONO_INTERFACE_CONNECTION_MANAGER(source), &contexts_v, res, &error);
 	if (!success) {
+		/* This covers cancellation (the object being freed mid-flight):
+		 * the caller is always answered so pending requests further up
+		 * are released, not leaked. Cancelled errors must not touch cm. */
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, NULL, cbd->data);
+		g_error_free(error);
 		goto cleanup;
 	}
 
@@ -293,16 +337,18 @@ static void get_contexts_cb(GObject *source, GAsyncResult *res, gpointer user_da
 		path_v = g_variant_get_child_value(context_v, 0);
 		path = g_variant_get_string(path_v, NULL);
 
-		context = ofono_connection_context_create(path);
+		/* The context-added signal can have raced us here */
+		if (!connection_manager_has_context(cm, path)) {
+			context = ofono_connection_context_create(path);
+			if (context)
+				cm->contexts = g_slist_append(cm->contexts, context);
+		}
 
-		cm->contexts = g_slist_append(cm->contexts, context);
+		g_variant_unref(path_v);
+		g_variant_unref(context_v);
 	}
 
-	/* As we're not called a second time connect here to any possible context updates */
-	g_signal_connect(G_OBJECT(cm->remote), "context-added",
-		G_CALLBACK(context_added_cb), cm);
-	g_signal_connect(G_OBJECT(cm->remote), "context-removed",
-		G_CALLBACK(context_removed_cb), cm);
+	g_variant_unref(contexts_v);
 
 	cb(NULL, cm->contexts, cbd->data);
 
@@ -317,21 +363,24 @@ void ofono_connection_manager_get_contexts(struct ofono_connection_manager *cm, 
 
 	if (!cm) {
 		error.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
-		error.message = NULL;
+		error.message = "No connection manager available";
 		cb(&error, NULL, data);
 		return;
 	}
 
-	/* Not the first time, so just return known contexts */
-	if (g_slist_length(cm->contexts) > 0) {
+	/* Not the first time, so just return known contexts; the signal handlers
+	 * connected in create keep the list current from here on */
+	if (cm->contexts_fetched) {
 		cb(NULL, cm->contexts, data);
 		return;
 	}
 
+	cm->contexts_fetched = TRUE;
+
 	cbd = cb_data_new(cb, data);
 	cbd->user = cm;
 
-	ofono_interface_connection_manager_call_get_contexts(cm->remote, NULL, get_contexts_cb, cbd);
+	ofono_interface_connection_manager_call_get_contexts(cm->remote, cm->cancellable, get_contexts_cb, cbd);
 }
 
 bool ofono_connection_manager_get_attached(struct ofono_connection_manager *cm)
@@ -374,7 +423,7 @@ bool ofono_connection_manager_get_roaming_allowed(struct ofono_connection_manage
 	return cm->roaming_allowed;
 }
 
-void set_roaming_allowed_cb(struct ofono_error *error, void *data)
+static void set_roaming_allowed_cb(struct ofono_error *error, void *data)
 {
 	if (!data)
 		return;
@@ -391,6 +440,14 @@ void ofono_connection_manager_set_roaming_allowed(struct ofono_connection_manage
 {
 	struct cb_data *cbd;
 	GVariant *value;
+	struct ofono_error oerr;
+
+	if (!cm) {
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No connection manager available";
+		cb(&oerr, data);
+		return;
+	}
 
 	cbd = cb_data_new(cb, data);
 

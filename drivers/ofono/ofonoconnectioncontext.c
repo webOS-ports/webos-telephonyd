@@ -140,10 +140,10 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs ctx_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_connection_context_call_set_property,
-	.set_property_finish = ofono_interface_connection_context_call_set_property_finish,
-	.get_properties = ofono_interface_connection_context_call_get_properties,
-	.get_properties_finish = ofono_interface_connection_context_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_connection_context_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_connection_context_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_connection_context_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_connection_context_call_get_properties_finish
 };
 
 struct ofono_connection_context* ofono_connection_context_create(const gchar *path)
@@ -261,9 +261,25 @@ const char* ofono_connection_context_get_access_point_name(struct ofono_connecti
 	return ctx->access_point_name;
 }
 
+
+/* None of the setters below are implemented yet; answer the caller instead
+ * of leaving the request waiting for a callback that never comes. */
+static void reply_not_implemented(ofono_base_result_cb cb, void *data)
+{
+	struct ofono_error err;
+
+	if (!cb)
+		return;
+
+	err.type = OFONO_ERROR_TYPE_NOT_IMPLEMENTED;
+	err.message = "Not implemented";
+	cb(&err, data);
+}
+
 void ofono_connection_context_set_access_point_name(struct ofono_connection_context *ctx,
 													ofono_base_result_cb cb, void *data)
 {
+	reply_not_implemented(cb, data);
 }
 
 enum ofono_connection_context_type ofono_connection_context_get_type(struct ofono_connection_context *ctx)
@@ -276,7 +292,7 @@ enum ofono_connection_context_type ofono_connection_context_get_type(struct ofon
 
 void ofono_connection_context_set_type(struct ofono_connection_context *ctx,
 					enum ofono_connection_context_type type, ofono_base_result_cb cb, void *data)
-{
+{	reply_not_implemented(cb, data);
 }
 
 const char* ofono_connection_context_get_username(struct ofono_connection_context *ctx)
@@ -289,7 +305,7 @@ const char* ofono_connection_context_get_username(struct ofono_connection_contex
 
 void ofono_connection_context_set_username(struct ofono_connection_context *ctx,
 										   const char *username, ofono_base_result_cb cb, void *data)
-{
+{	reply_not_implemented(cb, data);
 }
 
 const char* ofono_connection_context_get_password(struct ofono_connection_context *ctx)
@@ -302,7 +318,7 @@ const char* ofono_connection_context_get_password(struct ofono_connection_contex
 
 void ofono_connection_context_set_password(struct ofono_connection_context *ctx,
 										   const char *password, ofono_base_result_cb cb, void *data)
-{
+{	reply_not_implemented(cb, data);
 }
 
 enum ofono_connection_context_protocol ofono_connection_context_get_protocol(
@@ -317,7 +333,7 @@ enum ofono_connection_context_protocol ofono_connection_context_get_protocol(
 void ofono_connection_context_set_protocol(struct ofono_connection_context *ctx,
 										   enum ofono_connection_context_protocol protocol,
 										   ofono_base_result_cb cb, void *data)
-{
+{	reply_not_implemented(cb, data);
 }
 
 const char* ofono_connection_context_get_name(struct ofono_connection_context *ctx)
@@ -330,7 +346,7 @@ const char* ofono_connection_context_get_name(struct ofono_connection_context *c
 
 void ofono_connection_context_set_name(struct ofono_connection_context *ctx, const char *name,
 									   ofono_base_result_cb cb, void *data)
-{
+{	reply_not_implemented(cb, data);
 }
 
 const char* ofono_connection_context_get_address(struct ofono_connection_context *ctx)
