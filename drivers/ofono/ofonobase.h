@@ -41,20 +41,31 @@ typedef void (*ofono_base_cb)(void *data);
 typedef void (*ofono_base_result_cb)(struct ofono_error *error, void *data);
 typedef void (*ofono_property_changed_cb)(const gchar *name, void *data);
 
+/* The generated gdbus-codegen functions take their own proxy type as first
+ * argument while these vtable slots take void*; initializers cast through
+ * these typedefs, which modern compilers otherwise reject as incompatible. */
+typedef gboolean (*ofono_base_set_property_finish_fn)(void *proxy, GAsyncResult *res,
+	GError **error);
+typedef void (*ofono_base_set_property_fn)(void *proxy, const gchar *arg_property,
+	GVariant *arg_value, GCancellable *cancellable, GAsyncReadyCallback callback,
+	gpointer user_data);
+typedef void (*ofono_base_get_properties_fn)(void *proxy, GCancellable *cancellable,
+	GAsyncReadyCallback callback, gpointer user_data);
+typedef gboolean (*ofono_base_get_properties_finish_fn)(void *proxy,
+	GVariant **out_unnamed_arg0, GAsyncResult *res, GError **error);
+typedef gboolean (*ofono_base_get_properties_sync_fn)(void *proxy, GVariant **result,
+	GCancellable *cancellable, GError **error);
+
 struct ofono_base_funcs {
 	void (*update_property)(const gchar *name, GVariant *value, void *user_data);
 
-	gboolean (*set_property_finish)(void *proxy, GAsyncResult *res, GError **error);
-	void (*set_property)(void *proxy, const gchar *arg_property, GVariant *arg_value,
-		GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
+	ofono_base_set_property_finish_fn set_property_finish;
+	ofono_base_set_property_fn set_property;
 
-	void (*get_properties)(void *proxy, GCancellable *cancellable,
-		GAsyncReadyCallback callback, gpointer user_data);
-	gboolean (*get_properties_finish)(void *proxy, GVariant **out_unnamed_arg0,
-		GAsyncResult *res, GError **error);
+	ofono_base_get_properties_fn get_properties;
+	ofono_base_get_properties_finish_fn get_properties_finish;
 
-	void (*get_properties_sync)(void *proxy, GVariant **result,
-								GCancellable *cancellable, GError **error);
+	ofono_base_get_properties_sync_fn get_properties_sync;
 };
 
 struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remote, void *user_data);
