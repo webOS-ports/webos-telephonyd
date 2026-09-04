@@ -1119,7 +1119,20 @@ void ofono_dial(struct telephony_service *service, int sim_id, const char *numbe
 		dial_cb, cbd);
 }
 
-static void answer_call_cb(struct ofono_error *error, void *data)
+/**
+ * answer/ignore/hangup share one flow: fetch the call list, pick the call
+ * the operation applies to, run it. The service API carries no usable call
+ * id, so the target is chosen by state - the single-call case, which is
+ * all this driver handles elsewhere too.
+ */
+enum call_op {
+	CALL_OP_ANSWER = 0,
+	/* reject the ringing call; ofono has no way to only silence it */
+	CALL_OP_IGNORE,
+	CALL_OP_HANGUP,
+};
+
+static void call_op_result_cb(struct ofono_error *error, void *data)
 {
 	struct cb_data *cbd = data;
 	telephony_result_cb cb = cbd->cb;
@@ -1136,13 +1149,48 @@ static void answer_call_cb(struct ofono_error *error, void *data)
 	g_free(cbd);
 }
 
-static void answer_get_calls_cb(const struct ofono_error *error, GList *calls, void *data)
+static struct ofono_voicecall* find_ringing_call(GList *calls)
+{
+	GList *iter;
+
+	for (iter = calls; iter != NULL; iter = g_list_next(iter)) {
+		enum ofono_voicecall_state state = ofono_voicecall_get_state(iter->data);
+
+		if (state == OFONO_VOICECALL_STATE_INCOMING ||
+			state == OFONO_VOICECALL_STATE_WAITING)
+			return iter->data;
+	}
+
+	return NULL;
+}
+
+static struct ofono_voicecall* find_live_call(GList *calls)
+{
+	GList *iter;
+	struct ofono_voicecall *fallback = NULL;
+
+	/* Prefer the established call; hang up whatever else is alive
+	 * (dialing, alerting, held, ringing) only when there is none. */
+	for (iter = calls; iter != NULL; iter = g_list_next(iter)) {
+		enum ofono_voicecall_state state = ofono_voicecall_get_state(iter->data);
+
+		if (state == OFONO_VOICECALL_STATE_ACTIVE)
+			return iter->data;
+
+		if (state != OFONO_VOICECALL_STATE_DISCONNECTED && !fallback)
+			fallback = iter->data;
+	}
+
+	return fallback;
+}
+
+static void call_op_get_calls_cb(const struct ofono_error *error, GList *calls, void *data)
 {
 	struct cb_data *cbd = data;
 	telephony_result_cb cb = cbd->cb;
+	enum call_op op = GPOINTER_TO_INT(cbd->user);
 	struct telephony_error terr;
-	struct ofono_voicecall *incoming = NULL;
-	GList *iter;
+	struct ofono_voicecall *call = NULL;
 
 	if (error) {
 		terr.code = TELEPHONY_ERROR_INTERNAL;
@@ -1151,31 +1199,32 @@ static void answer_get_calls_cb(const struct ofono_error *error, GList *calls, v
 		return;
 	}
 
-	/* The service API carries no usable call id, so answer the ringing
-	 * call; ofono rejects Answer on anything that is not incoming anyway. */
-	for (iter = calls; iter != NULL; iter = g_list_next(iter)) {
-		struct ofono_voicecall *call = iter->data;
-		enum ofono_voicecall_state state = ofono_voicecall_get_state(call);
-
-		if (state == OFONO_VOICECALL_STATE_INCOMING ||
-			state == OFONO_VOICECALL_STATE_WAITING) {
-			incoming = call;
-			break;
-		}
+	switch (op) {
+	case CALL_OP_ANSWER:
+	case CALL_OP_IGNORE:
+		call = find_ringing_call(calls);
+		break;
+	case CALL_OP_HANGUP:
+		call = find_live_call(calls);
+		break;
 	}
 
-	if (!incoming) {
+	if (!call) {
 		terr.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
 		cb(&terr, cbd->data);
 		g_free(cbd);
 		return;
 	}
 
-	/* cbd travels on; answer_call_cb frees it */
-	ofono_voicecall_answer(incoming, answer_call_cb, cbd);
+	/* cbd travels on; call_op_result_cb frees it */
+	if (op == CALL_OP_ANSWER)
+		ofono_voicecall_answer(call, call_op_result_cb, cbd);
+	else
+		ofono_voicecall_hangup(call, call_op_result_cb, cbd);
 }
 
-void ofono_answer(struct telephony_service *service, int sim_id, int call_id, telephony_result_cb cb, void *data)
+static void start_call_op(struct telephony_service *service, int sim_id, enum call_op op,
+						  telephony_result_cb cb, void *data)
 {
 	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
@@ -1194,7 +1243,23 @@ void ofono_answer(struct telephony_service *service, int sim_id, int call_id, te
 	}
 
 	cbd = cb_data_new(cb, data);
-	ofono_voicecall_manager_get_calls(od->vm, answer_get_calls_cb, cbd);
+	cbd->user = GINT_TO_POINTER(op);
+	ofono_voicecall_manager_get_calls(od->vm, call_op_get_calls_cb, cbd);
+}
+
+void ofono_answer(struct telephony_service *service, int sim_id, int call_id, telephony_result_cb cb, void *data)
+{
+	start_call_op(service, sim_id, CALL_OP_ANSWER, cb, data);
+}
+
+void ofono_ignore(struct telephony_service *service, int sim_id, int call_id, telephony_result_cb cb, void *data)
+{
+	start_call_op(service, sim_id, CALL_OP_IGNORE, cb, data);
+}
+
+void ofono_hangup(struct telephony_service *service, int sim_id, int call_id, telephony_result_cb cb, void *data)
+{
+	start_call_op(service, sim_id, CALL_OP_HANGUP, cb, data);
 }
 
 static gboolean free_message_watch_idle_cb(gpointer data)
@@ -1697,6 +1762,8 @@ struct telephony_driver ofono_telephony_driver = {
 	.subscriber_id_query = ofono_subscriber_id_query,
 	.dial = ofono_dial,
 	.answer = ofono_answer,
+	.ignore = ofono_ignore,
+	.hangup = ofono_hangup,
 	.send_sms = ofono_send_sms
 };
 
