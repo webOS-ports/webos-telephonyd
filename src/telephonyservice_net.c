@@ -124,19 +124,18 @@ static int _service_signal_strength_query_finish(const struct telephony_error *e
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
-	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	/* handle possible subscriptions */
 	if (req_data->subscribed)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("bars"), jnumber_create_i32(bars));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
@@ -214,19 +213,18 @@ static int _service_network_status_query_finish(const struct telephony_error *er
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
-	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	/* handle possible subscriptions */
 	if (req_data->subscribed)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("state"),
 					jstring_create(telephony_network_state_to_string(net_status->state)));
@@ -313,12 +311,10 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 	jvalue_ref network_obj = NULL;
 	bool success = (error == NULL);
 	struct telephony_network *current_network = NULL;
-	int n;
+	guint n;
 	struct telephony_sim_state *sim = NULL;
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
-	networks_obj = jarray_create(NULL);
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
@@ -326,6 +322,9 @@ static int _service_network_list_query_finish(const struct telephony_error *erro
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
 
 	if (success) {
+		extended_obj = jobject_create();
+		networks_obj = jarray_create(NULL);
+
 		for (n = 0; n < g_list_length(networks); n++) {
 			current_network = g_list_nth_data(networks, n);
 
@@ -503,19 +502,18 @@ static int _service_network_id_query_finish(const struct telephony_error *error,
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"), jstring_create(""));
-	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	/* handle possible subscriptions */
 	if (req_data->subscribed)
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(req_data->subscribed));
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("mccmnc"), jstring_create(id));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
@@ -657,7 +655,7 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 	jvalue_ref automatic_obj = NULL;
 	jvalue_ref id_obj = NULL;
 	const char *payload;
-	raw_buffer id_buf;
+	raw_buffer id_buf = { 0 };
 	const char *id = NULL;
 	bool automatic = false;
 
@@ -687,8 +685,13 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 			goto cleanup;
 		}
 
+		/* m_str is NULL when the value is not a string */
 		id_buf = jstring_get(id_obj);
 		id = id_buf.m_str;
+		if (!id) {
+			luna_service_message_reply_error_invalid_params(handle, message);
+			goto cleanup;
+		}
 	}
 
 	req_data = telephony_service_begin_parsed_request(service, handle, message, parsed_obj,
@@ -696,10 +699,13 @@ bool _service_network_set_cb(LSHandle *handle, LSMessage *message, void *user_da
 	if (!req_data)
 		goto cleanup;
 
-
+	/* the driver copies the id if it needs it beyond this call */
 	service->driver->network_set(service, req_data->sim_id, automatic, id, telephonyservice_common_finish, req_data);
 
 cleanup:
+	if (id_buf.m_str)
+		jstring_free_buffer(id_buf);
+
 	if (!jis_null(parsed_obj))
 		j_release(&parsed_obj);
 
@@ -819,10 +825,14 @@ bool _service_rat_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 		goto cleanup;
 	}
 
+	/* m_str is NULL when the value is not a string; from_string turns
+	 * that into INVALID rather than crashing on it */
 	mode_buf = jstring_get(mode_obj);
 	mode = telephony_radio_access_mode_from_string(mode_buf.m_str);
+	if (mode_buf.m_str)
+		jstring_free_buffer(mode_buf);
 
-	if (mode < 0) {
+	if (mode == TELEPHONY_RADIO_ACCESS_MODE_INVALID) {
 		luna_service_message_reply_error_invalid_params(handle, message);
 		goto cleanup;
 	}

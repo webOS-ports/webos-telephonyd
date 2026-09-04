@@ -236,7 +236,6 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
@@ -247,6 +246,7 @@ int _service_power_query_finish(const struct telephony_error *error, bool power,
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("powerState"), jstring_create(power ? "on" : "off"));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
@@ -329,13 +329,13 @@ static int _service_platform_query_finish(const struct telephony_error *error, s
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 			jstring_create(telephony_platform_type_to_string(platform_info->platform_type)));
@@ -430,13 +430,13 @@ static int _service_subscriber_id_query_finish(const struct telephony_error *err
 	bool success = (error == NULL);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(success));
 
 	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
 
 	if (success) {
+		extended_obj = jobject_create();
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("platformType"),
 					jstring_create(telephony_platform_type_to_string(info->platform_type)));
@@ -567,7 +567,6 @@ bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *u
 	sim = telephony_service_sim_state(service, sim_id);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	subscribed = telephony_service_process_sim_subscription(service, handle, message,
 										"deviceLockQuery", sim_id, explicit_sim);
@@ -586,6 +585,7 @@ bool _service_device_lock_query_cb(LSHandle *handle, LSMessage *message, void *u
 
 	/* FIXME we don't really now which properties are part of the extended object */
 
+	extended_obj = jobject_create();
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
 
@@ -662,7 +662,6 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
 	sim = telephony_service_sim_state(service, sim_id);
 
 	reply_obj = jobject_create();
-	extended_obj = jobject_create();
 
 	subscribed = telephony_service_process_sim_subscription(service, handle, message,
 										"isTelephonyReady", sim_id, explicit_sim);
@@ -673,6 +672,8 @@ bool _service_is_telephony_ready_cb(LSHandle *handle, LSMessage *message, void *
 	telephony_service_add_sim_id(reply_obj, sim_id);
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("simCount"),
 				jnumber_create_i32(telephony_service_get_sim_count(service)));
+
+	extended_obj = jobject_create();
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(sim_id));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("radioConnected"), jboolean_create(sim && sim->initialized));
 	jobject_put(extended_obj, J_CSTR_TO_JVAL("power"), jboolean_create(sim && sim->powered));

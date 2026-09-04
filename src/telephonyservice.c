@@ -1078,6 +1078,18 @@ failed:
 	if (service->driver && service->driver->remove)
 		service->driver->remove(service);
 
+	if (service->palmHandle != NULL &&
+		!LSUnregister(service->palmHandle, &error)) {
+		g_critical("Could not unregister palm service: %s", error.message);
+		LSErrorFree(&error);
+	}
+
+	if (service->webosHandle != NULL &&
+		!LSUnregister(service->webosHandle, &error)) {
+		g_critical("Could not unregister webos service: %s", error.message);
+		LSErrorFree(&error);
+	}
+
 	free_service_resources(service);
 	g_free(service);
 	return NULL;
@@ -1090,13 +1102,13 @@ void telephony_service_free(struct telephony_service *service)
 	LSErrorInit(&error);
 
 	if (service->palmHandle != NULL &&
-		LSUnregister(service->palmHandle, &error) < 0) {
+		!LSUnregister(service->palmHandle, &error)) {
 		g_critical("Could not unregister palm service: %s", error.message);
 		LSErrorFree(&error);
 	}
 
 	if (service->webosHandle != NULL &&
-		LSUnregister(service->webosHandle, &error) < 0) {
+		!LSUnregister(service->webosHandle, &error)) {
 		g_critical("Could not unregister webos service: %s", error.message);
 		LSErrorFree(&error);
 	}
