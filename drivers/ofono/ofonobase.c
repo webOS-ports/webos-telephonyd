@@ -74,6 +74,11 @@ static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer 
 	struct ofono_error oerr;
 
 	if (base->dead) {
+		/* The interface is gone; still answer the caller so wrapper cb_data
+		 * and pending requests further up are released, not leaked. */
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
+		oerr.message = "Interface is no longer available";
+		cb(&oerr, cbd->data);
 		g_free(cbd);
 		ofono_base_unref(base);
 		return;
@@ -81,6 +86,7 @@ static void set_property_cb(GObject *source_object, GAsyncResult *res, gpointer 
 
 	success = base->funcs->set_property_finish(base->remote, res, &error);
 	if (!success) {
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -136,21 +142,28 @@ static void get_properties_cb(GObject *source_object, GAsyncResult *res, gpointe
 	}
 
 	handle_get_properties_result(base, properties);
+	g_variant_unref(properties);
 	ofono_base_unref(base);
 }
 
 static void property_changed_cb(void *object, const gchar *name, GVariant *value, gpointer user_data)
 {
 	struct ofono_base *base = user_data;
+	GVariant *inner;
 
-	base->funcs->update_property(name, g_variant_get_variant(value), base->user_data);
+	/* update_property implementations treat the value as borrowed (the
+	 * GetProperties path hands them g_variant_iter_loop values), so the
+	 * unwrapped variant has to be released here. */
+	inner = g_variant_get_variant(value);
+	base->funcs->update_property(name, inner, base->user_data);
+	g_variant_unref(inner);
 }
 
 struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remote, void *user_data)
 {
 	struct ofono_base *base;
 	GError *error = NULL;
-	GVariant *properties;
+	GVariant *properties = NULL;
 
 	base = g_try_new0(struct ofono_base, 1);
 	if (!base)
@@ -175,8 +188,9 @@ struct ofono_base* ofono_base_create(struct ofono_base_funcs *funcs, void *remot
 			g_warning("Failed to retrieve properties from base: %s", error->message);
 			g_error_free(error);
 		}
-		else {
+		else if (properties) {
 			handle_get_properties_result(base, properties);
+			g_variant_unref(properties);
 		}
 	}
 
