@@ -79,7 +79,7 @@ static enum ofono_network_status parse_ofono_network_status(const gchar *status)
 	return OFONO_NETWORK_REGISTRATION_STATUS_UNKNOWN;
 }
 
-enum ofono_network_technology parse_ofono_network_technology(char *technology)
+enum ofono_network_technology parse_ofono_network_technology(const char *technology)
 {
 	if (g_str_equal(technology, "gsm"))
 		return OFONO_NETWORK_TECHNOLOGY_GSM;
@@ -102,25 +102,33 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	g_message("[NetworkRegistration:%s] property %s changed", netreg->path, name);
 
 	if (g_str_equal(name, "Mode"))
-		netreg->mode = parse_ofono_network_registration_mode(g_variant_dup_string(value, NULL));
+		netreg->mode = parse_ofono_network_registration_mode(g_variant_get_string(value, NULL));
 	else if (g_str_equal(name, "Status"))
-		netreg->status = parse_ofono_network_status(g_variant_dup_string(value, NULL));
+		netreg->status = parse_ofono_network_status(g_variant_get_string(value, NULL));
 	else if (g_str_equal(name, "LocationAreaCode"))
 		netreg->location_area_code = g_variant_get_uint16(value);
 	else if (g_str_equal(name, "CellId"))
 		netreg->cell_id = g_variant_get_uint32(value);
-	else if (g_str_equal(name, "MobileCountryCode"))
+	else if (g_str_equal(name, "MobileCountryCode")) {
+		g_free(netreg->mcc);
 		netreg->mcc = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "MobileNetworkCode"))
+	}
+	else if (g_str_equal(name, "MobileNetworkCode")) {
+		g_free(netreg->mnc);
 		netreg->mnc = g_variant_dup_string(value, NULL);
+	}
 	else if (g_str_equal(name, "Technology"))
-		netreg->technology = parse_ofono_network_technology(g_variant_dup_string(value, NULL));
-	else if (g_str_equal(name, "Name"))
+		netreg->technology = parse_ofono_network_technology(g_variant_get_string(value, NULL));
+	else if (g_str_equal(name, "Name")) {
+		g_free(netreg->operator_name);
 		netreg->operator_name = g_variant_dup_string(value, NULL);
+	}
 	else if (g_str_equal(name, "Strength"))
 		netreg->strength = g_variant_get_byte(value);
-	else if (g_str_equal(name, "BaseStation"))
+	else if (g_str_equal(name, "BaseStation")) {
+		g_free(netreg->base_station);
 		netreg->base_station = g_variant_dup_string(value, NULL);
+	}
 
 	if (netreg->prop_changed_cb)
 		netreg->prop_changed_cb(name, netreg->prop_changed_data);
@@ -128,10 +136,10 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs netreg_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_network_registration_call_set_property,
-	.set_property_finish = ofono_interface_network_registration_call_set_property_finish,
-	.get_properties = ofono_interface_network_registration_call_get_properties,
-	.get_properties_finish = ofono_interface_network_registration_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_network_registration_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_network_registration_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_network_registration_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_network_registration_call_get_properties_finish
 };
 
 struct ofono_network_registration* ofono_network_registration_create(const gchar *path)
@@ -189,6 +197,11 @@ void ofono_network_registration_free(struct ofono_network_registration *netreg)
 	if (netreg->remote)
 		g_object_unref(netreg->remote);
 
+	g_free(netreg->path);
+	g_free(netreg->mcc);
+	g_free(netreg->mnc);
+	g_free(netreg->operator_name);
+	g_free(netreg->base_station);
 	g_free(netreg);
 }
 
@@ -212,14 +225,17 @@ void ofono_network_registration_register_prop_changed_handler(struct ofono_netwo
 static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_network_registration *netreg = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	struct ofono_error oerr;
 	gboolean success;
 	GError *error = NULL;
 
-	success = ofono_interface_network_registration_call_register_finish(netreg->remote, res, &error);
+	/* Finish against the proxy GIO hands back; the registration object can
+	 * already be gone when the reply lands. */
+	success = ofono_interface_network_registration_call_register_finish(
+		OFONO_INTERFACE_NETWORK_REGISTRATION(source_object), res, &error);
 	if (!success) {
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -234,9 +250,14 @@ static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user
 void ofono_network_registration_register(struct ofono_network_registration *netreg, ofono_base_result_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
 
-	if (!netreg)
+	if (!netreg) {
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No network registration available";
+		cb(&oerr, data);
 		return;
+	}
 
 	cbd = cb_data_new(cb, data);
 	cbd->user = netreg;
@@ -248,20 +269,24 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 {
 	struct cb_data *cbd = user_data;
 	struct cb_data *cbd2 = cbd->user;
-	struct ofono_network_registration *netreg = cbd2->user;
 	ofono_network_registration_operator_list_cb cb = cbd->cb;
 	_common_operators_finish_cb finish_cb = cbd2->cb;
 	struct ofono_error oerr;
 	gboolean success;
 	GError *error = NULL;
-	GVariant *result, *iter;
-	int n;
+	GVariant *result = NULL, *iter, *path_v;
+	gsize n;
 	const char *path = NULL;
 	struct ofono_network_operator *network_operator;
 	GList *operators = NULL;
 
-	success = finish_cb(netreg->remote, &result, res, &error);
+	/* Finish against the proxy GIO hands back; the registration object can
+	 * already be gone when the reply lands (scans run for up to 40s). */
+	success = finish_cb(source_object, &result, res, &error);
 	if (!success) {
+		/* This covers cancellation too: the caller is always answered so
+		 * pending requests further up are released, not leaked */
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, NULL, cbd->data);
 		g_error_free(error);
@@ -269,14 +294,22 @@ static void get_operators_cb(GObject *source_object, GAsyncResult *res, gpointer
 	else {
 		for (n = 0; n < g_variant_n_children(result); n++) {
 			iter = g_variant_get_child_value(result, n);
-			path = g_variant_dup_string(g_variant_get_child_value(iter, 0), NULL);
+			path_v = g_variant_get_child_value(iter, 0);
+			path = g_variant_get_string(path_v, NULL);
 
 			network_operator = ofono_network_operator_create(path);
-			operators = g_list_append(operators, network_operator);
+			if (network_operator)
+				operators = g_list_append(operators, network_operator);
+
+			g_variant_unref(path_v);
+			g_variant_unref(iter);
 		}
 
+		/* The callback takes ownership of the list and its operators and
+		 * releases them with ofono_network_operator_free when done. */
 		cb(NULL, operators, cbd->data);
-		g_list_free_full(operators, (GDestroyNotify) ofono_network_operator_free);
+
+		g_variant_unref(result);
 	}
 
 	g_free(cbd);
@@ -288,9 +321,14 @@ void ofono_network_registration_scan(struct ofono_network_registration *netreg,
 {
 	struct cb_data *cbd;
 	struct cb_data *cbd2;
+	struct ofono_error oerr;
 
-	if (!netreg)
+	if (!netreg) {
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No network registration available";
+		cb(&oerr, NULL, data);
 		return;
+	}
 
 	cbd = cb_data_new(cb, data);
 	cbd2 = cb_data_new(ofono_interface_network_registration_call_scan_finish, NULL);
@@ -308,9 +346,14 @@ void ofono_network_registration_get_operators(struct ofono_network_registration 
 {
 	struct cb_data *cbd;
 	struct cb_data *cbd2;
+	struct ofono_error oerr;
 
-	if (!netreg)
+	if (!netreg) {
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No network registration available";
+		cb(&oerr, NULL, data);
 		return;
+	}
 
 	cbd = cb_data_new(cb, data);
 	cbd2 = cb_data_new(ofono_interface_network_registration_call_get_operators_finish, NULL);
