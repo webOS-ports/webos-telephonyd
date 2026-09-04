@@ -27,7 +27,7 @@
 #include "ofononetworkoperator.h"
 #include "ofono-interface.h"
 
-extern enum ofono_network_technology parse_ofono_network_technology(char *technology);
+extern enum ofono_network_technology parse_ofono_network_technology(const char *technology);
 
 struct ofono_network_operator {
 	gchar *path;
@@ -59,10 +59,8 @@ static enum ofono_network_operator_status parse_ofono_network_operator_status(co
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_network_operator *netop = user_data;
-	char *status = NULL;
-	char *tech_str = NULL;
 	GVariant *child = NULL;
-	int n;
+	gsize n;
 	enum ofono_network_technology tech;
 
 	g_message("[NetworkOperator:%s] property %s changed", netop->path, name);
@@ -73,9 +71,7 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		netop->name = g_variant_dup_string(value, NULL);
 	}
 	else if (g_str_equal(name, "Status")) {
-		status = g_variant_dup_string(value, NULL);
-		netop->status = parse_ofono_network_operator_status(status);
-		g_free(status);
+		netop->status = parse_ofono_network_operator_status(g_variant_get_string(value, NULL));
 	}
 	else if (g_str_equal(name, "MobileCountryCode")) {
 		if (netop->mcc)
@@ -88,14 +84,17 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		netop->mnc = g_variant_dup_string(value, NULL);
 	}
 	else if (g_str_equal(name, "Technologies")) {
+		/* Full replacement list: drop technologies no longer offered */
+		memset(netop->available_technologies, 0, sizeof(netop->available_technologies));
+
 		for (n = 0; n < g_variant_n_children(value); n++) {
 			child = g_variant_get_child_value(value, n);
 
-			tech_str = g_variant_dup_string(child, NULL);
-			tech = parse_ofono_network_technology(tech_str);
-			g_free(tech_str);
+			tech = parse_ofono_network_technology(g_variant_get_string(child, NULL));
+			if (tech != OFONO_NETWORK_TECHNOLOGY_UNKNOWN)
+				netop->available_technologies[tech] = true;
 
-			netop->available_technologies[tech] = (tech != OFONO_NETWORK_TECHNOLOGY_UNKNOWN);
+			g_variant_unref(child);
 		}
 	}
 }
@@ -108,7 +107,7 @@ struct ofono_base_funcs netop_base_funcs = {
 	.set_property_finish = NULL,
 	.get_properties = NULL,
 	.get_properties_finish = NULL,
-	.get_properties_sync = ofono_interface_network_operator_call_get_properties_sync,
+	.get_properties_sync = (ofono_base_get_properties_sync_fn) ofono_interface_network_operator_call_get_properties_sync,
 };
 
 struct ofono_network_operator* ofono_network_operator_create(const char *path)
@@ -166,14 +165,17 @@ void ofono_network_operator_free(struct ofono_network_operator *netop)
 static void register_cb(GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	struct cb_data *cbd = user_data;
-	struct ofono_network_operator *netop = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	struct ofono_error oerr;
 	gboolean success;
 	GError *error = NULL;
 
-	success = ofono_interface_network_operator_call_register_finish(netop->remote, res, &error);
+	/* Finish against the proxy GIO hands back; scan-result operators are
+	 * short-lived and can be freed while Register is in flight. */
+	success = ofono_interface_network_operator_call_register_finish(
+		OFONO_INTERFACE_NETWORK_OPERATOR(source_object), res, &error);
 	if (!success) {
+		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, cbd->data);
 		g_error_free(error);
@@ -192,6 +194,7 @@ void ofono_network_operator_register(struct ofono_network_operator *netop, ofono
 
 	if (!netop) {
 		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No network operator available";
 		cb(&oerr, user_data);
 		return;
 	}
