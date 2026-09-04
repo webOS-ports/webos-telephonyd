@@ -40,7 +40,6 @@ struct wan_service {
 	struct wan_driver *driver;
 	void *data;
 	LSHandle *serviceHandle;
-	struct wan_configuration configuration;
 	bool initialized;
 };
 
@@ -133,7 +132,7 @@ const char* wan_connection_status_to_string(enum wan_connection_status status)
 	case WAN_CONNECTION_STATUS_ACTIVE:
 		return "active";
 	case WAN_CONNECTION_STATUS_CONNECTING:
-		return "disconnecting";
+		return "connecting";
 	case WAN_CONNECTION_STATUS_DISCONNECTED:
 		return "disconnected";
 	case WAN_CONNECTION_STATUS_DISCONNECTING:
@@ -142,7 +141,8 @@ const char* wan_connection_status_to_string(enum wan_connection_status status)
 		return "dormant";
 	}
 
-	return NULL;
+	/* jstring_create() must never see NULL */
+	return "unknown";
 }
 
 const char* wan_service_type_to_string(enum wan_service_type type)
@@ -174,11 +174,14 @@ const char* wan_request_status_to_string(enum wan_request_status status)
 		return "disconnect failed";
 	case WAN_REQUEST_STATUS_DISCONNECT_SUCCEEDED:
 		return "disconnect succeeded";
+	case WAN_REQUEST_STATUS_EVENT:
+		return "event";
 	default:
 		break;
 	}
 
-	return NULL;
+	/* jstring_create() must never see NULL */
+	return "unknown";
 }
 
 struct wan_service* wan_service_create(void)
@@ -194,8 +197,6 @@ struct wan_service* wan_service_create(void)
 	service = g_try_new0(struct wan_service, 1);
 	if (!service)
 		return NULL;
-
-	memset(&service->configuration, 0, sizeof(struct wan_configuration));
 
 	/* take first driver until we have some mechanism to determine the best driver */
 	service->driver = g_driver_list->data;
@@ -223,9 +224,9 @@ struct wan_service* wan_service_create(void)
 			NULL, NULL, &error)) {
 		g_critical("Could not register category for WAN service");
 		LSErrorFree(&error);
-		return NULL;
+		goto error;
 	}
-    
+
 	if (!LSCategorySetData(service->serviceHandle, "/", service, &error)) {
 		g_warning("Could not set data for service category");
 		LSErrorFree(&error);
@@ -238,10 +239,13 @@ struct wan_service* wan_service_create(void)
 
 error:
 	if (service->serviceHandle &&
-		LSUnregister(service->serviceHandle, &error) < 0) {
-		g_error("Could not unregister service: %s", error.message);
+		!LSUnregister(service->serviceHandle, &error)) {
+		g_critical("Could not unregister service: %s", error.message);
 		LSErrorFree(&error);
 	}
+
+	if (service->driver)
+		service->driver->remove(service);
 
 	g_free(service);
 
@@ -258,7 +262,7 @@ void wan_service_free(struct wan_service *service)
 	LSErrorInit(&error);
 
 	if (service->serviceHandle != NULL &&
-		LSUnregister(service->serviceHandle, &error) < 0) {
+		!LSUnregister(service->serviceHandle, &error)) {
 		g_critical("Could not unregister service: %s", error.message);
 		LSErrorFree(&error);
 	}
@@ -383,16 +387,27 @@ void wan_service_status_changed_notify(struct wan_service *service, struct wan_s
 	j_release(&reply_obj);
 }
 
-void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
+static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
 
-	reply_obj = create_status_update_reply(status);
-	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	if (error || !status) {
+		reply_obj = jobject_create();
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(false));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"),
+					jnumber_create_i32(error ? error->code : WAN_ERROR_INTERNAL));
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("errorText"),
+					jstring_create(wan_error_to_string(error ? error->code : WAN_ERROR_INTERNAL)));
+	}
+	else {
+		reply_obj = create_status_update_reply(status);
+		jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	}
 
 	luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj);
 
+	j_release(&reply_obj);
 	luna_service_req_data_free(req_data);
 }
 
@@ -403,8 +418,6 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 	bool subscribed = false;
 	struct luna_service_req_data *req_data = NULL;
 
-	reply_obj = jobject_create();
-
 	if (!service->driver || !service->driver->get_status) {
 		g_warning("No implementation available for service getstatus API method");
 		luna_service_message_reply_error_not_implemented(handle, message);
@@ -412,6 +425,8 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 	}
 
 	subscribed = luna_service_check_for_subscription_and_process(handle, message);
+
+	reply_obj = jobject_create();
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("errorCode"), jnumber_create_i32(0));
@@ -433,9 +448,9 @@ bool _wan_service_getstatus_cb(LSHandle *handle, LSMessage *message, void *user_
 }
 
 #define is_flag_set(flags, flag) \
-	((flags & flag) == flag)
+	((((flags) & (flag))) == (flag))
 
-void _service_set_finish(const struct wan_error *error, void *data)
+static void _service_set_finish(const struct wan_error *error, void *data)
 {
 	struct luna_service_req_data *req_data = data;
 	jvalue_ref reply_obj = NULL;
@@ -470,6 +485,10 @@ bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 	jvalue_ref disablewan_obj = NULL;
 	jvalue_ref roamguard_obj = NULL;
 	const char *payload;
+	/* Each request carries its own configuration: writing into shared state
+	 * let a second set clobber one still travelling through the driver. The
+	 * driver copies what it needs before this handler returns. */
+	struct wan_configuration configuration;
 
 	if (!service->driver || !service->driver->set_configuration) {
 		g_warning("No implementation available for service set API method");
@@ -484,32 +503,32 @@ bool _wan_service_set_cb(LSHandle *handle, LSMessage *message, void *user_data)
 		goto cleanup;
 	}
 
-	service->configuration.flags = 0;
+	memset(&configuration, 0, sizeof(configuration));
 
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("disablewan"), &disablewan_obj)) {
 		if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("on")))
-			service->configuration.disablewan = true;
+			configuration.disablewan = true;
 		else if (jstring_equal2(disablewan_obj, J_CSTR_TO_BUF("off")))
-			service->configuration.disablewan = false;
+			configuration.disablewan = false;
 
-		service->configuration.flags |= WAN_CONFIGURATION_TYPE_DISABLEWAN;
+		configuration.flags |= WAN_CONFIGURATION_TYPE_DISABLEWAN;
 	}
 
 	if (jobject_get_exists(parsed_obj, J_CSTR_TO_BUF("roamguard"), &roamguard_obj)) {
 		if (jstring_equal2(roamguard_obj, J_CSTR_TO_BUF("enable"))) {
-			service->configuration.roamguard = true;
+			configuration.roamguard = true;
 		}
 		else if (jstring_equal2(roamguard_obj, J_CSTR_TO_BUF("disable"))) {
-			service->configuration.roamguard = false;
+			configuration.roamguard = false;
 		}
 
-		service->configuration.flags |= WAN_CONFIGURATION_TYPE_ROAMGUARD;
+		configuration.flags |= WAN_CONFIGURATION_TYPE_ROAMGUARD;
 	}
 
 	req_data = luna_service_req_data_new(handle, message);
 	req_data->user_data = service;
 
-	service->driver->set_configuration(service, &service->configuration, _service_set_finish, req_data);
+	service->driver->set_configuration(service, &configuration, _service_set_finish, req_data);
 
 cleanup:
 	if (!jis_null(parsed_obj))
