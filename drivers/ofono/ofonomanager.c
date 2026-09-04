@@ -124,8 +124,9 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	GError *error = NULL;
 	GVariant *modems = NULL;
 	GVariant *child = NULL;
-	gchar *path;
-	int n = 0;
+	GVariant *path_v = NULL;
+	const gchar *path;
+	gsize n = 0;
 	struct ofono_modem *modem = NULL;
 	gboolean success;
 
@@ -133,13 +134,13 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 	if (!success) {
 		g_critical("Failed to retrieve list of available modems from manager: %s", error->message);
 		g_error_free(error);
-		goto done;
+		return;
 	}
 
 	for (n = 0; n < g_variant_n_children(modems); n++) {
 		child = g_variant_get_child_value(modems, n);
-
-		path = g_variant_dup_string(g_variant_get_child_value(child, 0), NULL);
+		path_v = g_variant_get_child_value(child, 0);
+		path = g_variant_get_string(path_v, NULL);
 
 		/* A ModemAdded that arrived while this call was in flight has
 		 * already put the modem on the list. */
@@ -152,13 +153,13 @@ static void get_modems_cb(GObject *source_object, GAsyncResult *res, gpointer us
 			}
 		}
 
-		g_free(path);
+		g_variant_unref(path_v);
+		g_variant_unref(child);
 	}
 
-	notify_modems_changed(manager);
+	g_variant_unref(modems);
 
-done:
-	return;
+	notify_modems_changed(manager);
 }
 
 struct ofono_manager* ofono_manager_create(void)

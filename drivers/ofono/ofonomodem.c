@@ -47,9 +47,9 @@ struct ofono_modem {
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_modem *modem = user_data;
-	gchar *interface_name;
+	const gchar *interface_name;
 	GVariant *child;
-	int n;
+	gsize n;
 
 	g_message("[Modem:%s] property %s changed", modem->path, name);
 
@@ -61,12 +61,18 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		modem->lockdown = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "Emergency"))
 		modem->emergency = g_variant_get_boolean(value);
-	else if (g_str_equal(name, "Name"))
+	else if (g_str_equal(name, "Name")) {
+		g_free(modem->name);
 		modem->name = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "Serial"))
+	}
+	else if (g_str_equal(name, "Serial")) {
+		g_free(modem->serial);
 		modem->serial = g_variant_dup_string(value, NULL);
-	else if (g_str_equal(name, "Revision"))
+	}
+	else if (g_str_equal(name, "Revision")) {
+		g_free(modem->revision);
 		modem->revision = g_variant_dup_string(value, NULL);
+	}
 	else if (g_str_equal(name, "Interfaces")) {
 		memset(modem->interfaces, 0, sizeof(modem->interfaces));
 
@@ -129,10 +135,10 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs modem_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_modem_call_set_property,
-	.set_property_finish = ofono_interface_modem_call_set_property_finish,
-	.get_properties = ofono_interface_modem_call_get_properties,
-	.get_properties_finish = ofono_interface_modem_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_modem_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_modem_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_modem_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_modem_call_get_properties_finish
 };
 
 struct ofono_modem* ofono_modem_create(const gchar *path)
@@ -199,6 +205,8 @@ void ofono_modem_free(struct ofono_modem *modem)
 
 	if (modem->revision)
 		g_free(modem->revision);
+
+	g_free(modem->path);
 
 	if (modem->base)
 		ofono_base_free(modem->base);
