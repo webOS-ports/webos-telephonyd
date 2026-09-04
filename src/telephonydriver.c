@@ -130,6 +130,9 @@ enum telephony_radio_access_mode telephony_radio_access_mode_from_string(const c
 {
 	enum telephony_radio_access_mode result = TELEPHONY_RADIO_ACCESS_MODE_ANY;
 
+	if (!mode)
+		return TELEPHONY_RADIO_ACCESS_MODE_INVALID;
+
 	if (g_str_equal(mode, "any"))
 		result = TELEPHONY_RADIO_ACCESS_MODE_ANY;
 	else if (g_str_equal(mode, "gsm"))
@@ -139,7 +142,7 @@ enum telephony_radio_access_mode telephony_radio_access_mode_from_string(const c
 	else if (g_str_equal(mode, "lte"))
 		result = TELEPHONY_RADIO_ACCESS_MODE_LTE;
 	else
-		return -1;
+		return TELEPHONY_RADIO_ACCESS_MODE_INVALID;
 
 	return result;
 }

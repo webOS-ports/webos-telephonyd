@@ -92,10 +92,13 @@ enum telephony_network_registration {
 };
 
 enum telephony_radio_access_mode {
+	/* forces the enum to a signed type so parse failures survive < 0 checks */
+	TELEPHONY_RADIO_ACCESS_MODE_INVALID = -1,
 	TELEPHONY_RADIO_ACCESS_MODE_ANY = 0,
 	TELEPHONY_RADIO_ACCESS_MODE_GSM,
 	TELEPHONY_RADIO_ACCESS_MODE_UMTS,
 	TELEPHONY_RADIO_ACCESS_MODE_LTE,
+	TELEPHONY_RADIO_ACCESS_MODE_UNKNOWN,
 };
 
 enum telephony_platform_type {

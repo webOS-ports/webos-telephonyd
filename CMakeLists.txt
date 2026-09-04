@@ -87,3 +87,22 @@ target_link_libraries(webos-telephonyd
 
 webos_build_daemon()
 webos_build_system_bus_files()
+
+# Unit tests for the pure helper units; they need GLib only. They can also be
+# built without CMake via tests/run-tests.sh on any development machine.
+option(WITH_TESTS "Build unit tests" OFF)
+if(WITH_TESTS)
+    enable_testing()
+
+    add_executable(test_timeutils tests/test_timeutils.c src/timeutils.c)
+    target_link_libraries(test_timeutils ${GLIB2_LDFLAGS})
+    add_test(NAME timeutils COMMAND test_timeutils)
+
+    add_executable(test_netutils tests/test_netutils.c src/netutils.c)
+    target_link_libraries(test_netutils ${GLIB2_LDFLAGS})
+    add_test(NAME netutils COMMAND test_netutils)
+
+    add_executable(test_ratmode tests/test_ratmode.c src/telephonydriver.c)
+    target_link_libraries(test_ratmode ${GLIB2_LDFLAGS})
+    add_test(NAME ratmode COMMAND test_ratmode)
+endif()
