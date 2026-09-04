@@ -45,6 +45,7 @@ void ofono_voicecall_unref(struct ofono_voicecall *call);
 void ofono_voicecall_free(struct ofono_voicecall *call);
 
 const char* ofono_voicecall_get_path(struct ofono_voicecall *call);
+enum ofono_voicecall_state ofono_voicecall_get_state(struct ofono_voicecall *call);
 
 void ofono_voicecall_register_prop_changed_cb(struct ofono_voicecall *call,
 											ofono_property_changed_cb cb, void *data);

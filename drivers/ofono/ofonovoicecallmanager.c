@@ -32,7 +32,9 @@ struct ofono_voicecall_manager {
 	gchar *path;
 	OfonoInterfaceVoiceCallManager *remote;
 	struct ofono_base *base;
+	GCancellable *cancellable;
 	int ref_count;
+	gboolean calls_fetched;
 	GList *emergency_numbers;
 	GList *calls;
 	ofono_property_changed_cb prop_changed_cb;
@@ -64,13 +66,13 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	struct ofono_voicecall_manager *vm = user_data;
 	char *number = NULL;
 	GVariant *child;
-	int n;
+	gsize n;
 
 	g_message("[VoicecallManager:%s] property %s changed", vm->path, name);
 
 	if (g_strcmp0(name, "EmergencyNumbers") == 0) {
 		if (vm->emergency_numbers) {
-			g_list_free(vm->emergency_numbers);
+			g_list_free_full(vm->emergency_numbers, g_free);
 			vm->emergency_numbers = 0;
 		}
 
@@ -90,11 +92,16 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs vm_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_voice_call_manager_call_set_property,
-	.set_property_finish = ofono_interface_voice_call_manager_call_set_property_finish,
-	.get_properties = ofono_interface_voice_call_manager_call_get_properties,
-	.get_properties_finish = ofono_interface_voice_call_manager_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_voice_call_manager_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_voice_call_manager_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_voice_call_manager_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_voice_call_manager_call_get_properties_finish
 };
+
+static void call_added_cb(OfonoInterfaceVoiceCallManager *source, const gchar *path,
+							 GVariant *properties, gpointer user_data);
+static void call_removed_cb(OfonoInterfaceVoiceCallManager *source, const gchar *path,
+							   gpointer user_data);
 
 struct ofono_voicecall_manager* ofono_voicecall_manager_create(const gchar *path)
 {
@@ -115,7 +122,15 @@ struct ofono_voicecall_manager* ofono_voicecall_manager_create(const gchar *path
 	}
 
 	vm->path = g_strdup(path);
+	vm->cancellable = g_cancellable_new();
 	vm->base = ofono_base_create(&vm_base_funcs, vm->remote, vm);
+
+	/* Connect once here; connecting from get_calls_cb stacked one handler
+	 * per GetCalls round trip since an empty call list is re-queried. */
+	g_signal_connect(G_OBJECT(vm->remote), "call-added",
+		G_CALLBACK(call_added_cb), vm);
+	g_signal_connect(G_OBJECT(vm->remote), "call-removed",
+		G_CALLBACK(call_removed_cb), vm);
 
 	return vm;
 }
@@ -144,12 +159,23 @@ void ofono_voicecall_manager_free(struct ofono_voicecall_manager *vm)
 	if (!vm)
 		return;
 
+	/* In-flight async replies still hold a proxy ref, so the signal
+	 * handlers do not die with our unref below and must go explicitly. */
+	if (vm->remote)
+		g_signal_handlers_disconnect_by_data(vm->remote, vm);
+
+	g_cancellable_cancel(vm->cancellable);
+	g_object_unref(vm->cancellable);
+
 	if (vm->base)
 		ofono_base_free(vm->base);
 
 	if (vm->remote)
 		g_object_unref(vm->remote);
 
+	g_list_free_full(vm->calls, (GDestroyNotify) ofono_voicecall_free);
+	g_list_free_full(vm->emergency_numbers, g_free);
+	g_free(vm->path);
 	g_free(vm);
 }
 
@@ -197,13 +223,13 @@ static void dial_cb(GObject *source, GAsyncResult *res, gpointer data)
 {
 	struct cb_data *cbd = data;
 	ofono_voicecall_manager_dial_cb cb = cbd->cb;
-	struct ofono_voicecall_manager *vm = cbd->user;
-	GError *error;
+	GError *error = NULL;
 	gchar *path = NULL;
 	struct ofono_error oerr;
 	gboolean success = FALSE;
 
-	success = ofono_interface_voice_call_manager_call_dial_finish(vm->remote, &path, res, &error);
+	success = ofono_interface_voice_call_manager_call_dial_finish(
+		OFONO_INTERFACE_VOICE_CALL_MANAGER(source), &path, res, &error);
 	if (success == FALSE) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -213,6 +239,7 @@ static void dial_cb(GObject *source, GAsyncResult *res, gpointer data)
 	}
 
 	cb(NULL, path, cbd->data);
+	g_free(path);
 
 cleanup:
 	g_free(cbd);
@@ -223,6 +250,14 @@ void ofono_voicecall_manager_dial(struct ofono_voicecall_manager *vm,
 								  ofono_voicecall_manager_dial_cb cb, void *data)
 {
 	struct cb_data *cbd;
+	struct ofono_error oerr;
+
+	if (!vm) {
+		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No voice call manager available";
+		cb(&oerr, NULL, data);
+		return;
+	}
 
 	cbd = cb_data_new(cb, data);
 	cbd->user = vm;
@@ -238,12 +273,13 @@ static void vm_common_cb(GObject *source, GAsyncResult *res, gpointer data)
 	struct cb_data *cbd2 = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	glib_common_async_finish_cb finish_cb = cbd2->cb;
-	struct ofono_voicecall_manager *vm = cbd2->user;
-	GError *error;
+	GError *error = NULL;
 	struct ofono_error oerr;
 	gboolean success = FALSE;
 
-	success = finish_cb(vm->remote, res, &error);
+	/* Finish against the proxy GIO hands back; the manager can already be
+	 * gone when the reply lands. */
+	success = finish_cb(source, res, &error);
 	if (success == FALSE) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -357,7 +393,7 @@ void ofono_voicecall_manager_send_tones(struct ofono_voicecall_manager *vm, cons
 	ofono_interface_voice_call_manager_call_send_tones(vm->remote, tones, NULL, vm_common_cb, cbd);
 }
 
-static void call_added_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
+static void call_added_cb(OfonoInterfaceVoiceCallManager *source, const gchar *path,
 							 GVariant *properties, gpointer user_data)
 {
 	struct ofono_voicecall_manager *vm = user_data;
@@ -383,7 +419,7 @@ static void call_added_cb(OfonoInterfaceConnectionManager *source, const gchar *
 		vm->call_added_cb(path, vm->call_added_data);
 }
 
-static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar *path,
+static void call_removed_cb(OfonoInterfaceVoiceCallManager *source, const gchar *path,
 							   gpointer user_data)
 {
 	struct ofono_voicecall_manager *vm = user_data;
@@ -404,7 +440,8 @@ static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar
 	if (removable) {
 		call = removable->data;
 		ofono_voicecall_free(call);
-		vm->calls = g_list_remove(vm->calls, removable);
+		/* g_list_remove() matches on data; removable is the link itself */
+		vm->calls = g_list_delete_link(vm->calls, removable);
 	}
 
 	if (vm->calls_changed_cb)
@@ -412,6 +449,18 @@ static void call_removed_cb(OfonoInterfaceConnectionManager *source, const gchar
 
 	if (vm->call_removed_cb)
 		vm->call_removed_cb(path, vm->call_removed_data);
+}
+
+static gboolean voicecall_manager_has_call(struct ofono_voicecall_manager *vm, const char *path)
+{
+	GList *iter;
+
+	for (iter = vm->calls; iter != NULL; iter = g_list_next(iter)) {
+		if (g_strcmp0(ofono_voicecall_get_path(iter->data), path) == 0)
+			return TRUE;
+	}
+
+	return FALSE;
 }
 
 static void get_calls_cb(GObject *source, GAsyncResult *res, gpointer user_data)
@@ -422,17 +471,21 @@ static void get_calls_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 	struct ofono_error oerr;
 	GError *error = NULL;
 	gboolean success = FALSE;
-	GVariant *calls_v, *call_v, *path_v;
+	GVariant *calls_v = NULL, *call_v, *path_v;
 	const char *path = NULL;
-	int n;
+	gsize n;
 	struct ofono_voicecall *call;
 
-	success = ofono_interface_voice_call_manager_call_get_calls_finish(vm->remote, &calls_v,
-																		  res, &error);
+	success = ofono_interface_voice_call_manager_call_get_calls_finish(
+		OFONO_INTERFACE_VOICE_CALL_MANAGER(source), &calls_v, res, &error);
 	if (!success) {
+		/* This covers cancellation (the object being freed mid-flight):
+		 * the caller is always answered so pending requests further up
+		 * are released, not leaked. Cancelled errors must not touch vm. */
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
 		cb(&oerr, NULL, cbd->data);
+		g_error_free(error);
 		goto cleanup;
 	}
 
@@ -441,19 +494,18 @@ static void get_calls_cb(GObject *source, GAsyncResult *res, gpointer user_data)
 		path_v = g_variant_get_child_value(call_v, 0);
 		path = g_variant_get_string(path_v, NULL);
 
-		call = ofono_voicecall_create(path);
-
-		vm->calls = g_list_append(vm->calls, call);
+		/* The call-added signal can have raced us here */
+		if (!voicecall_manager_has_call(vm, path)) {
+			call = ofono_voicecall_create(path);
+			if (call)
+				vm->calls = g_list_append(vm->calls, call);
+		}
 
 		g_variant_unref(path_v);
 		g_variant_unref(call_v);
 	}
 
-	/* As we're not called a second time connect here to any possible call updates */
-	g_signal_connect(G_OBJECT(vm->remote), "call-added",
-		G_CALLBACK(call_added_cb), vm);
-	g_signal_connect(G_OBJECT(vm->remote), "call-removed",
-		G_CALLBACK(call_removed_cb), vm);
+	g_variant_unref(calls_v);
 
 	cb(NULL, vm->calls, cbd->data);
 
@@ -474,16 +526,19 @@ void ofono_voicecall_manager_get_calls(struct ofono_voicecall_manager *vm,
 		return;
 	}
 
-	/* Not the first time, so just return known calls */
-	if (g_list_length(vm->calls) > 0) {
+	/* Not the first time, so just return known calls; the signal handlers
+	 * connected in create keep the list current from here on */
+	if (vm->calls_fetched) {
 		cb(NULL, vm->calls, data);
 		return;
 	}
 
+	vm->calls_fetched = TRUE;
+
 	cbd = cb_data_new(cb, data);
 	cbd->user = vm;
 
-	ofono_interface_voice_call_manager_call_get_calls(vm->remote, NULL, get_calls_cb, cbd);
+	ofono_interface_voice_call_manager_call_get_calls(vm->remote, vm->cancellable, get_calls_cb, cbd);
 }
 
 GList* ofono_voicecall_manager_get_emergency_numbers(struct ofono_voicecall_manager *vm)

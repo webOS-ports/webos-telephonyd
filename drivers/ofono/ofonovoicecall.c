@@ -113,10 +113,10 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 
 struct ofono_base_funcs call_base_funcs = {
 	.update_property = update_property,
-	.set_property = ofono_interface_voice_call_call_set_property,
-	.set_property_finish = ofono_interface_voice_call_call_set_property_finish,
-	.get_properties = ofono_interface_voice_call_call_get_properties,
-	.get_properties_finish = ofono_interface_voice_call_call_get_properties_finish
+	.set_property = (ofono_base_set_property_fn) ofono_interface_voice_call_call_set_property,
+	.set_property_finish = (ofono_base_set_property_finish_fn) ofono_interface_voice_call_call_set_property_finish,
+	.get_properties = (ofono_base_get_properties_fn) ofono_interface_voice_call_call_get_properties,
+	.get_properties_finish = (ofono_base_get_properties_finish_fn) ofono_interface_voice_call_call_get_properties_finish
 };
 
 struct ofono_voicecall* ofono_voicecall_create(const gchar *path)
@@ -173,6 +173,11 @@ void ofono_voicecall_free(struct ofono_voicecall *call)
 	if (call->remote)
 		g_object_unref(call->remote);
 
+	g_free(call->path);
+	g_free(call->line_identification);
+	g_free(call->incoming_line);
+	g_free(call->name);
+	g_free(call->start_time);
 	g_free(call);
 }
 
@@ -194,18 +199,28 @@ const char* ofono_voicecall_get_path(struct ofono_voicecall *call)
 	return call->path;
 }
 
+enum ofono_voicecall_state ofono_voicecall_get_state(struct ofono_voicecall *call)
+{
+	if (!call)
+		return OFONO_VOICECALL_STATE_DISCONNECTED;
+
+	return call->state;
+}
+
 static void common_cb(GObject *source, GAsyncResult *res, gpointer data)
 {
 	struct cb_data *cbd = data;
 	struct cb_data *cbd2 = cbd->user;
 	ofono_base_result_cb cb = cbd->cb;
 	glib_common_async_finish_cb finish_cb = cbd2->cb;
-	struct ofono_voicecall *call = cbd2->user;
 	struct ofono_error oerr;
-	GError *error;
+	GError *error = NULL;
 	gboolean success = false;
 
-	success = finish_cb(call->remote, res, &error);
+	/* The call object can be freed while this request is in flight (a hangup
+	 * racing the call's own removal is the normal case), so finish against
+	 * the proxy GIO hands back rather than through the call struct. */
+	success = finish_cb(source, res, &error);
 	if (success == FALSE) {
 		oerr.type = OFONO_ERROR_TYPE_FAILED;
 		oerr.message = error->message;
@@ -229,6 +244,7 @@ void ofono_voicecall_deflect(struct ofono_voicecall *call, const char *number, o
 
 	if (!call) {
 		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No voice call available";
 		cb(&oerr, data);
 		return;
 	}
@@ -249,6 +265,7 @@ void ofono_voicecall_hangup(struct ofono_voicecall *call, ofono_base_result_cb c
 
 	if (!call) {
 		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No voice call available";
 		cb(&oerr, data);
 		return;
 	}
@@ -269,6 +286,7 @@ void ofono_voicecall_answer(struct ofono_voicecall *call, ofono_base_result_cb c
 
 	if (!call) {
 		oerr.type = OFONO_ERROR_TYPE_INVALID_ARGUMENTS;
+		oerr.message = "No voice call available";
 		cb(&oerr, data);
 		return;
 	}
