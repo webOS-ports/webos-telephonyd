@@ -65,8 +65,9 @@ set(GDBUS_IF_DIR ${WEBOS_BINARY_CONFIGURED_DIR}/src)
 file (MAKE_DIRECTORY ${GDBUS_IF_DIR})
 
 execute_process(COMMAND ${GDBUS_CODEGEN_EXECUTABLE} --c-namespace OfonoInterface --generate-c-code
-						${GDBUS_IF_DIR}/ofono-interface --interface-prefix org.ofono.
+						ofono-interface --interface-prefix org.ofono.
 						${CMAKE_CURRENT_SOURCE_DIR}/files/xml/ofono.xml
+						WORKING_DIRECTORY ${GDBUS_IF_DIR}
 						RESULT_VARIABLE codegen_failed)
 if(codegen_failed)
 		message(FATAL_ERROR "Error in generating code for ofono interface using gdbus-codegen")
