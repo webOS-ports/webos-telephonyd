@@ -20,6 +20,7 @@
 #define TELEPHONY_SERVICE_H_
 
 #include "telephonydriver.h"
+#include "stkcore.h"
 
 int telephony_driver_register(struct telephony_driver *driver);
 void telephony_driver_unregister(struct telephony_driver *driver);
@@ -78,6 +79,19 @@ struct telephony_message {
 };
 
 void telephony_service_incoming_message_notify(struct telephony_service *service, int sim_id, struct telephony_message *message);
+
+/**
+ * SIM toolkit. The driver reports the main menu of a slot (NULL when the SIM
+ * has no toolkit or it went away), hands over every agent request together
+ * with the function that answers it, and says when ofono cancelled or
+ * released one of the slot's agents.
+ */
+void telephony_service_stk_menu_changed_notify(struct telephony_service *service, int sim_id,
+                                               const struct stk_menu *menu);
+void telephony_service_stk_request_notify(struct telephony_service *service, struct stk_request *request,
+                                          stk_reply_fn reply_fn, void *token);
+void telephony_service_stk_cancel_notify(struct telephony_service *service, int sim_id, bool session,
+                                         bool released);
 
 #endif
 

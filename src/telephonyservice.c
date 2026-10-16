@@ -110,6 +110,10 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "simNameSet", _service_sim_name_set_cb },
 	{ "airplaneModeSet", _service_airplane_mode_set_cb },
 	{ "airplaneModeQuery", _service_airplane_mode_query_cb },
+	{ "stkGetMainMenu", _service_stk_get_main_menu_cb, LUNA_METHOD_FLAGS_NONE },
+	{ "stkSelectItem", _service_stk_select_item_cb, LUNA_METHOD_FLAGS_NONE },
+	{ "stkAgentRequest", _service_stk_agent_request_cb, LUNA_METHOD_FLAGS_NONE },
+	{ "stkRespond", _service_stk_respond_cb, LUNA_METHOD_FLAGS_NONE },
 	{ 0, 0 }
 };
 
@@ -966,6 +970,8 @@ static void free_service_resources(struct telephony_service *service)
 {
 	int role;
 
+	telephony_service_stk_shutdown(service);
+
 	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++) {
 		g_free(service->default_sim_iccid[role]);
 		service->default_sim_iccid[role] = NULL;
@@ -1006,6 +1012,8 @@ struct telephony_service* telephony_service_create()
 
 	load_default_sim_preferences(service);
 	load_sim_names(service);
+
+	telephony_service_stk_setup(service);
 
 	/* take first driver until we have some machanism to determine the best driver */
 	service->driver = g_driver_list->data;
@@ -1100,6 +1108,10 @@ void telephony_service_free(struct telephony_service *service)
 	LSError error;
 
 	LSErrorInit(&error);
+
+	/* Answer ofono for whatever is still on screen while the luna handles
+	 * and the driver are all still there. */
+	telephony_service_stk_shutdown(service);
 
 	if (service->palmHandle != NULL &&
 		!LSUnregister(service->palmHandle, &error)) {

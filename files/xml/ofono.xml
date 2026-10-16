@@ -271,4 +271,116 @@
                 <arg type="v" name="value" direction="out"/>
             </signal>
         </interface>
+	<interface name="org.ofono.SimToolkit">
+		<method name="GetProperties">
+			<arg type="a{sv}" direction="out"/>
+		</method>
+		<method name="SelectItem">
+			<arg type="y" name="item" direction="in"/>
+			<arg type="o" name="agent" direction="in"/>
+		</method>
+		<method name="RegisterAgent">
+			<arg type="o" name="path" direction="in"/>
+		</method>
+		<method name="UnregisterAgent">
+			<arg type="o" name="path" direction="in"/>
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="s" name="property" direction="out"/>
+			<arg type="v" name="value" direction="out"/>
+		</signal>
+	</interface>
+	<!-- Implemented by telephonyd and called by ofono (doc/stk-api.txt). -->
+	<interface name="org.ofono.SimToolkitAgent">
+		<method name="RequestSelection">
+			<arg type="s" name="title" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="a(sy)" name="items" direction="in"/>
+			<arg type="n" name="default_item" direction="in"/>
+			<arg type="y" name="selection" direction="out"/>
+		</method>
+		<method name="DisplayText">
+			<arg type="s" name="text" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="b" name="urgent" direction="in"/>
+		</method>
+		<method name="RequestInput">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="default_text" direction="in"/>
+			<arg type="y" name="min_length" direction="in"/>
+			<arg type="y" name="max_length" direction="in"/>
+			<arg type="b" name="hide_typing" direction="in"/>
+			<arg type="s" name="input" direction="out"/>
+		</method>
+		<method name="RequestDigits">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="default_text" direction="in"/>
+			<arg type="y" name="min_length" direction="in"/>
+			<arg type="y" name="max_length" direction="in"/>
+			<arg type="b" name="hide_typing" direction="in"/>
+			<arg type="s" name="digits" direction="out"/>
+		</method>
+		<method name="RequestKey">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="key" direction="out"/>
+		</method>
+		<method name="RequestDigit">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="digit" direction="out"/>
+		</method>
+		<method name="RequestQuickDigit">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="digit" direction="out"/>
+		</method>
+		<method name="RequestConfirmation">
+			<arg type="s" name="alpha" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="b" name="confirmed" direction="out"/>
+		</method>
+		<method name="ConfirmCallSetup">
+			<arg type="s" name="information" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="b" name="confirmed" direction="out"/>
+		</method>
+		<method name="PlayTone">
+			<arg type="s" name="tone" direction="in"/>
+			<arg type="s" name="text" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+		</method>
+		<method name="LoopTone">
+			<arg type="s" name="tone" direction="in"/>
+			<arg type="s" name="text" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+		</method>
+		<method name="DisplayActionInformation">
+			<arg type="s" name="text" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+		</method>
+		<method name="ConfirmLaunchBrowser">
+			<arg type="s" name="information" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="s" name="url" direction="in"/>
+			<arg type="b" name="confirmed" direction="out"/>
+		</method>
+		<method name="DisplayAction">
+			<arg type="s" name="text" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+		</method>
+		<method name="ConfirmOpenChannel">
+			<arg type="s" name="information" direction="in"/>
+			<arg type="y" name="icon_id" direction="in"/>
+			<arg type="b" name="confirmed" direction="out"/>
+		</method>
+		<method name="Cancel">
+			<annotation name="org.freedesktop.DBus.Method.NoReply" value="true"/>
+		</method>
+		<method name="Release">
+			<annotation name="org.freedesktop.DBus.Method.NoReply" value="true"/>
+		</method>
+	</interface>
 </node>

@@ -106,4 +106,26 @@ if(WITH_TESTS)
     add_executable(test_ratmode tests/test_ratmode.c src/telephonydriver.c)
     target_link_libraries(test_ratmode ${GLIB2_LDFLAGS})
     add_test(NAME ratmode COMMAND test_ratmode)
+
+    # SIM toolkit: the request state machine, the agent against a fake ofono
+    # on a private dbus-daemon (GTestDBus), the JSON side, and the luna
+    # methods with luna-service2 stubbed out inside the test.
+    add_executable(test_stkcore tests/test_stkcore.c src/stkcore.c)
+    target_link_libraries(test_stkcore ${GLIB2_LDFLAGS})
+    add_test(NAME stkcore COMMAND test_stkcore)
+
+    add_executable(test_ofonostk tests/test_ofonostk.c drivers/ofono/ofonostk.c drivers/ofono/ofonobase.c
+                   src/stkcore.c ${GDBUS_IF_DIR}/ofono-interface.c)
+    target_include_directories(test_ofonostk PRIVATE drivers/ofono)
+    target_link_libraries(test_ofonostk ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
+    add_test(NAME ofonostk COMMAND test_ofonostk)
+
+    add_executable(test_stkjson tests/test_stkjson.c src/stkjson.c src/stkcore.c)
+    target_link_libraries(test_stkjson ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
+    add_test(NAME stkjson COMMAND test_stkjson)
+
+    add_executable(test_telephonyservice_stk tests/test_telephonyservice_stk.c src/telephonyservice_stk.c
+                   src/stkjson.c src/stkcore.c src/luna_service_utils.c)
+    target_link_libraries(test_telephonyservice_stk ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
+    add_test(NAME telephonyservice_stk COMMAND test_telephonyservice_stk)
 endif()

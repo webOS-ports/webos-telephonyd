@@ -114,6 +114,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 				modem->interfaces[OFONO_MODEM_INTERFACE_RADIO_SETTINGS] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.SimManager"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_SIM_MANAGER] = 1;
+			else if (g_str_equal(interface_name, "org.ofono.SimToolkit"))
+				modem->interfaces[OFONO_MODEM_INTERFACE_SIM_TOOLKIT] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.SmartMessaging"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_SMART_MESSAGING] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.SupplementaryServices"))
