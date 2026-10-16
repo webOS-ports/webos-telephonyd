@@ -2,12 +2,16 @@
     "com.palm.telephony": [
         "activity.operation",
         "database.operation",
-        "telephony.management"
+        "telephony.management",
+        "application.launcher",
+        "notification.operation"
     ],
     "com.webos.service.telephony": [
         "activity.operation",
         "database.operation",
-        "telephony.management"
+        "telephony.management",
+        "application.launcher",
+        "notification.operation"
     ],
     "com.palm.wan": [
         "activity.operation",
