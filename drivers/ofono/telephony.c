@@ -33,6 +33,7 @@
 #include "ofonovoicecall.h"
 #include "ofonomessagemanager.h"
 #include "ofonomessage.h"
+#include "ofonostk.h"
 #include "ofonomessagewatch.h"
 #include "utils.h"
 #include "netutils.h"
@@ -57,6 +58,7 @@ struct ofono_sim_data {
 	struct ofono_radio_settings *rs;
 	struct ofono_voicecall_manager *vm;
 	struct ofono_message_manager *mm;
+	struct ofono_stk *stk;
 	enum telephony_sim_status sim_status;
 	bool initializing;
 	bool power_set_pending;
@@ -1386,6 +1388,102 @@ static void notify_no_network_registration(struct ofono_sim_data *od)
 	telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 }
 
+/* ------------------------------------------------------------------------
+ * SIM toolkit
+ * ------------------------------------------------------------------------ */
+
+static void stk_menu_changed_cb(const struct stk_menu *menu, void *data)
+{
+	struct ofono_sim_data *od = data;
+
+	telephony_service_stk_menu_changed_notify(od->service, od->sim_id, menu);
+}
+
+static void stk_request_cb(struct stk_request *request, void *token, void *data)
+{
+	struct ofono_sim_data *od = data;
+
+	telephony_service_stk_request_notify(od->service, request, ofono_stk_send_reply, token);
+}
+
+static void stk_cancel_cb(bool session, bool released, void *data)
+{
+	struct ofono_sim_data *od = data;
+
+	telephony_service_stk_cancel_notify(od->service, od->sim_id, session, released);
+}
+
+static const struct ofono_stk_callbacks stk_callbacks = {
+	.menu_changed = stk_menu_changed_cb,
+	.request = stk_request_cb,
+	.cancel = stk_cancel_cb,
+};
+
+static void stk_free(struct ofono_sim_data *od)
+{
+	if (!od->stk)
+		return;
+
+	ofono_stk_free(od->stk);
+	od->stk = NULL;
+
+	/* no SIM toolkit on this slot any more */
+	telephony_service_stk_menu_changed_notify(od->service, od->sim_id, NULL);
+}
+
+static void stk_select_item_cb(struct ofono_error *error, void *data)
+{
+	struct cb_data *cbd = data;
+	telephony_result_cb cb = cbd->cb;
+	struct telephony_error terr;
+
+	if (error) {
+		switch (error->type) {
+		case OFONO_ERROR_TYPE_IN_PROGRESS:
+			terr.code = TELEPHONY_ERROR_ALREADY_INPROGRESS;
+			break;
+		case OFONO_ERROR_TYPE_INVALID_ARGUMENTS:
+		case OFONO_ERROR_TYPE_INVALID_FORMAT:
+			terr.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+			break;
+		case OFONO_ERROR_TYPE_NOT_IMPLEMENTED:
+			terr.code = TELEPHONY_ERROR_NOT_IMPLEMENTED;
+			break;
+		default:
+			terr.code = TELEPHONY_ERROR_FAIL;
+			break;
+		}
+		g_message("SIM toolkit SelectItem failed: %s", error->message ? error->message : "");
+		cb(&terr, cbd->data);
+	}
+	else {
+		cb(NULL, cbd->data);
+	}
+
+	g_free(cbd);
+}
+
+static void ofono_stk_select_item_op(struct telephony_service *service, int sim_id, int index,
+                                     telephony_result_cb cb, void *data)
+{
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
+	struct telephony_error err;
+
+	if (!od || !od->stk) {
+		err.code = TELEPHONY_ERROR_NOT_AVAILABLE;
+		cb(&err, data);
+		return;
+	}
+
+	if (index < 0 || index > 255) {
+		err.code = TELEPHONY_ERROR_INVALID_ARGUMENT;
+		cb(&err, data);
+		return;
+	}
+
+	ofono_stk_select_item(od->stk, (guint8) index, stk_select_item_cb, cb_data_new(cb, data));
+}
+
 static void modem_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_sim_data *od = data;
@@ -1440,6 +1538,15 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->mm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MESSAGE_MANAGER)) {
 			ofono_message_manager_free(od->mm);
 			od->mm = NULL;
+		}
+
+		/* SimToolkit comes and goes with the SIM (and with a SIM reset);
+		 * a new instance registers the agent again. */
+		if (!od->stk && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_TOOLKIT)) {
+			od->stk = ofono_stk_create(path, od->sim_id, &stk_callbacks, od);
+		}
+		else if (od->stk && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_SIM_TOOLKIT)) {
+			stk_free(od);
 		}
 
 		notify_sim_info(od);
@@ -1531,6 +1638,8 @@ void ofono_sim_info_query(struct telephony_service *service, int sim_id,
 /* Release the per interface proxies of one modem. */
 static void free_used_instances(struct ofono_sim_data *od)
 {
+	stk_free(od);
+
 	if (od->mm) {
 		ofono_message_manager_free(od->mm);
 		od->mm = NULL;
@@ -1764,7 +1873,8 @@ struct telephony_driver ofono_telephony_driver = {
 	.answer = ofono_answer,
 	.ignore = ofono_ignore,
 	.hangup = ofono_hangup,
-	.send_sms = ofono_send_sms
+	.send_sms = ofono_send_sms,
+	.stk_select_item = ofono_stk_select_item_op
 };
 
 // vim:ts=4:sw=4:noexpandtab

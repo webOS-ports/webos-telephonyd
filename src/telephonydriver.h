@@ -244,6 +244,9 @@ struct telephony_driver {
 
 	/* sms */
 	void (*send_sms)(struct telephony_service *service, int sim_id, const char *to, const char *text, telephony_result_cb cb, void *data);
+
+	/* SIM toolkit: start a session with the main menu item at index */
+	void (*stk_select_item)(struct telephony_service *service, int sim_id, int index, telephony_result_cb cb, void *data);
 };
 
 #endif

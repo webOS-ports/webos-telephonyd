@@ -24,6 +24,7 @@
 #include <luna-service2/lunaservice.h>
 
 #include "telephonydriver.h"
+#include "stkcore.h"
 
 /**
  * Everything the service tracks for one SIM slot. Before dual SIM support all
@@ -77,6 +78,11 @@ struct telephony_service {
 	 * modem is online only when its own stored state says so AND this is off.
 	 */
 	bool airplane_mode;
+
+	/* SIM toolkit: agent requests waiting for the user, and the main menu
+	 * of each slot (NULL when the slot has none) */
+	struct stk_core *stk;
+	struct stk_menu *stk_menu[TELEPHONY_MAX_SIMS];
 };
 
 int telephonyservice_common_finish(const struct telephony_error *error, void *data);
@@ -176,6 +182,15 @@ bool _service_sim_list_query_cb(LSHandle *handle, LSMessage *message, void *user
 bool _service_default_sim_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_default_sim_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_sim_name_set_cb(LSHandle *handle, LSMessage *message, void *user_data);
+
+/* Implemented in telephonyservice_stk.c */
+bool _service_stk_get_main_menu_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_stk_select_item_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_stk_agent_request_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_stk_respond_cb(LSHandle *handle, LSMessage *message, void *user_data);
+void telephony_service_stk_setup(struct telephony_service *service);
+/* Answers every pending request (without posting to luna) and drops the menus. */
+void telephony_service_stk_shutdown(struct telephony_service *service);
 
 #endif
 
