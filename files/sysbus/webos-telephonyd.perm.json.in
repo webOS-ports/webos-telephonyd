@@ -17,10 +17,5 @@
         "activity.operation",
         "database.operation",
         "telephony.management"
-    ],
-    "com.webos.service.wan": [
-        "activity.operation",
-        "database.operation",
-        "telephony.management"
     ]
 }
