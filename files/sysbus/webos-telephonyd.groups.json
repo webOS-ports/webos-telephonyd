@@ -1,5 +1,5 @@
 {
- "allowedNames": ["com.palm.telephony", "com.webos.service.telephony", "com.palm.wan", "com.webos.service.wan"],
+ "allowedNames": ["com.palm.telephony", "com.webos.service.telephony", "com.palm.wan"],
  "telephony.management": ["dev"],
  "telephony.query": ["dev"]
 }
