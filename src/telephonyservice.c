@@ -29,6 +29,7 @@
 #include "telephonydriver.h"
 #include "telephonyservice.h"
 #include "telephonyservice_internal.h"
+#include "telephonyservice_mms.h"
 #include "telephonyservice_sms.h"
 #include "wanservice.h"
 #include "utils.h"
@@ -104,6 +105,8 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "ignore", _service_ignore_cb },
 	{ "hangup", _service_hangup_cb },
 	{ "sendSmsFromDb", _service_internal_send_sms_from_db_cb },
+	{ "sendMmsFromDb", _service_internal_send_mms_from_db_cb, LUNA_METHOD_FLAGS_NONE },
+	{ "mmsStatusQuery", _service_mms_status_query_cb, LUNA_METHOD_FLAGS_NONE },
 	{ "simListQuery", _service_sim_list_query_cb },
 	{ "defaultSimQuery", _service_default_sim_query_cb },
 	{ "defaultSimSet", _service_default_sim_set_cb },
@@ -1077,6 +1080,7 @@ struct telephony_service* telephony_service_create()
 	}
 
 	telephonyservice_sms_setup(service);
+	telephony_service_mms_setup(service, NULL);
 
 	return service;
 
@@ -1124,6 +1128,9 @@ void telephony_service_free(struct telephony_service *service)
 		g_critical("Could not unregister webos service: %s", error.message);
 		LSErrorFree(&error);
 	}
+
+	/* after the luna handles: no db8 reply can come for it any more */
+	telephony_service_mms_shutdown(service);
 
 	if (service->driver) {
 		service->driver->remove(service);

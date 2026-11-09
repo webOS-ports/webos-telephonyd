@@ -17,6 +17,14 @@
             ]
         },
         {
+            "name":"outgoing",
+            "props":[
+                { "name":"folder" },
+                { "name":"status" },
+                { "name":"localTimestamp" }
+            ]
+        },
+        {
             "name":"byIdAndMmsType",
             "props":[
                 { "name":"_id" },
