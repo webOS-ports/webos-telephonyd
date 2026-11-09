@@ -1,0 +1,31 @@
+{
+    "start": true,
+    "activity": {
+        "name": "telephony-send-outgoing-mms",
+        "description": "DB8 watch to get notified once a new MMS message is ready to be sent",
+        "type": {
+            "foreground": true,
+            "power":true,
+            "powerDebounce":true,
+            "explicit":true
+        },
+        "trigger": {
+            "method": "palm://com.palm.db/watch",
+            "key": "fired",
+            "params": {
+                "subscribe": true,
+                "query": {
+                    "from": "com.palm.mmsmessage:1",
+                    "where": [
+                        {"op":"=","prop":"folder","val":"outbox"},
+                        {"op":"=","prop":"status","val":"pending"}
+                    ]
+                }
+            }
+        },
+        "callback": {
+            "method": "palm://com.palm.telephony/sendMmsFromDb",
+            "params": {}
+        }
+    }
+}

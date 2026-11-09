@@ -83,6 +83,9 @@ struct telephony_service {
 	 * of each slot (NULL when the slot has none) */
 	struct stk_core *stk;
 	struct stk_menu *stk_menu[TELEPHONY_MAX_SIMS];
+
+	/* MMS through mmsd (telephonyservice_mms.c); NULL when not set up */
+	struct telephony_mms *mms;
 };
 
 int telephonyservice_common_finish(const struct telephony_error *error, void *data);
