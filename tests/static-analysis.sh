@@ -1,5 +1,5 @@
 #!/bin/sh
-# Static analysis of the given C files (default: the SIM toolkit units and
+# Static analysis of the given C files (default: the SIM toolkit and MMS units and
 # the files they touch), one section per tool:
 #
 #   gcc -fanalyzer (-O0 and -O2), clang --analyze with the alpha
@@ -22,7 +22,8 @@ GEN=${GEN:-$TOP/tests/.build}
 if [ $# -gt 0 ]; then
 	FILES="$*"
 else
-	FILES="src/stkcore.c src/stkjson.c src/telephonyservice_stk.c drivers/ofono/ofonostk.c"
+	FILES="src/stkcore.c src/stkjson.c src/telephonyservice_stk.c drivers/ofono/ofonostk.c \
+	       src/mmscore.c src/mmsjson.c src/mmsdclient.c src/telephonyservice_mms.c"
 fi
 
 mkdir -p "$GEN"

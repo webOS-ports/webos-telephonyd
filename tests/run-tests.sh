@@ -68,6 +68,9 @@ run_test test_ratmode "" "$TESTS_DIR/test_ratmode.c" "$TOP_DIR/src/telephonydriv
 run_test test_stkcore "" "$TESTS_DIR/test_stkcore.c" "$TOP_DIR/src/stkcore.c"
 run_test test_ofonostk "$STUBS" "$TESTS_DIR/test_ofonostk.c" "$TOP_DIR/drivers/ofono/ofonostk.c" \
 	"$TOP_DIR/drivers/ofono/ofonobase.c" "$TOP_DIR/src/stkcore.c" "$BUILD_DIR/ofono-interface.c"
+run_test test_mmscore "" "$TESTS_DIR/test_mmscore.c" "$TOP_DIR/src/mmscore.c"
+run_test test_mmsdclient "-I$TESTS_DIR" "$TESTS_DIR/test_mmsdclient.c" "$TESTS_DIR/fake_mmsd.c" \
+	"$TOP_DIR/src/mmsdclient.c" "$TOP_DIR/src/mmscore.c"
 
 if $PC --exists pbnjson_c 2>/dev/null; then
 	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
@@ -75,6 +78,14 @@ if $PC --exists pbnjson_c 2>/dev/null; then
 		"$TOP_DIR/src/stkcore.c"
 else
 	echo "SKIP: test_stkjson (no pbnjson_c)"
+fi
+
+if $PC --exists pbnjson_c 2>/dev/null; then
+	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
+	run_test test_mmsjson "$($PC --cflags pbnjson_c)" "$TESTS_DIR/test_mmsjson.c" "$TOP_DIR/src/mmsjson.c" \
+		"$TOP_DIR/src/mmscore.c"
+else
+	echo "SKIP: test_mmsjson (no pbnjson_c)"
 fi
 
 # The luna methods, with luna-service2 replaced by stubs in the test: only
@@ -86,6 +97,17 @@ if $PC --exists pbnjson_c luna-service2 2>/dev/null; then
 		"$TOP_DIR/src/stkjson.c" "$TOP_DIR/src/stkcore.c" "$TOP_DIR/src/luna_service_utils.c"
 else
 	echo "SKIP: test_telephonyservice_stk (no pbnjson_c / luna-service2 headers)"
+fi
+
+# MMS from the db8 outbox to a fake mmsd on a private bus and back.
+if $PC --exists pbnjson_c luna-service2 2>/dev/null; then
+	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
+	run_test test_telephonyservice_mms "$($PC --cflags pbnjson_c luna-service2) -I$TESTS_DIR" \
+		"$TESTS_DIR/test_telephonyservice_mms.c" "$TESTS_DIR/fake_mmsd.c" "$TOP_DIR/src/telephonyservice_mms.c" \
+		"$TOP_DIR/src/mmsjson.c" "$TOP_DIR/src/mmscore.c" "$TOP_DIR/src/mmsdclient.c" \
+		"$TOP_DIR/src/luna_service_utils.c" "$TOP_DIR/src/timeutils.c"
+else
+	echo "SKIP: test_telephonyservice_mms (no pbnjson_c / luna-service2 headers)"
 fi
 
 exit $status

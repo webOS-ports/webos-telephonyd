@@ -128,4 +128,25 @@ if(WITH_TESTS)
                    src/stkjson.c src/stkcore.c src/luna_service_utils.c)
     target_link_libraries(test_telephonyservice_stk ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
     add_test(NAME telephonyservice_stk COMMAND test_telephonyservice_stk)
+
+    add_executable(test_mmscore tests/test_mmscore.c src/mmscore.c)
+    target_link_libraries(test_mmscore ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS})
+    add_test(NAME mmscore COMMAND test_mmscore)
+
+    add_executable(test_mmsdclient tests/test_mmsdclient.c tests/fake_mmsd.c src/mmsdclient.c src/mmscore.c)
+    target_include_directories(test_mmsdclient PRIVATE tests)
+    target_link_libraries(test_mmsdclient ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
+    add_test(NAME mmsdclient COMMAND test_mmsdclient)
+
+    add_executable(test_mmsjson tests/test_mmsjson.c src/mmsjson.c src/mmscore.c)
+    target_link_libraries(test_mmsjson ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
+    add_test(NAME mmsjson COMMAND test_mmsjson)
+
+    add_executable(test_telephonyservice_mms tests/test_telephonyservice_mms.c tests/fake_mmsd.c
+                   src/telephonyservice_mms.c src/mmsjson.c src/mmscore.c src/mmsdclient.c
+                   src/luna_service_utils.c src/timeutils.c)
+    target_include_directories(test_telephonyservice_mms PRIVATE tests)
+    target_link_libraries(test_telephonyservice_mms ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
+                          ${PBNJSON_C_LDFLAGS})
+    add_test(NAME telephonyservice_mms COMMAND test_telephonyservice_mms)
 endif()
