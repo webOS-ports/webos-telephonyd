@@ -43,9 +43,15 @@
 
 /* At most this many files go with one message (the app stages up to 10). */
 #define MMS_MAX_FILES 10
-/* Upper bound for all files of one message together, in bytes. Carriers take
- * between 300 KiB and a few MiB; nothing is scaled down here. */
-#define MMS_MAX_TOTAL_SIZE ((gsize) 1024 * 1024)
+/* The size an outgoing message is fitted into, in bytes: its text, its files
+ * and what mmsd puts around them. A choice, not a carrier's number: 300 KB is
+ * the message size class of OMA's MMS conformance document that phones and
+ * carriers take most widely. Pictures are made smaller to fit
+ * (src/mmsimage.h); other files have to fit as they are. */
+#define MMS_DEFAULT_MESSAGE_SIZE ((gsize) 300 * 1024)
+/* Kept from that for the SMIL body and the headers mmsd adds to the message
+ * and to each part (an allowance, not a measurement). */
+#define MMS_ENVELOPE_RESERVE ((gsize) 4 * 1024)
 /* mmsd's own limit for one number (src/service.c valid_number_format). */
 #define MMS_MAX_NUMBER_DIGITS 20
 
@@ -138,6 +144,17 @@ int mms_open_file(const char *path, const char * const *roots, gsize max_size,
  * that group. Returns FALSE and removes dest on any error.
  */
 gboolean mms_copy_fd_to_file(int fd, const char *dest, gsize max, mode_t mode, gid_t gid, GError **error);
+
+/**
+ * How the n files of a message share budget bytes. sizes[i] is the size of
+ * file i, fittable[i] whether it is a picture that can be made smaller. The
+ * other files take what they are; the pictures share the rest equally, and a
+ * picture smaller than its share leaves what it does not need to the larger
+ * ones. On TRUE targets[i] is what file i may take: not below sizes[i] means
+ * it goes as it is, below means it has to be made to fit. FALSE when the
+ * other files alone do not fit, or a picture would get nothing.
+ */
+gboolean mms_plan_fit(const gsize *sizes, const gboolean *fittable, guint n, gsize budget, gsize *targets);
 
 /* Write data into a new file, as mms_copy_fd_to_file. */
 gboolean mms_write_new_file(const char *dest, const void *data, gsize len, mode_t mode, gid_t gid,

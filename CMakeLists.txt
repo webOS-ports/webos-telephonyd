@@ -50,6 +50,12 @@ pkg_check_modules(PBNJSON_C REQUIRED pbnjson_c)
 include_directories(${PBNJSON_C_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${PBNJSON_C_CFLAGS_OTHER})
 
+# Pictures that are too large for an MMS are scaled down and re-encoded
+# (src/mmsimage.c); LuneOS' gdk-pixbuf has the JPEG and PNG loaders built in.
+pkg_check_modules(GDKPIXBUF REQUIRED gdk-pixbuf-2.0)
+include_directories(${GDKPIXBUF_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${GDKPIXBUF_CFLAGS_OTHER})
+
 pkg_check_modules(LUNAPREFS REQUIRED luna-prefs)
 include_directories(${LUNAPREFS_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${LUNAPREFS_CFLAGS_OTHER})
@@ -84,7 +90,7 @@ add_executable(webos-telephonyd ${SOURCE_FILES})
 target_link_libraries(webos-telephonyd
     ${GLIB2_LDFLAGS} ${LUNASERVICE2_LDFLAGS} ${PBNJSON_C_LDFLAGS}
     ${GIO2_LDFLAGS} ${GIO-UNIX_LDFLAGS} ${GOBJECT2_LDFLAGS}
-    ${LUNAPREFS_LDFLAGS} rt pthread)
+    ${LUNAPREFS_LDFLAGS} ${GDKPIXBUF_LDFLAGS} rt pthread)
 
 webos_build_daemon()
 webos_build_system_bus_files()
@@ -142,11 +148,15 @@ if(WITH_TESTS)
     target_link_libraries(test_mmsjson ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
     add_test(NAME mmsjson COMMAND test_mmsjson)
 
+    add_executable(test_mmsimage tests/test_mmsimage.c src/mmsimage.c src/mmscore.c)
+    target_link_libraries(test_mmsimage ${GLIB2_LDFLAGS} ${GOBJECT2_LDFLAGS} ${GDKPIXBUF_LDFLAGS})
+    add_test(NAME mmsimage COMMAND test_mmsimage)
+
     add_executable(test_telephonyservice_mms tests/test_telephonyservice_mms.c tests/fake_mmsd.c
-                   src/telephonyservice_mms.c src/mmsjson.c src/mmscore.c src/mmsdclient.c
+                   src/telephonyservice_mms.c src/mmsjson.c src/mmscore.c src/mmsdclient.c src/mmsimage.c
                    src/luna_service_utils.c src/timeutils.c)
     target_include_directories(test_telephonyservice_mms PRIVATE tests)
     target_link_libraries(test_telephonyservice_mms ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS}
-                          ${PBNJSON_C_LDFLAGS})
+                          ${PBNJSON_C_LDFLAGS} ${GDKPIXBUF_LDFLAGS})
     add_test(NAME telephonyservice_mms COMMAND test_telephonyservice_mms)
 endif()

@@ -23,7 +23,7 @@ if [ $# -gt 0 ]; then
 	FILES="$*"
 else
 	FILES="src/stkcore.c src/stkjson.c src/telephonyservice_stk.c drivers/ofono/ofonostk.c \
-	       src/mmscore.c src/mmsjson.c src/mmsdclient.c src/telephonyservice_mms.c"
+	       src/mmscore.c src/mmsjson.c src/mmsdclient.c src/mmsimage.c src/telephonyservice_mms.c"
 fi
 
 mkdir -p "$GEN"
@@ -31,7 +31,7 @@ mkdir -p "$GEN"
 	--interface-prefix org.ofono. "$TOP/files/xml/ofono.xml")
 
 PC="env PKG_CONFIG_SYSROOT_DIR=$SYSROOT PKG_CONFIG_LIBDIR=$SYSROOT/usr/lib/pkgconfig:$SYSROOT/usr/share/pkgconfig pkg-config"
-INC="$($PC --cflags glib-2.0 gio-2.0 gio-unix-2.0 luna-service2 pbnjson_c luna-prefs) -Isrc -Idrivers/ofono -I$GEN"
+INC="$($PC --cflags glib-2.0 gio-2.0 gio-unix-2.0 luna-service2 pbnjson_c luna-prefs gdk-pixbuf-2.0) -Isrc -Idrivers/ofono -I$GEN"
 CFLAGS="--sysroot=$SYSROOT $INC"
 FILE_RE=$(printf '%s\n' $FILES | sed 's/[.]/[.]/g' | paste -sd'|')
 tools_failed=0
@@ -100,7 +100,8 @@ fi
 if have cppcheck; then
 	# shellcheck disable=SC2086
 	out=$(cppcheck --enable=all --check-level=exhaustive --inconclusive --std=c11 \
-		--library=gnu --library=posix --force --inline-suppr --quiet \
+		--library=gnu --library=posix --library=gtk --force --inline-suppr --quiet \
+		-D'G_GSIZE_FORMAT="zu"' -D'G_GUINT64_FORMAT="lu"' \
 		--suppress=missingIncludeSystem --suppress=missingInclude --suppress=unmatchedSuppression \
 		--suppress=checkersReport --suppress=unusedFunction --suppress=staticFunction \
 		--template='{file}:{line}: {severity}: {message} [{id}]' \
