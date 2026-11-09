@@ -384,8 +384,9 @@ static void setup(guint send_timeout_s)
 	telephony_service_mms_setup(service, &config);
 	g_assert_nonnull(service->mms);
 
-	/* the activity is re-armed at start */
-	answer(take_call("activitymanager/complete"), "{\"returnValue\":true}");
+	/* the activity is re-armed at start, under the redirected name
+	 * (TELEPHONY_ACTIVITY_COMPLETE_URI) */
+	answer(take_call("//com.palm.activitymanager/complete"), "{\"returnValue\":true}");
 }
 
 static void teardown(void)
@@ -451,7 +452,7 @@ static void run_activity(const char *results_json)
 	answer(find, reply);
 	g_free(reply);
 
-	answer(take_call("activitymanager/complete"), "{\"returnValue\":true}");
+	answer(take_call("//com.palm.activitymanager/complete"), "{\"returnValue\":true}");
 }
 
 /* The next merge, checked and answered. */

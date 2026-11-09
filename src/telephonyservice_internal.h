@@ -26,6 +26,27 @@
 #include "telephonydriver.h"
 #include "stkcore.h"
 
+/*
+ * Where the send activities are completed (and re-armed with "restart").
+ *
+ * Not under the activity manager's own name, com.webos.service.activitymanager:
+ * the activity manager calls sendSmsFromDb / sendMmsFromDb as a proxy for the
+ * activity's creator, and the hub gives a proxy connection to us inbound
+ * permission only. libluna-service2 (transport.c, the proxy query-name reply)
+ * still files that connection under the activity manager's name, replacing
+ * the outbound one, so the next call to that name goes out on a connection
+ * that may not carry it: LS_ASSERT _LSTransportClientAllowOutboundCalls in
+ * LSTransportSend, and the activity manager drops the call (LS_REQUIRES_SECURITY
+ * "not allowed to make calls"). The activity is then never re-armed: it sits
+ * "expired" and the next message in the outbox is not sent.
+ *
+ * com.palm.activitymanager is not a registered name; the hub redirects it to
+ * com.webos.service.activitymanager and answers with an outbound connection of
+ * its own, filed under the old name, which no proxy call replaces. The caller
+ * is still com.palm.telephony, the activities' creator.
+ */
+#define TELEPHONY_ACTIVITY_COMPLETE_URI "luna://com.palm.activitymanager/complete"
+
 /**
  * Everything the service tracks for one SIM slot. Before dual SIM support all
  * of these lived directly in struct telephony_service; the single-SIM case is
