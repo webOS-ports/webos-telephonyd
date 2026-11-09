@@ -30,6 +30,7 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <pbnjson.h>
 #include <luna-service2/lunaservice.h>
 
@@ -210,6 +211,7 @@ static gchar *media;	/* the allowed root */
 static gchar *spool;
 static gchar *inbox;
 static struct telephony_service *service;
+static gsize message_limit;	/* 0: the default */
 
 static jvalue_ref parse(const char *json)
 {
@@ -380,6 +382,7 @@ static void setup(guint send_timeout_s)
 	config.spool_gid = getgid();
 	config.roots = roots;
 	config.send_timeout_s = send_timeout_s;
+	config.max_message_size = message_limit;
 
 	telephony_service_mms_setup(service, &config);
 	g_assert_nonnull(service->mms);
@@ -604,10 +607,10 @@ static void test_refusals(void)
 
 	/* too large */
 	{
-		gchar *big = g_malloc0(MMS_MAX_TOTAL_SIZE + 1);
+		gchar *big = g_malloc0(MMS_DEFAULT_MESSAGE_SIZE + 1);
 		gchar *path = g_build_filename(media, "big.jpg", NULL);
 
-		g_assert_true(g_file_set_contents(path, big, MMS_MAX_TOTAL_SIZE + 1, NULL));
+		g_assert_true(g_file_set_contents(path, big, MMS_DEFAULT_MESSAGE_SIZE + 1, NULL));
 		results = g_strdup_printf("[{\"_id\":\"r3\",\"to\":[{\"addr\":\"112\"}],\"filePath\":\"%s\"}]", path);
 		run_activity(results);
 		expect_merge("r3", NULL, "sending", NULL);
@@ -735,6 +738,178 @@ static void test_no_service(void)
 	assert_json(g_ptr_array_index(m->replies, 0), "subscribed", "false");
 	message_free(m);
 
+	teardown();
+}
+
+/* A picture of noise, so that it does not compress away, saved below media. */
+static gchar* media_picture(const char *name, int width, int height, const char *type, const char *quality)
+{
+	GdkPixbuf *p = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+	GRand *rand = g_rand_new_with_seed(7);
+	gchar *path = g_build_filename(media, name, NULL);
+	guchar *pixels = gdk_pixbuf_get_pixels(p);
+	int x, y, c;
+
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			for (c = 0; c < 4; c++)
+				pixels[(gsize) y * gdk_pixbuf_get_rowstride(p) + (gsize) x * 4 + c] =
+					c == 3 ? 255 : (guchar) g_rand_int_range(rand, 0, 256);
+		}
+	}
+
+	if (quality)
+		g_assert_true(gdk_pixbuf_save(p, path, type, NULL, "quality", quality, NULL));
+	else
+		g_assert_true(gdk_pixbuf_save(p, path, type, NULL, NULL));
+
+	g_rand_free(rand);
+	g_object_unref(p);
+	return path;
+}
+
+static GBytes* file_bytes(const char *path)
+{
+	gchar *data = NULL;
+	gsize len = 0;
+
+	g_assert_true(g_file_get_contents(path, &data, &len, NULL));
+	return g_bytes_new_take(data, len);
+}
+
+/* A screenshot larger than a whole MMS goes as a JPEG that fits, a small
+ * photo next to it as it is; the user's files stay as they were. */
+static void test_send_fits_pictures(void)
+{
+	gchar *shot = media_picture("shot.png", 1400, 900, "png", NULL);
+	gchar *photo = media_picture("photo.jpg", 160, 120, "jpeg", "80");
+	GBytes *shot_before = file_bytes(shot);
+	GBytes *photo_before = file_bytes(photo);
+	GBytes *shot_after;
+	GBytes *photo_after;
+	GVariantIter *to, *att;
+	const char *smil, *id, *ct, *file;
+	gchar *results;
+	gsize total = 0;
+	guint n;
+
+	g_assert_cmpuint(g_bytes_get_size(shot_before), >, MMS_DEFAULT_MESSAGE_SIZE);
+	start_with_service(600);
+
+	results = g_strdup_printf("[%s]", "{\"_id\":\"f1\",\"to\":[{\"addr\":\"112\"}],\"messageText\":\"Look\","
+	                          "\"attachments\":[{\"path\":\"SHOT\",\"mimeType\":\"image/png\"},{\"path\":\"PHOTO\"}]}");
+	{
+		gchar **split = g_strsplit(results, "SHOT", -1);
+
+		g_free(results);
+		results = g_strjoinv(shot, split);
+		g_strfreev(split);
+		split = g_strsplit(results, "PHOTO", -1);
+		g_free(results);
+		results = g_strjoinv(photo, split);
+		g_strfreev(split);
+	}
+
+	run_activity(results);
+	expect_merge("f1", NULL, "sending", NULL);
+	g_assert_true(fake_wait(sends_reached, GUINT_TO_POINTER(1)));
+
+	g_variant_get(fake.last_send, "(as&sa(sss))", &to, &smil, &att);
+	g_assert_true(g_variant_iter_next(att, "(&s&s&s)", &id, &ct, &file));
+	g_assert_cmpstr(ct, ==, "text/plain");
+	g_assert_true(g_variant_iter_next(att, "(&s&s&s)", &id, &ct, &file));
+	g_assert_cmpstr(id, ==, "<part1.jpg>");
+	g_assert_cmpstr(ct, ==, "image/jpeg");
+	g_assert_true(g_variant_iter_next(att, "(&s&s&s)", &id, &ct, &file));
+	g_assert_cmpstr(id, ==, "<part2.jpg>");
+	g_assert_cmpstr(ct, ==, "image/jpeg");
+	g_assert_false(g_variant_iter_next(att, "(&s&s&s)", &id, &ct, &file));
+	g_variant_iter_free(to);
+	g_variant_iter_free(att);
+
+	/* all of it within the size, less what mmsd adds */
+	for (n = 0; n < fake.last_send_data->len; n++)
+		total += g_bytes_get_size(g_ptr_array_index(fake.last_send_data, n));
+	g_assert_cmpuint(total, <=, MMS_DEFAULT_MESSAGE_SIZE - MMS_ENVELOPE_RESERVE);
+
+	/* the screenshot became a JPEG, the photo went untouched */
+	{
+		const guchar *jpeg = g_bytes_get_data(g_ptr_array_index(fake.last_send_data, 1), NULL);
+
+		g_assert_cmpuint(jpeg[0], ==, 0xff);
+		g_assert_cmpuint(jpeg[1], ==, 0xd8);
+	}
+	g_assert_true(g_bytes_equal(g_ptr_array_index(fake.last_send_data, 2), photo_before));
+
+	/* and the user's files are as they were */
+	shot_after = file_bytes(shot);
+	photo_after = file_bytes(photo);
+	g_assert_true(g_bytes_equal(shot_before, shot_after));
+	g_assert_true(g_bytes_equal(photo_before, photo_after));
+
+	expect_merge("f1", NULL, "sending", NULL);
+	g_assert_cmpuint(spool_entries(), ==, 0);
+
+	g_bytes_unref(shot_before);
+	g_bytes_unref(shot_after);
+	g_bytes_unref(photo_before);
+	g_bytes_unref(photo_after);
+	g_unlink(shot);
+	g_unlink(photo);
+	g_free(shot);
+	g_free(photo);
+	g_free(results);
+	teardown();
+}
+
+/* What cannot be made smaller has to fit as it is; text counts too. */
+static void test_send_too_large(void)
+{
+	gchar *results;
+	gchar *path = g_build_filename(media, "clip.bin", NULL);
+	gchar *data = g_malloc0(60000);
+	gchar *text = g_malloc(70000);
+
+	message_limit = 64 * 1024;
+	start_with_service(600);
+
+	/* a file that is not a picture, larger than the message may be */
+	g_assert_true(g_file_set_contents(path, data, 60000, NULL));
+	memset(text, 'x', 69999);
+	text[69999] = '\0';
+
+	/* fits */
+	results = g_strdup_printf("[{\"_id\":\"t1\",\"to\":[{\"addr\":\"112\"}],\"filePath\":\"%s\"}]", path);
+	run_activity(results);
+	g_free(results);
+	expect_merge("t1", NULL, "sending", NULL);
+	g_assert_true(fake_wait(sends_reached, GUINT_TO_POINTER(1)));
+	expect_merge("t1", NULL, "sending", NULL);
+
+	/* the same with a text that takes the room it needs */
+	results = g_strdup_printf("[{\"_id\":\"t2\",\"to\":[{\"addr\":\"112\"}],\"messageText\":\"%.5000s\","
+	                          "\"filePath\":\"%s\"}]", text, path);
+	run_activity(results);
+	g_free(results);
+	expect_merge("t2", NULL, "sending", NULL);
+	expect_merge("t2", NULL, "failed", "mmsErrorAttachmentTooLarge");
+
+	/* a text alone larger than the message */
+	results = g_strdup_printf("[{\"_id\":\"t3\",\"to\":[{\"addr\":\"112\"}],\"messageText\":\"%s\"}]", text);
+	run_activity(results);
+	g_free(results);
+	expect_merge("t3", NULL, "sending", NULL);
+	expect_merge("t3", NULL, "failed", "mmsErrorAttachmentTooLarge");
+
+	fake_settle();
+	g_assert_cmpuint(fake.sends, ==, 1);
+	g_assert_cmpuint(spool_entries(), ==, 0);
+
+	message_limit = 0;
+	g_unlink(path);
+	g_free(path);
+	g_free(data);
+	g_free(text);
 	teardown();
 }
 
@@ -936,6 +1111,8 @@ int main(int argc, char **argv)
 
 	g_test_add_func("/telephonyservice_mms/send-and-sent", test_send_and_sent);
 	g_test_add_func("/telephonyservice_mms/refusals", test_refusals);
+	g_test_add_func("/telephonyservice_mms/send-fits-pictures", test_send_fits_pictures);
+	g_test_add_func("/telephonyservice_mms/send-too-large", test_send_too_large);
 	g_test_add_func("/telephonyservice_mms/one-at-a-time", test_one_at_a_time);
 	g_test_add_func("/telephonyservice_mms/timeout-and-draft", test_timeout_and_draft);
 	g_test_add_func("/telephonyservice_mms/no-service", test_no_service);

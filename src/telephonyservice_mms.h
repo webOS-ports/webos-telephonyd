@@ -60,11 +60,14 @@ struct telephony_mms_config {
 	/* No "sent" from mmsd within this many seconds: the record is marked
 	 * failed (and still becomes successful should mmsd send it later). */
 	guint send_timeout_s;
+	/* An outgoing message is fitted into this many bytes, pictures made
+	 * smaller to fit; 0: MMS_DEFAULT_MESSAGE_SIZE (300 KB). */
+	gsize max_message_size;
 };
 
 /* What the daemon uses: the system bus, /var/lib/webos-telephonyd/mms-spool,
  * /media/internal/.mms-attachments, group mmsd, files below /media/internal,
- * 10 minutes. */
+ * 10 minutes, 300 KB. */
 extern const struct telephony_mms_config telephony_mms_default_config;
 
 void telephony_service_mms_setup(struct telephony_service *service, const struct telephony_mms_config *config);

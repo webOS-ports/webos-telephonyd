@@ -20,7 +20,7 @@ TMPD=${1:?usage: build-matrix.sh <build TMPDIR> <out dir>}
 OUT=${2:?usage: build-matrix.sh <build TMPDIR> <out dir>}
 SRC=$(pwd)
 WARN="-Wall -Wextra -Wshadow -Wformat=2 -Wcast-align -Wpointer-arith -Wvla -Wno-unused-parameter"
-PKGS="glib-2.0 gio-2.0 gio-unix-2.0 gobject-2.0 luna-service2 pbnjson_c luna-prefs"
+PKGS="glib-2.0 gio-2.0 gio-unix-2.0 gobject-2.0 luna-service2 pbnjson_c luna-prefs gdk-pixbuf-2.0"
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
 FAILED=$OUT/failed
@@ -37,7 +37,8 @@ if [ ! -d "$ARMSR/usr/include/luna-service2" ]; then
     mkdir -p "$ARMSR"
     for c in glibc gcc-runtime libgcc glib-2.0 libffi libpcre2 zlib util-linux luna-service2 \
              libpbnjson luna-prefs json-c pmloglib linux-libc-headers yajl gmp uriparser \
-             libpthread-stubs libxcrypt libcap systemd nyx-lib sqlite3; do
+             libpthread-stubs libxcrypt libcap systemd nyx-lib sqlite3 \
+             gdk-pixbuf libpng libjpeg-turbo shared-mime-info; do
         [ -d "$SC/$c" ] && cp -a "$SC/$c/." "$ARMSR/"
     done
     rm -rf "$ARMSR/sysroot-providers"

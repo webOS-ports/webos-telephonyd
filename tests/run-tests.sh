@@ -99,15 +99,24 @@ else
 	echo "SKIP: test_telephonyservice_stk (no pbnjson_c / luna-service2 headers)"
 fi
 
+# Pictures made smaller for an MMS: gdk-pixbuf with its JPEG and PNG loaders.
+if $PC --exists gdk-pixbuf-2.0 2>/dev/null; then
+	EXTRA_LIBS="$($PC --libs gdk-pixbuf-2.0)" \
+	run_test test_mmsimage "$($PC --cflags gdk-pixbuf-2.0)" "$TESTS_DIR/test_mmsimage.c" \
+		"$TOP_DIR/src/mmsimage.c" "$TOP_DIR/src/mmscore.c"
+else
+	echo "SKIP: test_mmsimage (no gdk-pixbuf-2.0)"
+fi
+
 # MMS from the db8 outbox to a fake mmsd on a private bus and back.
-if $PC --exists pbnjson_c luna-service2 2>/dev/null; then
-	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
-	run_test test_telephonyservice_mms "$($PC --cflags pbnjson_c luna-service2) -I$TESTS_DIR" \
+if $PC --exists pbnjson_c luna-service2 gdk-pixbuf-2.0 2>/dev/null; then
+	EXTRA_LIBS="$($PC --libs pbnjson_c gdk-pixbuf-2.0)" \
+	run_test test_telephonyservice_mms "$($PC --cflags pbnjson_c luna-service2 gdk-pixbuf-2.0) -I$TESTS_DIR" \
 		"$TESTS_DIR/test_telephonyservice_mms.c" "$TESTS_DIR/fake_mmsd.c" "$TOP_DIR/src/telephonyservice_mms.c" \
-		"$TOP_DIR/src/mmsjson.c" "$TOP_DIR/src/mmscore.c" "$TOP_DIR/src/mmsdclient.c" \
+		"$TOP_DIR/src/mmsjson.c" "$TOP_DIR/src/mmscore.c" "$TOP_DIR/src/mmsdclient.c" "$TOP_DIR/src/mmsimage.c" \
 		"$TOP_DIR/src/luna_service_utils.c" "$TOP_DIR/src/timeutils.c"
 else
-	echo "SKIP: test_telephonyservice_mms (no pbnjson_c / luna-service2 headers)"
+	echo "SKIP: test_telephonyservice_mms (no pbnjson_c / luna-service2 headers / gdk-pixbuf-2.0)"
 fi
 
 exit $status
