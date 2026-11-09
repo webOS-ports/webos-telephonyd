@@ -133,7 +133,7 @@ static void restart_activity(struct telephony_mms *mms)
 	jobject_put(req, J_CSTR_TO_JVAL("restart"), jboolean_create(true));
 
 	if (!luna_service_call_validate_and_send(mms->service->palmHandle,
-	                                         "luna://com.webos.service.activitymanager/complete", req, NULL, NULL))
+	                                         TELEPHONY_ACTIVITY_COMPLETE_URI, req, NULL, NULL))
 		g_warning("[MMS] could not re-arm the outgoing MMS activity");
 
 	j_release(&req);
