@@ -479,6 +479,57 @@ gboolean mms_write_new_file(const char *dest, const void *data, gsize len, mode_
 	return finish_new_file(out, dest, write_all(out, data, len, dest, error), error);
 }
 
+static gint compare_sizes(gconstpointer a, gconstpointer b, gpointer user_data)
+{
+	const gsize *sizes = user_data;
+	gsize sa = sizes[*(const guint *) a];
+	gsize sb = sizes[*(const guint *) b];
+
+	return sa < sb ? -1 : (sa > sb ? 1 : 0);
+}
+
+gboolean mms_plan_fit(const gsize *sizes, const gboolean *fittable, guint n, gsize budget, gsize *targets)
+{
+	GArray *pictures = g_array_new(FALSE, FALSE, sizeof(guint));
+	gsize left = budget;
+	gboolean ok = TRUE;
+	guint i;
+
+	for (i = 0; i < n; i++) {
+		targets[i] = sizes[i];
+
+		if (fittable[i]) {
+			g_array_append_val(pictures, i);
+		}
+		else if (sizes[i] > left) {
+			ok = FALSE;
+		}
+		else {
+			left -= sizes[i];
+		}
+	}
+
+	/* smallest first: whatever a small one does not need, the larger
+	 * ones after it share */
+	g_array_sort_with_data(pictures, compare_sizes, (gpointer) sizes);
+
+	for (i = 0; ok && i < pictures->len; i++) {
+		guint index = g_array_index(pictures, guint, i);
+		gsize share = left / (pictures->len - i);
+
+		if (share == 0) {
+			ok = FALSE;
+			break;
+		}
+
+		targets[index] = MIN(sizes[index], share);
+		left -= targets[index];
+	}
+
+	g_array_free(pictures, TRUE);
+	return ok;
+}
+
 void mms_send_part_free(struct mms_send_part *part)
 {
 	if (!part)

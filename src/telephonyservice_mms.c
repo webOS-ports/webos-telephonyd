@@ -35,6 +35,7 @@
 #include "luna_service_utils.h"
 #include "mmscore.h"
 #include "mmsdclient.h"
+#include "mmsimage.h"
 #include "mmsjson.h"
 #include "timeutils.h"
 
@@ -48,6 +49,7 @@ const struct telephony_mms_config telephony_mms_default_config = {
 	.spool_gid = (gid_t) -1,
 	.roots = mms_default_roots,
 	.send_timeout_s = 600,
+	.max_message_size = MMS_DEFAULT_MESSAGE_SIZE,
 };
 
 struct inflight;
@@ -61,6 +63,7 @@ struct telephony_mms {
 	bool spool_gid_known;
 	const char * const *roots;
 	guint send_timeout_s;
+	gsize max_message_size;
 
 	GQueue *queue;			/* struct mms_outgoing* waiting to go */
 	GHashTable *known_ids;		/* db _id -> NULL, queued or in flight */
@@ -270,15 +273,140 @@ static gchar* file_content_type(const struct mms_file *file)
 	return g_strdup(mms_content_type_for_name(file->path));
 }
 
+/* One file of the message on its way into the spool. */
+struct spool_file {
+	int fd;
+	gsize size;
+	gchar *content_type;
+};
+
+/* Copies one file into the spool: as it is when it fits its target, else
+ * (a picture) made smaller to fit. NULL when that worked, else the error
+ * code. */
+static const char* spool_file(const struct telephony_mms *mms, struct inflight *in, guint n,
+                              const struct spool_file *file, gsize target, gsize *used)
+{
+	const struct mms_send_part *part;
+	GError *error = NULL;
+	gchar *name;
+
+	if (target >= file->size) {
+		name = g_strdup_printf("part%u.%s", n + 1, mms_extension_for_content_type(file->content_type));
+		part = add_part(in, name, file->content_type);
+		g_free(name);
+
+		if (!mms_copy_fd_to_file(file->fd, part->file, file->size, 0640, mms->spool_gid, &error)) {
+			g_warning("[MMS] cannot spool file %u: %s", n, error->message);
+			g_clear_error(&error);
+			return MMS_ERR_UNSPECIFIED;
+		}
+
+		*used += file->size;
+		return NULL;
+	}
+
+	{
+		GBytes *jpeg = mms_image_fit(file->fd, target, &error);
+		gsize len;
+		const void *data;
+
+		if (!jpeg) {
+			g_warning("[MMS] message %s: picture %u (%" G_GSIZE_FORMAT " bytes) cannot be made to fit %"
+			          G_GSIZE_FORMAT " bytes: %s", in->msg->id, n, file->size, target, error->message);
+			g_clear_error(&error);
+			return MMS_ERR_TOO_LARGE;
+		}
+
+		data = g_bytes_get_data(jpeg, &len);
+		name = g_strdup_printf("part%u.jpg", n + 1);
+		part = add_part(in, name, "image/jpeg");
+		g_free(name);
+
+		if (!mms_write_new_file(part->file, data, len, 0640, mms->spool_gid, &error)) {
+			g_warning("[MMS] cannot spool picture %u: %s", n, error->message);
+			g_clear_error(&error);
+			g_bytes_unref(jpeg);
+			return MMS_ERR_UNSPECIFIED;
+		}
+
+		g_message("[MMS] message %s: picture %u made smaller, %" G_GSIZE_FORMAT " -> %" G_GSIZE_FORMAT
+		          " bytes", in->msg->id, n, file->size, len);
+		*used += len;
+		g_bytes_unref(jpeg);
+	}
+
+	return NULL;
+}
+
+/* Opens every file, shares the room the text leaves among them and copies
+ * them into the spool. NULL when that worked, else the error code. */
+static const char* spool_files(const struct telephony_mms *mms, struct inflight *in, gsize budget, gsize *used)
+{
+	guint count = in->msg->files->len;
+	struct spool_file *files;
+	gsize *sizes;
+	gsize *targets;
+	gboolean *fittable;
+	const char *error_code = NULL;
+	guint n;
+
+	if (count == 0)
+		return NULL;
+
+	files = g_new0(struct spool_file, count);
+	sizes = g_new0(gsize, count);
+	targets = g_new0(gsize, count);
+	fittable = g_new0(gboolean, count);
+
+	for (n = 0; n < count; n++)
+		files[n].fd = -1;
+
+	for (n = 0; n < count && !error_code; n++) {
+		const struct mms_file *file = g_ptr_array_index(in->msg->files, n);
+		gsize max;
+
+		files[n].content_type = file_content_type(file);
+		fittable[n] = mms_image_fittable(files[n].content_type);
+		/* a picture may be larger than the message: it is made smaller */
+		max = fittable[n] ? MAX(budget, MMS_IMAGE_MAX_FILE_SIZE) : budget;
+
+		files[n].fd = mms_open_file(file->path, mms->roots, max, &files[n].size, &error_code);
+		if (files[n].fd < 0)
+			g_warning("[MMS] message %s: file %u cannot go (%s)", in->msg->id, n, error_code);
+		sizes[n] = files[n].size;
+	}
+
+	if (!error_code && !mms_plan_fit(sizes, fittable, count, budget, targets)) {
+		g_warning("[MMS] message %s: its files do not fit into %" G_GSIZE_FORMAT " bytes", in->msg->id, budget);
+		error_code = MMS_ERR_TOO_LARGE;
+	}
+
+	for (n = 0; n < count && !error_code; n++)
+		error_code = spool_file(mms, in, n, &files[n], targets[n], used);
+
+	for (n = 0; n < count; n++) {
+		if (files[n].fd >= 0)
+			close(files[n].fd);
+		g_free(files[n].content_type);
+	}
+	g_free(files);
+	g_free(sizes);
+	g_free(targets);
+	g_free(fittable);
+
+	return error_code;
+}
+
 /* Copies text and files into a fresh spool directory. NULL when that worked,
  * else the error code to fail the message with. */
 static const char* spool_message(struct telephony_mms *mms, struct inflight *in)
 {
+	gsize budget;
 	gsize used = 0;
 	gchar *tmpl;
 	GError *error = NULL;
+	const char *error_code;
 	int dir_fd;
-	guint n;
 
 	if (!mms->spool_gid_known)
 		return MMS_ERR_NOT_READY;
@@ -306,10 +434,20 @@ static const char* spool_message(struct telephony_mms *mms, struct inflight *in)
 	}
 	close(dir_fd);
 
+	/* what text and files may take together */
+	budget = mms->max_message_size > MMS_ENVELOPE_RESERVE ? mms->max_message_size - MMS_ENVELOPE_RESERVE : 0;
+
 	if (in->msg->text && *in->msg->text) {
-		const struct mms_send_part *part = add_part(in, "text_0.txt", "text/plain");
+		const struct mms_send_part *part;
 		gsize len = strlen(in->msg->text);
 
+		if (len > budget) {
+			g_warning("[MMS] message %s: its text alone is larger than %" G_GSIZE_FORMAT " bytes", in->msg->id,
+			          budget);
+			return MMS_ERR_TOO_LARGE;
+		}
+
+		part = add_part(in, "text_0.txt", "text/plain");
 		if (!mms_write_new_file(part->file, in->msg->text, len, 0640, mms->spool_gid, &error)) {
 			g_warning("[MMS] cannot spool the text: %s", error->message);
 			g_clear_error(&error);
@@ -318,42 +456,13 @@ static const char* spool_message(struct telephony_mms *mms, struct inflight *in)
 		used += len;
 	}
 
-	for (n = 0; n < in->msg->files->len; n++) {
-		const struct mms_file *file = g_ptr_array_index(in->msg->files, n);
-		const char *error_code = NULL;
-		const struct mms_send_part *part;
-		gchar *content_type;
-		gchar *name;
-		gsize size = 0;
-		int fd;
+	error_code = spool_files(mms, in, budget - used, &used);
+	if (error_code)
+		return error_code;
 
-		if (used >= MMS_MAX_TOTAL_SIZE)
-			return MMS_ERR_TOO_LARGE;
-
-		fd = mms_open_file(file->path, mms->roots, MMS_MAX_TOTAL_SIZE - used, &size, &error_code);
-		if (fd < 0) {
-			g_warning("[MMS] message %s: file %u cannot go (%s)", in->msg->id, n, error_code);
-			return error_code;
-		}
-
-		content_type = file_content_type(file);
-		name = g_strdup_printf("part%u.%s", n + 1, mms_extension_for_content_type(content_type));
-		part = add_part(in, name, content_type);
-
-		if (!mms_copy_fd_to_file(fd, part->file, MMS_MAX_TOTAL_SIZE - used, 0640, mms->spool_gid, &error)) {
-			g_warning("[MMS] cannot spool file %u: %s", n, error->message);
-			g_clear_error(&error);
-			g_free(content_type);
-			g_free(name);
-			close(fd);
-			return MMS_ERR_UNSPECIFIED;
-		}
-
-		used += size;
-		g_free(content_type);
-		g_free(name);
-		close(fd);
-	}
+	/* the plan keeps to the budget; a file that grew is refused while copying */
+	if (used > budget)
+		return MMS_ERR_TOO_LARGE;
 
 	return in->parts->len > 0 ? NULL : MMS_ERR_UNSUPPORTED;
 }
@@ -916,6 +1025,7 @@ void telephony_service_mms_setup(struct telephony_service *service, const struct
 	mms->inbox_dir = g_strdup(config->inbox_dir);
 	mms->roots = config->roots;
 	mms->send_timeout_s = config->send_timeout_s;
+	mms->max_message_size = config->max_message_size ? config->max_message_size : MMS_DEFAULT_MESSAGE_SIZE;
 	mms->queue = g_queue_new();
 	mms->known_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	mms->timeouts = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, send_timeout_free);
