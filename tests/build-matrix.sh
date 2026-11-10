@@ -87,7 +87,12 @@ gcclibdir() {   # sysroot
 # x86-64 and aarch64: recipe sysroots
 for arch in x86_64 aarch64; do
     if [ $arch = x86_64 ]; then D=$(recipe_dir corei7-64-webos-linux); triple=x86_64-webos-linux
-    else D=$(recipe_dir aarch64-webos-linux); triple=aarch64-webos-linux; fi
+    else
+        # a Halium-only build has the aarch64 workdir under the halium tune
+        D=$(recipe_dir aarch64-webos-linux 2>/dev/null)
+        [ -n "$D" ] || D=$(recipe_dir aarch64-halium-webos-linux)
+        triple=aarch64-webos-linux
+    fi
     SR=$D/recipe-sysroot
     NATIVE=$D/recipe-sysroot-native/usr/bin/$triple
     build "$arch-gcc" "$NATIVE/$triple-gcc" "$SR" "" ""
