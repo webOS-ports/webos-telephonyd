@@ -52,12 +52,12 @@ static LSMethod _wan_service_methods[]  = {
 	{ 0, 0 }
 };
 
-void wan_service_set_data_sim(int sim_id)
+void wan_service_set_data_sim(int sim_id, const char *imsi)
 {
 	if (!g_wan_service || !g_wan_service->driver || !g_wan_service->driver->set_data_sim)
 		return;
 
-	g_wan_service->driver->set_data_sim(g_wan_service, sim_id);
+	g_wan_service->driver->set_data_sim(g_wan_service, sim_id, imsi);
 }
 
 int wan_service_get_data_sim(void)

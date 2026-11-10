@@ -71,6 +71,7 @@ run_test test_ofonostk "$STUBS" "$TESTS_DIR/test_ofonostk.c" "$TOP_DIR/drivers/o
 run_test test_mmscore "" "$TESTS_DIR/test_mmscore.c" "$TOP_DIR/src/mmscore.c"
 run_test test_mmsdclient "-I$TESTS_DIR" "$TESTS_DIR/test_mmsdclient.c" "$TESTS_DIR/fake_mmsd.c" \
 	"$TOP_DIR/src/mmsdclient.c" "$TOP_DIR/src/mmscore.c"
+run_test test_ofonodatasim "" "$TESTS_DIR/test_ofonodatasim.c" "$TOP_DIR/drivers/ofono/ofonodatasim.c"
 
 if $PC --exists pbnjson_c 2>/dev/null; then
 	EXTRA_LIBS="$($PC --libs pbnjson_c)" \

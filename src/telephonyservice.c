@@ -469,6 +469,13 @@ static const char* sim_display_name(struct telephony_sim_state *sim, char *buf, 
  * A stored ICCID always wins so that the user's choice follows the physical
  * card. Otherwise we fall back to the first slot holding a usable SIM, and only
  * then to slot 0, which is what a single SIM device ends up with.
+ *
+ * The WAN driver follows the data slot every time, and hands a data SIM the
+ * user chose (a stored ICCID) on to ofono by IMSI, which decides which slot
+ * may attach for data. The IMSI is read later than the slot is known, so this
+ * runs on every pass, not only when the slot changes. The fallback is not
+ * handed on: it changes while the SIMs are still being read, and with nothing
+ * chosen ofono's slot manager picks the data SIM itself (AutoSelectDataSim).
  */
 static bool recompute_default_sims(struct telephony_service *service)
 {
@@ -504,12 +511,16 @@ static bool recompute_default_sims(struct telephony_service *service)
 		if (service->default_sim[role] < 0 && telephony_service_get_sim_count(service) > 0)
 			service->default_sim[role] = 0;
 
-		if (service->default_sim[role] != previous) {
+		if (service->default_sim[role] != previous)
 			changed = true;
+	}
 
-			if (role == TELEPHONY_SIM_ROLE_DATA)
-				wan_service_set_data_sim(service->default_sim[role]);
-		}
+	sim = telephony_service_sim_state(service, service->default_sim[TELEPHONY_SIM_ROLE_DATA]);
+	if (sim) {
+		bool chosen = sim->iccid && service->default_sim_iccid[TELEPHONY_SIM_ROLE_DATA] &&
+					  g_strcmp0(sim->iccid, service->default_sim_iccid[TELEPHONY_SIM_ROLE_DATA]) == 0;
+
+		wan_service_set_data_sim(sim->sim_id, chosen ? sim->imsi : NULL);
 	}
 
 	return changed;
@@ -542,7 +553,7 @@ bool telephony_service_set_default_sim(struct telephony_service *service, enum t
 	store_default_sim_preferences(service);
 
 	if (role == TELEPHONY_SIM_ROLE_DATA)
-		wan_service_set_data_sim(sim_id);
+		wan_service_set_data_sim(sim_id, sim->imsi);
 
 	return true;
 }

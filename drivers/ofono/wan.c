@@ -27,6 +27,7 @@
 
 #include "ofonobase.h"
 #include "ofonomanager.h"
+#include "ofonodatasim.h"
 #include "ofonomodem.h"
 #include "ofonoconnectioncontext.h"
 #include "ofonoconnectionmanager.h"
@@ -45,6 +46,13 @@ struct ofono_wan_data {
 	 * data SIM.
 	 */
 	int data_sim_id;
+	/*
+	 * The IMSI of that SIM, handed on to ofono: on a multi-SIM modem ofono's
+	 * slot manager decides which slot may attach for data, so following the
+	 * slot here is not enough by itself.
+	 */
+	gchar *data_imsi;
+	struct ofono_data_sim *data_sim;
 	struct ofono_modem *modem;
 	struct ofono_connection_manager *cm;
 	struct ofono_network_registration *netreg;
@@ -102,6 +110,9 @@ enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum 
 
 static void free_used_instances(struct ofono_wan_data *od)
 {
+	ofono_data_sim_free(od->data_sim);
+	od->data_sim = NULL;
+
 	if (od->manager) {
 		ofono_manager_free(od->manager);
 		od->manager = 0;
@@ -547,14 +558,25 @@ static void modems_changed_cb(gpointer user_data)
 }
 
 /**
- * The user (or the telephony service) moved packet data to another SIM: drop
- * the contexts of the old modem and follow the new one.
+ * The user (or the telephony service) moved packet data to another SIM: tell
+ * ofono, drop the contexts of the old modem and follow the new one. imsi is
+ * NULL while the SIM has not been read yet; the telephony service calls again
+ * once it is known.
  */
-void ofono_wan_set_data_sim(struct wan_service *service, int sim_id)
+void ofono_wan_set_data_sim(struct wan_service *service, int sim_id, const char *imsi)
 {
 	struct ofono_wan_data *od = wan_service_get_data(service);
 
-	if (!od || od->data_sim_id == sim_id)
+	if (!od)
+		return;
+
+	if (imsi && g_strcmp0(od->data_imsi, imsi) != 0) {
+		g_free(od->data_imsi);
+		od->data_imsi = g_strdup(imsi);
+		ofono_data_sim_set_imsi(od->data_sim, imsi);
+	}
+
+	if (od->data_sim_id == sim_id)
 		return;
 
 	g_message("[WAN] moving packet data to SIM %d", sim_id);
@@ -583,6 +605,10 @@ static void service_appeared_cb(GDBusConnection *conn, const gchar *name, const 
 
 	od->manager = ofono_manager_create();
 	ofono_manager_set_modems_changed_callback(od->manager, modems_changed_cb, od);
+
+	/* ofono may have restarted and lost track of it: say it again */
+	od->data_sim = ofono_data_sim_create();
+	ofono_data_sim_set_imsi(od->data_sim, od->data_imsi);
 }
 
 static void service_vanished_cb(GDBusConnection *conn, const gchar *name, gpointer user_data)
@@ -930,6 +956,7 @@ void ofono_wan_remove(struct wan_service *service)
 	detach_from_modem(data);
 	free_used_instances(data);
 
+	g_free(data->data_imsi);
 	g_free(data);
 
 	wan_service_set_data(service, NULL);
