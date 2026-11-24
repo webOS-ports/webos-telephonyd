@@ -27,6 +27,7 @@
 #include "ofononetworkregistration.h"
 #include "ofononetworkoperator.h"
 #include "ofono-interface.h"
+#include "ofonotechnology.h"
 
 struct ofono_network_registration {
 	gchar *path;
@@ -77,22 +78,6 @@ static enum ofono_network_status parse_ofono_network_status(const gchar *status)
 		return OFONO_NETWORK_REGISTRATION_STATUS_ROAMING;
 
 	return OFONO_NETWORK_REGISTRATION_STATUS_UNKNOWN;
-}
-
-enum ofono_network_technology parse_ofono_network_technology(const char *technology)
-{
-	if (g_str_equal(technology, "gsm"))
-		return OFONO_NETWORK_TECHNOLOGY_GSM;
-	else if (g_str_equal(technology, "edge"))
-		return OFONO_NETWORK_TECHNOLOGY_EDGE;
-	else if (g_str_equal(technology, "umts"))
-		return OFONO_NETWORK_TECHNOLOGY_UMTS;
-	else if (g_str_equal(technology, "hspa"))
-		return OFONO_NETWORK_TECHNOLOGY_HSPA;
-	else if (g_str_equal(technology, "lte"))
-		return OFONO_NETWORK_TECHNOLOGY_LTE;
-
-	return OFONO_NETWORK_TECHNOLOGY_UNKNOWN;
 }
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)

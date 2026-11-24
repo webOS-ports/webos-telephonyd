@@ -85,6 +85,8 @@ const char* wan_network_type_to_string(enum wan_network_type type)
 		return "1x";
 	case WAN_NETWORK_TYPE_EVDO:
 		return "evdo";
+	case WAN_NETWORK_TYPE_NR:
+		return "5g";
 	default:
 		break;
 	}

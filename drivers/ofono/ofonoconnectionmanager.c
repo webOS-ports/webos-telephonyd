@@ -26,6 +26,7 @@
 #include "ofonoconnectionmanager.h"
 #include "ofonoconnectioncontext.h"
 #include "ofono-interface.h"
+#include "ofonotechnology.h"
 
 struct ofono_connection_manager {
 	gchar *path;
@@ -45,26 +46,6 @@ struct ofono_connection_manager {
 	ofono_base_cb contexts_changed_cb;
 	void *contexts_changed_data;
 };
-
-static enum ofono_connection_bearer parse_ofono_connection_bearer(const char *bearer)
-{
-	if (g_str_equal(bearer, "gprs"))
-		return OFONO_CONNECTION_BEARER_GPRS;
-	else if (g_str_equal(bearer, "edge"))
-		return OFONO_CONNECTION_BEARER_EDGE;
-	else if (g_str_equal(bearer, "umts"))
-		return OFONO_CONNECTION_BEARER_UMTS;
-	else if (g_str_equal(bearer, "hsupa"))
-		return OFONO_CONNECTION_BEARER_HSUPA;
-	else if (g_str_equal(bearer, "hsdpa"))
-		return OFONO_CONNECTION_BEARER_HSDPA;
-	else if (g_str_equal(bearer, "hspa"))
-		return OFONO_CONNECTION_BEARER_HSPA;
-	else if (g_str_equal(bearer, "lte"))
-		return OFONO_CONNECTION_BEARER_LTE;
-
-	return OFONO_CONNECTION_BEARER_UNKNOWN;
-}
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
