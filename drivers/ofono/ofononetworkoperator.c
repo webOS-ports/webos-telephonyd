@@ -26,8 +26,8 @@
 #include "ofonobase.h"
 #include "ofononetworkoperator.h"
 #include "ofono-interface.h"
+#include "ofonotechnology.h"
 
-extern enum ofono_network_technology parse_ofono_network_technology(const char *technology);
 
 struct ofono_network_operator {
 	gchar *path;

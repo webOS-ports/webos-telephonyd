@@ -42,7 +42,8 @@ enum wan_network_type {
 	WAN_NETWORK_TYPE_HSDPA,
 	WAN_NETWORK_TYPE_LTE,
 	WAN_NETWORK_TYPE_1X,
-	WAN_NETWORK_TYPE_EVDO
+	WAN_NETWORK_TYPE_EVDO,
+	WAN_NETWORK_TYPE_NR
 };
 
 enum wan_connection_status {

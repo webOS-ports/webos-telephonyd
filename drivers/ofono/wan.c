@@ -32,6 +32,7 @@
 #include "ofonoconnectioncontext.h"
 #include "ofonoconnectionmanager.h"
 #include "ofononetworkregistration.h"
+#include "ofonotechnology.h"
 
 #define is_flag_set(flags, flag) \
 	((((flags) & (flag))) == (flag))
@@ -65,48 +66,6 @@ struct ofono_wan_data {
 	guint current_service_watch;
 	GDBusProxy *current_service_proxy;
 };
-
-enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum ofono_connection_bearer bearer)
-{
-	switch (bearer) {
-	case OFONO_CONNECTION_BEARER_GPRS:
-		return WAN_NETWORK_TYPE_GPRS;
-	case OFONO_CONNECTION_BEARER_EDGE:
-		return WAN_NETWORK_TYPE_EDGE;
-	case OFONO_CONNECTION_BEARER_HSUPA:
-	case OFONO_CONNECTION_BEARER_HSDPA:
-	case OFONO_CONNECTION_BEARER_HSPA:
-		return WAN_NETWORK_TYPE_HSDPA;
-	case OFONO_CONNECTION_BEARER_UMTS:
-		return WAN_NETWORK_TYPE_UMTS;
-	case OFONO_CONNECTION_BEARER_LTE:
-		return WAN_NETWORK_TYPE_LTE;
-	default:
-		break;
-	}
-
-	return WAN_NETWORK_TYPE_NONE;
-}
-
-enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum ofono_network_technology technology)
-{
-	switch (technology) {
-	case OFONO_NETWORK_TECHNOLOGY_GSM:
-		return WAN_NETWORK_TYPE_GPRS;
-	case OFONO_NETWORK_TECHNOLOGY_EDGE:
-		return WAN_NETWORK_TYPE_EDGE;
-	case OFONO_NETWORK_TECHNOLOGY_UMTS:
-		return WAN_NETWORK_TYPE_UMTS;
-	case OFONO_NETWORK_TECHNOLOGY_HSPA:
-		return WAN_NETWORK_TYPE_HSDPA;
-	case OFONO_NETWORK_TECHNOLOGY_LTE:
-		return WAN_NETWORK_TYPE_LTE;
-	default:
-		break;
-	}
-
-	return WAN_NETWORK_TYPE_NONE;
-}
 
 static void free_used_instances(struct ofono_wan_data *od)
 {
@@ -298,13 +257,9 @@ static void get_contexts_cb(const struct ofono_error *error, GSList *contexts, v
 	status.network_attached = ofono_connection_manager_get_attached(od->cm);
 
 	enum ofono_connection_bearer bearer = ofono_connection_manager_get_bearer(od->cm);
-	if (bearer == OFONO_CONNECTION_BEARER_UNKNOWN && od->netreg) {
-		enum ofono_network_technology tech = ofono_network_registration_get_technology(od->netreg);
-		status.network_type = convert_ofono_network_technology_to_wan_network_type(tech);
-	}
-	else {
-		status.network_type = convert_ofono_connection_bearer_to_wan_network_type(bearer);
-	}
+	enum ofono_network_technology tech = od->netreg ?
+		ofono_network_registration_get_technology(od->netreg) : OFONO_NETWORK_TECHNOLOGY_UNKNOWN;
+	status.network_type = select_wan_network_type(bearer, tech);
 
 	for (iter = contexts; iter != NULL; iter = g_slist_next(iter)) {
 		context = iter->data;
