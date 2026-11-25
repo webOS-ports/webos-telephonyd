@@ -35,6 +35,7 @@
 #include "ofonomessage.h"
 #include "ofonostk.h"
 #include "ofonomessagewatch.h"
+#include "ofonosmshistory.h"
 #include "utils.h"
 #include "netutils.h"
 
@@ -58,6 +59,7 @@ struct ofono_sim_data {
 	struct ofono_radio_settings *rs;
 	struct ofono_voicecall_manager *vm;
 	struct ofono_message_manager *mm;
+	struct ofono_sms_history *sms_history;
 	struct ofono_stk *stk;
 	enum telephony_sim_status sim_status;
 	bool initializing;
@@ -1273,17 +1275,18 @@ static gboolean free_message_watch_idle_cb(gpointer data)
 static void message_status_cb(enum ofono_message_status status, void *data)
 {
 	struct cb_data *cbd = data;
-	telephony_result_cb cb = cbd->cb;
+	telephony_sms_sent_cb cb = cbd->cb;
 	struct telephony_error terr;
 	struct ofono_message_watch *watch = cbd->user;
 
 	if (status == OFONO_MESSAGE_STATUS_FAILED) {
 		terr.code = TELEPHONY_ERROR_FAIL;
-		cb(&terr, cbd->data);
+		cb(&terr, NULL, cbd->data);
 		goto cleanup;
 	}
 	else if (status == OFONO_MESSAGE_STATUS_SENT) {
-		cb(NULL, cbd->data);
+		/* status reports name the message by this path */
+		cb(NULL, ofono_message_watch_get_path(watch), cbd->data);
 		goto cleanup;
 	}
 
@@ -1302,12 +1305,14 @@ cleanup:
 static void send_sms_cb(struct ofono_error *error, const char *path, void *data)
 {
 	struct cb_data *cbd = data;
-	telephony_result_cb cb = cbd->cb;
+	telephony_sms_sent_cb cb = cbd->cb;
 	struct telephony_error terr;
 
 	if (error) {
+		g_warning("[Telephony:SMS] ofono did not take the message: %s",
+				  error->message ? error->message : "no reason given");
 		terr.code = TELEPHONY_ERROR_INTERNAL;
-		cb(&terr, cbd->data);
+		cb(&terr, NULL, cbd->data);
 		g_free(cbd);
 		return;
 	}
@@ -1316,7 +1321,7 @@ static void send_sms_cb(struct ofono_error *error, const char *path, void *data)
 	if (!watch) {
 		/* Without a watch the send result can never be reported */
 		terr.code = TELEPHONY_ERROR_INTERNAL;
-		cb(&terr, cbd->data);
+		cb(&terr, NULL, cbd->data);
 		g_free(cbd);
 		return;
 	}
@@ -1325,7 +1330,8 @@ static void send_sms_cb(struct ofono_error *error, const char *path, void *data)
 	ofono_message_watch_set_status_callback(watch, message_status_cb, cbd);
 }
 
-void ofono_send_sms(struct telephony_service *service, int sim_id, const char *to, const char *text, telephony_result_cb cb, void *data)
+void ofono_send_sms(struct telephony_service *service, int sim_id, const char *to, const char *text,
+					bool delivery_report, telephony_sms_sent_cb cb, void *data)
 {
 	struct ofono_sim_data *od = get_sim_data(service, sim_id);
 	struct telephony_error error;
@@ -1333,19 +1339,26 @@ void ofono_send_sms(struct telephony_service *service, int sim_id, const char *t
 
 	if (!od) {
 		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
-		cb(&nosim, data);
+		cb(&nosim, NULL, data);
 		return;
 	}
 
 	if (!od->mm) {
 		error.code = TELEPHONY_ERROR_NOT_AVAILABLE;
-		cb(&error, data);
+		cb(&error, NULL, data);
 		return;
 	}
 
 	cbd = cb_data_new(cb, data);
 
-	ofono_message_manager_send_message(od->mm, to, text, send_sms_cb, cbd);
+	ofono_message_manager_send_message(od->mm, to, text, delivery_report, send_sms_cb, cbd);
+}
+
+static void sms_status_report_cb(const char *message_path, bool delivered, void *data)
+{
+	struct ofono_sim_data *od = data;
+
+	telephony_service_sms_status_report(od->service, message_path, delivered);
 }
 
 static void incoming_message_cb(struct ofono_message *message, void *data)
@@ -1534,10 +1547,14 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		if (!od->mm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MESSAGE_MANAGER)) {
 			od->mm = ofono_message_manager_create(path);
 			ofono_message_manager_set_incoming_message_callback(od->mm, incoming_message_cb, od);
+			/* status reports for what this modem sends */
+			od->sms_history = ofono_sms_history_create(path, sms_status_report_cb, od);
 		}
 		else if (od->mm && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MESSAGE_MANAGER)) {
 			ofono_message_manager_free(od->mm);
 			od->mm = NULL;
+			ofono_sms_history_free(od->sms_history);
+			od->sms_history = NULL;
 		}
 
 		/* SimToolkit comes and goes with the SIM (and with a SIM reset);
@@ -1644,6 +1661,9 @@ static void free_used_instances(struct ofono_sim_data *od)
 		ofono_message_manager_free(od->mm);
 		od->mm = NULL;
 	}
+
+	ofono_sms_history_free(od->sms_history);
+	od->sms_history = NULL;
 
 	if (od->rs) {
 		ofono_radio_settings_free(od->rs);

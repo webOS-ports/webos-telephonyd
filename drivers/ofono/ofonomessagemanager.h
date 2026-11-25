@@ -19,6 +19,8 @@
 #ifndef OFONO_MESSAGE_MANAGER_H_
 #define OFONO_MESSAGE_MANAGER_H_
 
+#include <stdbool.h>
+
 #include "ofonobase.h"
 
 struct ofono_message;
@@ -37,6 +39,9 @@ void ofono_message_manager_set_incoming_message_callback(struct ofono_message_ma
                                                          ofono_message_manager_incoming_message_cb cb,
                                                          gpointer user_data);
 
-void ofono_message_manager_send_message(struct ofono_message_manager *manager, const char *to, const char *text, ofono_message_manager_send_message_cb cb, void *data);
+/* delivery_report: ask for an SMS status report for this message
+ * (ofono's UseDeliveryReports is set to match before it goes out) */
+void ofono_message_manager_send_message(struct ofono_message_manager *manager, const char *to, const char *text,
+                                        bool delivery_report, ofono_message_manager_send_message_cb cb, void *data);
 
 #endif

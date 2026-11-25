@@ -181,6 +181,8 @@ struct telephony_subscriber_info {
 typedef void (*telephony_driver_result_cb)(void *data);
 
 typedef int (*telephony_result_cb)(const struct telephony_error* error, void *data);
+/* ref identifies the sent message in later status reports, NULL on error */
+typedef int (*telephony_sms_sent_cb)(const struct telephony_error* error, const char *ref, void *data);
 typedef int (*telephony_power_query_cb)(const struct telephony_error* error, bool power_state, void *data);
 typedef int (*telephony_sim_status_query_cb)(const struct telephony_error* error, enum telephony_sim_status status, void *data);
 typedef int (*telephony_network_status_query_cb)(const struct telephony_error* error, struct telephony_network_status *status, void *data);
@@ -243,7 +245,10 @@ struct telephony_driver {
 	void (*hangup)(struct telephony_service *service, int sim_id, int id, telephony_result_cb cb, void *data);
 
 	/* sms */
-	void (*send_sms)(struct telephony_service *service, int sim_id, const char *to, const char *text, telephony_result_cb cb, void *data);
+	/* delivery_report: ask the network for a status report, which comes back
+	 * through telephony_service_sms_status_report() with the cb's ref */
+	void (*send_sms)(struct telephony_service *service, int sim_id, const char *to, const char *text,
+					 bool delivery_report, telephony_sms_sent_cb cb, void *data);
 
 	/* SIM toolkit: start a session with the main menu item at index */
 	void (*stk_select_item)(struct telephony_service *service, int sim_id, int index, telephony_result_cb cb, void *data);
