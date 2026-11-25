@@ -35,4 +35,7 @@ void ofono_message_watch_free(struct ofono_message_watch *watch);
 
 void ofono_message_watch_set_status_callback(struct ofono_message_watch *watch, ofono_message_watch_status_cb cb, void *user_data);
 
+/* The message's object path, as SendMessage returned it */
+const char* ofono_message_watch_get_path(struct ofono_message_watch *watch);
+
 #endif

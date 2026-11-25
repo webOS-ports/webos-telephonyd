@@ -225,6 +225,15 @@
 			<arg type="s" name="reason" direction="out"/>
 		</signal>
 	</interface>
+        <!-- ofono's sms_history plugin (from Sailfish OS): one signal per
+             SMS status report. message is the path the message had while
+             it was sent, info holds "Delivered" (boolean). -->
+        <interface name="org.ofono.SmsHistory">
+            <signal name="StatusReport">
+                <arg type="s" name="message" direction="out"/>
+                <arg type="a{sv}" name="info" direction="out"/>
+            </signal>
+        </interface>
         <interface name="org.ofono.MessageManager">
             <method name="GetProperties">
                 <arg type="a{sv}" direction="out"/>

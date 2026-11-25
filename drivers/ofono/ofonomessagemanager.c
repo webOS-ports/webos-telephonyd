@@ -36,6 +36,19 @@ struct ofono_message_manager {
 	void *prop_changed_data;
 	ofono_message_manager_incoming_message_cb incoming_message_cb;
 	void *incoming_message_data;
+	/* ofono's UseDeliveryReports, once known */
+	bool delivery_reports_known;
+	bool delivery_reports;
+};
+
+/* A message waiting for UseDeliveryReports to be set before it goes out */
+struct pending_send {
+	OfonoInterfaceMessageManager *remote;
+	gchar *to;
+	gchar *text;
+	bool delivery_report;
+	ofono_message_manager_send_message_cb cb;
+	void *data;
 };
 
 static void update_property(const gchar *name, GVariant *value, void *user_data)
@@ -43,6 +56,11 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 	struct ofono_message_manager *mm = user_data;
 
 	g_message("[MessageManager:%s] property %s changed", mm->path, name);
+
+	if (g_str_equal(name, "UseDeliveryReports") && g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+		mm->delivery_reports = g_variant_get_boolean(value);
+		mm->delivery_reports_known = true;
+	}
 
 	if (mm->prop_changed_cb)
 		mm->prop_changed_cb(name, mm->prop_changed_data);
@@ -193,10 +211,51 @@ cleanup:
 }
 
 
-void ofono_message_manager_send_message(struct ofono_message_manager *manager, const char *to, const char *text,
-										ofono_message_manager_send_message_cb cb, void *data)
+static void send_now(OfonoInterfaceMessageManager *remote, const char *path, const char *to, const char *text,
+					 ofono_message_manager_send_message_cb cb, void *data)
 {
 	struct cb_data *cbd;
+
+	g_message("[MessageManager:%s] sending SMS to '%s'", path, to);
+
+	cbd = cb_data_new(cb, data);
+	ofono_interface_message_manager_call_send_message(remote, to, text, NULL, send_message_cb, cbd);
+}
+
+static void pending_send_free(struct pending_send *ps)
+{
+	g_object_unref(ps->remote);
+	g_free(ps->to);
+	g_free(ps->text);
+	g_free(ps);
+}
+
+static void set_delivery_reports_cb(GObject *source, GAsyncResult *res, gpointer user_data)
+{
+	struct pending_send *ps = user_data;
+	OfonoInterfaceMessageManager *remote = OFONO_INTERFACE_MESSAGE_MANAGER(source);
+	GError *error = NULL;
+	gchar *path;
+
+	path = g_strdup(g_dbus_proxy_get_object_path(G_DBUS_PROXY(remote)));
+
+	/* Against the proxy GIO hands back: the manager can be gone by now */
+	if (!ofono_interface_message_manager_call_set_property_finish(remote, res, &error)) {
+		/* the message still goes out, without (or with) a report */
+		g_warning("[MessageManager:%s] could not set UseDeliveryReports: %s", path, error->message);
+		g_error_free(error);
+	}
+
+	send_now(remote, path, ps->to, ps->text, ps->cb, ps->data);
+
+	g_free(path);
+	pending_send_free(ps);
+}
+
+void ofono_message_manager_send_message(struct ofono_message_manager *manager, const char *to, const char *text,
+										bool delivery_report, ofono_message_manager_send_message_cb cb, void *data)
+{
+	struct pending_send *ps;
 	struct ofono_error error;
 
 	if (!manager) {
@@ -206,10 +265,24 @@ void ofono_message_manager_send_message(struct ofono_message_manager *manager, c
 		return;
 	}
 
-	g_message("[MessageManager:%s] sending SMS to '%s'", manager->path, to);
+	/* ofono asks for a status report per its setting at the time a message
+	 * goes out, so the setting follows each message. Messages go out one
+	 * at a time. */
+	if (manager->delivery_reports_known && manager->delivery_reports == delivery_report) {
+		send_now(manager->remote, manager->path, to, text, cb, data);
+		return;
+	}
 
-	cbd = cb_data_new(cb, data);
-	cbd->user = manager;
+	ps = g_new0(struct pending_send, 1);
+	ps->remote = g_object_ref(manager->remote);
+	ps->to = g_strdup(to);
+	ps->text = g_strdup(text);
+	ps->delivery_report = delivery_report;
+	ps->cb = cb;
+	ps->data = data;
 
-	ofono_interface_message_manager_call_send_message(manager->remote, to, text, NULL, send_message_cb, cbd);
+	/* The cache follows ofono's PropertyChanged, so a setting that failed
+	 * is tried again with the next message */
+	ofono_interface_message_manager_call_set_property(manager->remote, "UseDeliveryReports",
+		g_variant_new_variant(g_variant_new_boolean(delivery_report)), NULL, set_delivery_reports_cb, ps);
 }

@@ -79,6 +79,9 @@ struct telephony_message {
 };
 
 void telephony_service_incoming_message_notify(struct telephony_service *service, int sim_id, struct telephony_message *message);
+/* A status report for a message sent with delivery_report; ref is the one
+ * send_sms handed back */
+void telephony_service_sms_status_report(struct telephony_service *service, const char *ref, bool delivered);
 
 /**
  * SIM toolkit. The driver reports the main menu of a slot (NULL when the SIM

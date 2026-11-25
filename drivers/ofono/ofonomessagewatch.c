@@ -115,3 +115,11 @@ void ofono_message_watch_set_status_callback(struct ofono_message_watch *watch, 
 	watch->status_cb = cb;
 	watch->status_data = user_data;
 }
+
+const char* ofono_message_watch_get_path(struct ofono_message_watch *watch)
+{
+	if (!watch)
+		return NULL;
+
+	return watch->path;
+}

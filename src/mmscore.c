@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-* Copyright (c) 2026 LuneOS project
+* Copyright (c) 2026 Herman van Hazendonk <github.com@herrie.org>
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "mmscore.h"
+#include "numberutils.h"
 
 /* Reading a received part: more than this is not an MMS. */
 #define MMS_MAX_PART_READ ((guint64) 64 * 1024 * 1024)
@@ -81,44 +82,12 @@ void mms_outgoing_add_file(struct mms_outgoing *msg, const char *path, const cha
 	g_ptr_array_add(msg->files, file);
 }
 
+/* mmsd and the SMS path take numbers the same way */
+G_STATIC_ASSERT(MMS_MAX_NUMBER_DIGITS == PHONE_NUMBER_MAX_DIGITS);
+
 gchar* mms_normalize_number(const char *addr)
 {
-	GString *out;
-	const char *p;
-	unsigned int digits = 0;
-
-	if (!addr)
-		return NULL;
-
-	out = g_string_new(NULL);
-
-	for (p = addr; *p; p++) {
-		if (*p == ' ' || *p == '\t' || *p == '-' || *p == '.' || *p == '(' || *p == ')')
-			continue;
-
-		if (*p == '+' && out->len == 0) {
-			g_string_append_c(out, '+');
-			continue;
-		}
-
-		if (*p >= '0' && *p <= '9') {
-			if (++digits > MMS_MAX_NUMBER_DIGITS)
-				goto bad;
-			g_string_append_c(out, *p);
-			continue;
-		}
-
-		goto bad;
-	}
-
-	if (digits == 0)
-		goto bad;
-
-	return g_string_free(out, FALSE);
-
-bad:
-	g_string_free(out, TRUE);
-	return NULL;
+	return phone_number_normalize(addr);
 }
 
 struct type_map {

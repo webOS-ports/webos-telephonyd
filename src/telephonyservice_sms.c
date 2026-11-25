@@ -32,6 +32,8 @@
 #include "telephonyservice.h"
 #include "utils.h"
 #include "luna_service_utils.h"
+#include "numberutils.h"
+#include "smsdelivery.h"
 #include <sys/time.h>
 
 GQueue *tx_queue = 0;
@@ -45,7 +47,12 @@ struct pending_sms {
 	bool inhibit_network_send;
 	/* slot the message should be sent from, or -1 for the default SMS SIM */
 	int sim_id;
+	/* flags.deliveryReport: the sender wants to know it arrived */
+	bool delivery_report;
 };
+
+/* messages sent with a status report requested, until the reports are in */
+static struct sms_delivery *deliveries = NULL;
 
 static void process_message(struct telephony_service *service, struct pending_sms *msg);
 
@@ -182,6 +189,52 @@ static void update_message_status(struct telephony_service *service, const char 
 	j_release(&req_obj);
 }
 
+static void update_delivery_status(struct telephony_service *service, const char *id,
+								   enum sms_delivery_result result)
+{
+	jvalue_ref req_obj, objects_obj, msg_obj;
+	const char *status;
+
+	if (result == SMS_DELIVERY_DELIVERED)
+		status = "delivered";
+	else if (result == SMS_DELIVERY_UNDELIVERED)
+		status = "undelivered";
+	else
+		return;
+
+	g_message("[Telephony:SMS] message %s %s", id, status);
+
+	req_obj = jobject_create();
+	objects_obj = jarray_create(NULL);
+	msg_obj = jobject_create();
+
+	/* the field IM transports set for their receipts, which Messaging shows */
+	jobject_put(msg_obj, J_CSTR_TO_JVAL("_id"), jstring_create(id));
+	jobject_put(msg_obj, J_CSTR_TO_JVAL("deliveryStatus"), jstring_create(status));
+	jarray_append(objects_obj, msg_obj);
+	jobject_put(req_obj, J_CSTR_TO_JVAL("objects"), objects_obj);
+
+	if (!luna_service_call_validate_and_send(service->palmHandle, "luna://com.palm.db/merge", req_obj,
+											 message_updated_cb, service))
+		g_warning("[Telephony:SMS] Failed to update the delivery status of %s", id);
+
+	j_release(&req_obj);
+}
+
+void telephony_service_sms_status_report(struct telephony_service *service, const char *ref, bool delivered)
+{
+	enum sms_delivery_result result;
+	gchar *id = NULL;
+
+	result = sms_delivery_report(deliveries, ref, delivered, &id);
+	if (id)
+		update_delivery_status(service, id, result);
+	else if (result == SMS_DELIVERY_UNKNOWN)
+		g_message("[Telephony:SMS] status report for %s, not one we wait for", ref);
+
+	g_free(id);
+}
+
 static void free_pending_message(struct pending_sms *msg)
 {
 	if (!msg)
@@ -193,13 +246,19 @@ static void free_pending_message(struct pending_sms *msg)
 	g_free(msg);
 }
 
-static int send_msg_cb(const struct telephony_error* error, void *user_data)
+static int send_msg_cb(const struct telephony_error* error, const char *ref, void *user_data)
 {
 	struct cb_data *cbd = user_data;
 	struct telephony_service *service = cbd->data;
 	struct pending_sms *msg = cbd->user;
 
 	bool success = (error == NULL);
+
+	if (success && msg->delivery_report && ref) {
+		if (!deliveries)
+			deliveries = sms_delivery_new();
+		sms_delivery_expect(deliveries, msg->id, ref);
+	}
 
 	/* Check if we have any further recipients we need to send the message to */
 	if (success && !g_queue_is_empty(msg->to)) {
@@ -211,6 +270,12 @@ static int send_msg_cb(const struct telephony_error* error, void *user_data)
 	g_message("[Telephony:SMS] sending message %s", success ? "succeedded" : "failed");
 
 	update_message_status(service, msg->id, success ? "successful" : "failed");
+
+	/* a message not sent to everyone won't be delivered to everyone */
+	if (success)
+		update_delivery_status(service, msg->id, sms_delivery_seal(deliveries, msg->id));
+	else
+		sms_delivery_forget(deliveries, msg->id);
 
 	/* FIXME eventually retry failed messages after some time again */
 
@@ -245,6 +310,7 @@ static void process_message(struct telephony_service *service, struct pending_sm
 {
 	struct cb_data *cbd = 0;
 	char *to_addr = 0;
+	gchar *number = 0;
 
 	if (!service->driver || !service->driver->send_sms) {
 		g_warning("[Telephony:SMS] No implementation available for sending messages");
@@ -262,9 +328,16 @@ static void process_message(struct telephony_service *service, struct pending_sm
 
 	to_addr = g_queue_pop_head(msg->to);
 
-	service->driver->send_sms(service, resolve_sms_sim_id(service, msg), to_addr, msg->text,
-							  send_msg_cb, cbd);
+	/* The address is as the Messaging app has it, "+31 6 1234 5678" when it
+	 * comes from a contact; ofono takes only "+" and digits and turns the
+	 * rest down without trying. Anything that isn't a number goes on as it
+	 * is and fails there, as before. */
+	number = phone_number_normalize(to_addr);
 
+	service->driver->send_sms(service, resolve_sms_sim_id(service, msg), number ? number : to_addr,
+							  msg->text, msg->delivery_report, send_msg_cb, cbd);
+
+	g_free(number);
 	g_free(to_addr);
 }
 
@@ -343,6 +416,8 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		jvalue_ref addr_obj = 0;
 		jvalue_ref inhibit_network_send_obj = 0;
 		jvalue_ref sim_id_obj = 0;
+		jvalue_ref flags_obj = 0;
+		jvalue_ref delivery_report_obj = 0;
 		raw_buffer id_buf;
 		raw_buffer addr_buf;
 		raw_buffer text_buf;
@@ -449,6 +524,12 @@ static bool query_pending_messages_cb(LSHandle *handle, LSMessage *message, void
 		if (jobject_get_exists(result_obj, J_CSTR_TO_BUF("simId"), &sim_id_obj) &&
 			jis_number(sim_id_obj))
 			jnumber_get_i32(sim_id_obj, &msg->sim_id);
+
+		/* Messaging sets flags.deliveryReport from its setting */
+		if (jobject_get_exists(result_obj, J_CSTR_TO_BUF("flags"), &flags_obj) && jis_object(flags_obj) &&
+			jobject_get_exists(flags_obj, J_CSTR_TO_BUF("deliveryReport"), &delivery_report_obj) &&
+			jis_boolean(delivery_report_obj))
+			jboolean_get(delivery_report_obj, &msg->delivery_report);
 
 		/* if we're the first one using it then create the queue */
 		if (!tx_queue)
