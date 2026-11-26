@@ -136,6 +136,12 @@ if(WITH_TESTS)
     target_link_libraries(test_ofonotechnology ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
     add_test(NAME ofonotechnology COMMAND test_ofonotechnology)
 
+    add_executable(test_ofonoims tests/test_ofonoims.c drivers/ofono/ofonoims.c drivers/ofono/ofonobase.c
+                   ${GDBUS_IF_DIR}/ofono-interface.c)
+    target_include_directories(test_ofonoims PRIVATE drivers/ofono)
+    target_link_libraries(test_ofonoims ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
+    add_test(NAME ofonoims COMMAND test_ofonoims)
+
     add_executable(test_stkjson tests/test_stkjson.c src/stkjson.c src/stkcore.c)
     target_link_libraries(test_stkjson ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
     add_test(NAME stkjson COMMAND test_stkjson)
