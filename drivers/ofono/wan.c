@@ -58,6 +58,8 @@ struct ofono_wan_data {
 	struct ofono_connection_manager *cm;
 	struct ofono_network_registration *netreg;
 	bool status_update_pending;
+	/* something changed while that request was out */
+	bool status_update_again;
 	guint connman_watch;
 	GDBusProxy *connman_manager_proxy;
 	gboolean wan_disabled;
@@ -389,6 +391,8 @@ void ofono_wan_set_configuration(struct wan_service *service, struct wan_configu
 	apply_pending_roamguard(req);
 }
 
+static void send_status_update_cb(void *data);
+
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
 {
 	struct ofono_wan_data *od = data;
@@ -398,16 +402,31 @@ static void get_status_cb(const struct wan_error *error, struct wan_status *stat
 	if (!error) {
 		wan_service_status_changed_notify(od->service, status);
 	}
+
+	/*
+	 * Changes that came while the request was out were folded into it, but
+	 * it may have answered before them, or failed: it is cancelled when
+	 * packet data moves to the other SIM, which telephonyd does at every
+	 * start, just as the new modem's properties come in. Without another
+	 * round subscribers heard nothing more until something else changed.
+	 */
+	if (od->status_update_again) {
+		od->status_update_again = false;
+		send_status_update_cb(od);
+	}
 }
 
 static void send_status_update_cb(void *data)
 {
 	struct ofono_wan_data *od = data;
 
-	if (!od->status_update_pending) {
-		od->status_update_pending = true;
-		ofono_wan_get_status(od->service, get_status_cb, od);
+	if (od->status_update_pending) {
+		od->status_update_again = true;
+		return;
 	}
+
+	od->status_update_pending = true;
+	ofono_wan_get_status(od->service, get_status_cb, od);
 }
 
 static void manager_property_changed_cb(const gchar *name, void *data)

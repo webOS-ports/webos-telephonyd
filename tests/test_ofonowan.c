@@ -87,6 +87,9 @@ struct fake_ofono {
 
 	/* whether a modem lists org.ofono.ConnectionManager in Interfaces */
 	gboolean has_cm[N_MODEMS];
+	/* hold the next GetContexts until fake_fail_held() answers it */
+	gboolean hold_get_contexts;
+	GDBusMethodInvocation *held;
 };
 
 static struct fake_ofono fake;
@@ -160,6 +163,10 @@ static void fake_method_call(GDBusConnection *conn, const gchar *sender, const g
 		}
 		g_dbus_method_invocation_return_value(invocation, g_variant_new("(a{sv})", &b));
 	}
+	else if (g_str_equal(method, "GetContexts") && fake.hold_get_contexts) {
+		fake.hold_get_contexts = FALSE;
+		fake.held = invocation;
+	}
 	else if (g_str_equal(method, "GetContexts")) {
 		g_assert_true(n >= 0 && n < N_MODEMS);
 		g_variant_builder_init(&b, G_VARIANT_TYPE("a(oa{sv})"));
@@ -208,6 +215,31 @@ static void fake_add_connection_manager(int n)
 	g_main_context_invoke(fake.context, emit_interfaces_idle, &fake.has_cm[n]);
 }
 
+static gboolean fail_held_idle(gpointer data)
+{
+	g_mutex_lock(&fake.lock);
+	g_dbus_method_invocation_return_dbus_error(fake.held, "org.ofono.Error.Failed", "Operation failed");
+	fake.held = NULL;
+	g_mutex_unlock(&fake.lock);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean fake_has_held(void)
+{
+	gboolean held;
+
+	g_mutex_lock(&fake.lock);
+	held = fake.held != NULL;
+	g_mutex_unlock(&fake.lock);
+	return held;
+}
+
+/* Answer the held GetContexts with an error, as a cancelled one ends. */
+static void fake_fail_held(void)
+{
+	g_main_context_invoke(fake.context, fail_held_idle, NULL);
+}
+
 static void fake_reset(gboolean cm0, gboolean cm1)
 {
 	g_mutex_lock(&fake.lock);
@@ -221,6 +253,8 @@ static void fake_reset(gboolean cm0, gboolean cm1)
 struct wan_service {
 	void *data;
 	int notifies;
+	enum wan_network_type last_type;
+	bool last_attached;
 };
 
 void wan_service_set_data(struct wan_service *service, void *data)
@@ -236,6 +270,8 @@ void *wan_service_get_data(struct wan_service *service)
 void wan_service_status_changed_notify(struct wan_service *service, struct wan_status *status)
 {
 	service->notifies++;
+	service->last_type = status->network_type;
+	service->last_attached = status->network_attached;
 }
 
 /* --- helpers ------------------------------------------------------------- */
@@ -366,6 +402,40 @@ static void test_connection_manager_appears(void)
 	spin(50);
 }
 
+/*
+ * Subscribers hear about a change that came while a status request was
+ * still out, even when that request then fails. Coming up, the
+ * ConnectionManager's properties arrive one by one: the first asks for a
+ * status, the others came while it was out and were dropped. When that one
+ * failed (it is cancelled when packet data moves to the other SIM, as
+ * telephonyd does at every start) subscribers were told nothing, and a
+ * getstatus subscription that had been answered "Not available" stayed
+ * that way until something else changed.
+ */
+static void test_update_after_failed_request(void)
+{
+	struct wan_service service = { 0 };
+
+	fake_reset(TRUE, TRUE);
+	g_mutex_lock(&fake.lock);
+	fake.hold_get_contexts = TRUE;
+	g_mutex_unlock(&fake.lock);
+
+	g_assert_cmpint(ofono_wan_probe(&service), ==, 0);
+	RUN_UNTIL(fake_has_held());
+	/* the rest of the properties come in meanwhile */
+	spin(100);
+	g_assert_cmpint(service.notifies, ==, 0);
+
+	fake_fail_held();
+	RUN_UNTIL(service.notifies > 0);
+	g_assert_true(service.last_attached);
+	g_assert_cmpint(service.last_type, ==, technology_of(0));
+
+	ofono_wan_remove(&service);
+	spin(50);
+}
+
 int main(int argc, char **argv)
 {
 	GTestDBus *bus;
@@ -422,6 +492,7 @@ int main(int argc, char **argv)
 
 	g_test_add_func("/ofonowan/switch-to-known-modem", test_switch_to_known_modem);
 	g_test_add_func("/ofonowan/connection-manager-appears", test_connection_manager_appears);
+	g_test_add_func("/ofonowan/update-after-failed-request", test_update_after_failed_request);
 
 	ret = g_test_run();
 
