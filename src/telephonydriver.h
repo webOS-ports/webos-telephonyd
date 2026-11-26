@@ -120,6 +120,8 @@ struct telephony_network_status {
 	const gchar *name;
 	int cause_code;
 	bool data_registered;
+	/* registered with IMS for voice calls: VoLTE (or VoNR, VoWiFi) */
+	bool volte;
 	/* enum telephony_data_type data_type; */
 };
 

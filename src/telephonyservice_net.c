@@ -104,6 +104,7 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 				jstring_create(telephony_network_registration_to_string(net_status->registration)));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(net_status->data_registered));
+	jobject_put(network_obj, J_CSTR_TO_JVAL("volte"), jboolean_create(net_status->volte));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), network_obj);
@@ -231,6 +232,7 @@ static int _service_network_status_query_finish(const struct telephony_error *er
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("registration"),
 				jstring_create(telephony_network_registration_to_string(net_status->registration)));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
+		jobject_put(extended_obj, J_CSTR_TO_JVAL("volte"), jboolean_create(net_status->volte));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}

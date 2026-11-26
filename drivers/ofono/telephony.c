@@ -29,6 +29,7 @@
 #include "ofononetworkregistration.h"
 #include "ofononetworkoperator.h"
 #include "ofonoradiosettings.h"
+#include "ofonoims.h"
 #include "ofonovoicecallmanager.h"
 #include "ofonovoicecall.h"
 #include "ofonomessagemanager.h"
@@ -57,6 +58,7 @@ struct ofono_sim_data {
 	struct ofono_sim_manager *sim;
 	struct ofono_network_registration *netreg;
 	struct ofono_radio_settings *rs;
+	struct ofono_ims *ims;
 	struct ofono_voicecall_manager *vm;
 	struct ofono_message_manager *mm;
 	struct ofono_sms_history *sms_history;
@@ -595,6 +597,7 @@ static void retrieve_network_status(struct ofono_sim_data *od, struct telephony_
 	/* FIXME when we support the relevant ofono interfaces set this correctly */
 	status->cause_code = 0;
 	status->data_registered = false;
+	status->volte = ofono_ims_voice_available(od->ims);
 }
 
 void ofono_network_status_query(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data)
@@ -615,7 +618,9 @@ void ofono_network_status_query(struct telephony_service *service, int sim_id, t
 		status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
 		status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
 		status.name = NULL;
+		status.cause_code = 0;
 		status.data_registered = false;
+		status.volte = false;
 	}
 
 	cb(NULL, &status, data);
@@ -656,6 +661,21 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 	else if (g_str_equal(name, "Strength")) {
 		strength = ofono_network_registration_get_strength(od->netreg);
 		telephony_service_signal_strength_changed_notify(od->service, od->sim_id, convert_strength_to_bars(strength));
+	}
+}
+
+/* Registered with IMS for voice or not any more: the status bar's VoLTE */
+static void ims_prop_changed_cb(const gchar *name, void *data)
+{
+	struct ofono_sim_data *od = data;
+	struct telephony_network_status net_status;
+
+	if (!od->netreg)
+		return;
+
+	if (g_str_equal(name, "Registered") || g_str_equal(name, "VoiceCapable")) {
+		retrieve_network_status(od, &net_status);
+		telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 	}
 }
 
@@ -1536,6 +1556,21 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 			od->rs = NULL;
 		}
 
+		if (!od->ims && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_IP_MULTIMEDIA_SYSTEM)) {
+			od->ims = ofono_ims_create(path);
+			ofono_ims_register_prop_changed_handler(od->ims, ims_prop_changed_cb, od);
+		}
+		else if (od->ims && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_IP_MULTIMEDIA_SYSTEM)) {
+			ofono_ims_free(od->ims);
+			od->ims = NULL;
+			if (od->netreg) {
+				struct telephony_network_status net_status;
+
+				retrieve_network_status(od, &net_status);
+				telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
+			}
+		}
+
 		if (!od->vm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
 			od->vm = ofono_voicecall_manager_create(path);
 		}
@@ -1669,6 +1704,9 @@ static void free_used_instances(struct ofono_sim_data *od)
 		ofono_radio_settings_free(od->rs);
 		od->rs = NULL;
 	}
+
+	ofono_ims_free(od->ims);
+	od->ims = NULL;
 
 	if (od->vm) {
 		ofono_voicecall_manager_free(od->vm);
