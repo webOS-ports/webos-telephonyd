@@ -503,7 +503,16 @@ static void select_data_modem(struct ofono_wan_data *data)
 
 	ofono_modem_register_prop_changed_handler(data->modem, modem_prop_changed_cb, data);
 
-	/* the Interfaces property handler does the rest once ofono reports it */
+	/*
+	 * The Interfaces property handler sets up the ConnectionManager and
+	 * NetworkRegistration, but only runs when ofono reports a change. A
+	 * modem that was already known (the other SIM's, when packet data moves
+	 * to it) has its interfaces up already and reports no change, which
+	 * left getstatus answering "Not available" for good. Apply what is
+	 * known now; a later change still comes through the handler.
+	 */
+	modem_prop_changed_cb("Interfaces", data);
+
 	send_status_update_cb(data);
 }
 
