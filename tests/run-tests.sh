@@ -78,6 +78,14 @@ run_test test_mmsdclient "-I$TESTS_DIR" "$TESTS_DIR/test_mmsdclient.c" "$TESTS_D
 	"$TOP_DIR/src/mmsdclient.c" "$TOP_DIR/src/mmscore.c" "$TOP_DIR/src/numberutils.c"
 run_test test_ofonodatasim "" "$TESTS_DIR/test_ofonodatasim.c" "$TOP_DIR/drivers/ofono/ofonodatasim.c"
 run_test test_ofonotechnology "" "$TESTS_DIR/test_ofonotechnology.c" "$TOP_DIR/drivers/ofono/ofonotechnology.c"
+# The WAN driver following the data SIM across a fake ofono's modems.
+run_test test_ofonowan "$STUBS" "$TESTS_DIR/test_ofonowan.c" "$TOP_DIR/drivers/ofono/wan.c" \
+	"$TOP_DIR/drivers/ofono/ofonobase.c" "$TOP_DIR/drivers/ofono/ofonomanager.c" \
+	"$TOP_DIR/drivers/ofono/ofonomodem.c" "$TOP_DIR/drivers/ofono/ofonodatasim.c" \
+	"$TOP_DIR/drivers/ofono/ofonoconnectionmanager.c" "$TOP_DIR/drivers/ofono/ofonoconnectioncontext.c" \
+	"$TOP_DIR/drivers/ofono/ofononetworkregistration.c" "$TOP_DIR/drivers/ofono/ofononetworkoperator.c" \
+	"$TOP_DIR/drivers/ofono/ofonotechnology.c" \
+	"$BUILD_DIR/ofono-interface.c"
 
 if $PC --exists pbnjson_c 2>/dev/null; then
 	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
