@@ -60,6 +60,12 @@ struct ofono_wan_data {
 	bool status_update_pending;
 	/* something changed while that request was out */
 	bool status_update_again;
+	/*
+	 * ofono_wan_remove() ran while that request was out. ofono answers it
+	 * when the ConnectionManager goes, cancelled, and later than the
+	 * removal: the data is freed with that answer, not before it.
+	 */
+	bool removed;
 	guint connman_watch;
 	GDBusProxy *connman_manager_proxy;
 	gboolean wan_disabled;
@@ -396,6 +402,11 @@ static void send_status_update_cb(void *data);
 static void get_status_cb(const struct wan_error *error, struct wan_status *status, void *data)
 {
 	struct ofono_wan_data *od = data;
+
+	if (od->removed) {
+		g_free(od);
+		return;
+	}
 
 	od->status_update_pending = false;
 
@@ -940,9 +951,15 @@ void ofono_wan_remove(struct wan_service *service)
 	free_used_instances(data);
 
 	g_free(data->data_imsi);
-	g_free(data);
+	data->data_imsi = NULL;
 
 	wan_service_set_data(service, NULL);
+
+	/* the request still out holds it: get_status_cb() frees it */
+	if (data->status_update_pending)
+		data->removed = true;
+	else
+		g_free(data);
 }
 
 struct wan_driver ofono_wan_driver = {
