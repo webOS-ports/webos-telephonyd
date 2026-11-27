@@ -150,6 +150,52 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 	telephony_service_repost_sim_list(service);
 }
 
+struct default_sim_repost {
+	struct telephony_service *service;
+	int sim_id;
+};
+
+static int _default_sim_network_status_finish(const struct telephony_error *error,
+											  struct telephony_network_status *net_status, void *data)
+{
+	struct default_sim_repost *repost = data;
+
+	/* Through the notification, which posts to the clients without a simId
+	 * now that the SIM is their default */
+	if (!error && net_status)
+		telephony_service_network_status_changed_notify(repost->service, repost->sim_id, net_status);
+
+	g_free(repost);
+	return 0;
+}
+
+/*
+ * The default SIM of a role changed. Clients that subscribed to
+ * networkStatusQuery without a simId follow the voice SIM, but heard of it only
+ * when its status changed while it was already the default. At start up the
+ * SIMs report their registration and IMS before the default is known, so
+ * without this they keep the answer they got before, often "no service".
+ */
+void telephony_service_default_sim_changed(struct telephony_service *service, enum telephony_sim_role role,
+										   int sim_id)
+{
+	struct default_sim_repost *repost;
+
+	if (role != TELEPHONY_SIM_ROLE_VOICE || !service)
+		return;
+
+	if (!service->driver || !service->driver->network_status_query)
+		return;
+
+	if (!telephony_service_sim_state(service, sim_id))
+		return;
+
+	repost = g_new0(struct default_sim_repost, 1);
+	repost->service = service;
+	repost->sim_id = sim_id;
+	service->driver->network_status_query(service, sim_id, _default_sim_network_status_finish, repost);
+}
+
 static int _service_signal_strength_query_finish(const struct telephony_error *error, unsigned int bars, void *data)
 {
 	struct luna_service_req_data *req_data = data;
