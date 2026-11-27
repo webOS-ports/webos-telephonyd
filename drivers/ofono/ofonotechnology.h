@@ -41,6 +41,9 @@
 enum ofono_network_technology parse_ofono_network_technology(const char *technology);
 enum ofono_connection_bearer parse_ofono_connection_bearer(const char *bearer);
 
+/* ofono's name for a technology, "" for one it has none for */
+const char* ofono_network_technology_to_string(enum ofono_network_technology technology);
+
 enum wan_network_type convert_ofono_connection_bearer_to_wan_network_type(enum ofono_connection_bearer bearer);
 enum wan_network_type convert_ofono_network_technology_to_wan_network_type(enum ofono_network_technology technology);
 

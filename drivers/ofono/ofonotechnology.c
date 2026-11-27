@@ -41,6 +41,26 @@ enum ofono_network_technology parse_ofono_network_technology(const char *technol
 	return OFONO_NETWORK_TECHNOLOGY_UNKNOWN;
 }
 
+const char* ofono_network_technology_to_string(enum ofono_network_technology technology)
+{
+	switch (technology) {
+	case OFONO_NETWORK_TECHNOLOGY_GSM:
+		return "gsm";
+	case OFONO_NETWORK_TECHNOLOGY_EDGE:
+		return "edge";
+	case OFONO_NETWORK_TECHNOLOGY_UMTS:
+		return "umts";
+	case OFONO_NETWORK_TECHNOLOGY_HSPA:
+		return "hspa";
+	case OFONO_NETWORK_TECHNOLOGY_LTE:
+		return "lte";
+	case OFONO_NETWORK_TECHNOLOGY_NR:
+		return "nr";
+	default:
+		return "";
+	}
+}
+
 enum ofono_connection_bearer parse_ofono_connection_bearer(const char *bearer)
 {
 	if (!bearer)

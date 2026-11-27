@@ -28,6 +28,7 @@
 /*
  * A modem's IMS registration, org.ofono.IpMultimediaSystem. Registered with
  * voice is what a status bar shows as VoLTE: voice calls can go over IMS.
+ * Over what, LTE, NR or Wi-Fi, is not ofono's to say; see ofonoimsbearer.h.
  */
 
 struct ofono_ims;
@@ -40,6 +41,7 @@ void ofono_ims_register_prop_changed_handler(struct ofono_ims *ims, ofono_proper
 
 bool ofono_ims_get_registered(struct ofono_ims *ims);
 bool ofono_ims_get_voice_capable(struct ofono_ims *ims);
+bool ofono_ims_get_sms_capable(struct ofono_ims *ims);
 
 /* Registered with IMS and able to carry voice; false without IMS. */
 bool ofono_ims_voice_available(struct ofono_ims *ims);

@@ -29,6 +29,7 @@ struct ofono_ims {
 	struct ofono_base *base;
 	bool registered;
 	bool voice_capable;
+	bool sms_capable;
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
@@ -44,6 +45,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 		ims->registered = g_variant_get_boolean(value);
 	else if (g_str_equal(name, "VoiceCapable"))
 		ims->voice_capable = g_variant_get_boolean(value);
+	else if (g_str_equal(name, "SmsCapable"))
+		ims->sms_capable = g_variant_get_boolean(value);
 	else
 		return;
 
@@ -118,6 +121,11 @@ bool ofono_ims_get_registered(struct ofono_ims *ims)
 bool ofono_ims_get_voice_capable(struct ofono_ims *ims)
 {
 	return ims && ims->voice_capable;
+}
+
+bool ofono_ims_get_sms_capable(struct ofono_ims *ims)
+{
+	return ims && ims->sms_capable;
 }
 
 bool ofono_ims_voice_available(struct ofono_ims *ims)

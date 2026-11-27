@@ -120,8 +120,24 @@ struct telephony_network_status {
 	const gchar *name;
 	int cause_code;
 	bool data_registered;
-	/* registered with IMS for voice calls: VoLTE (or VoNR, VoWiFi) */
+	/*
+	 * Registered with IMS for voice calls, over any bearer: LTE, NR or
+	 * Wi-Fi. A status bar that knows vowifi shows VoWiFi when that is set
+	 * and VoLTE otherwise; one that does not shows VoLTE for both, as it
+	 * did before telephonyd knew the bearer, since a call does go over IMS.
+	 */
 	bool volte;
+	/* volte, with the IMS registration over Wi-Fi: Wi-Fi calling */
+	bool vowifi;
+	/* the IMS registration, for a phone-info page */
+	bool ims_registered;
+	bool ims_voice_capable;
+	bool ims_sms_capable;
+	/* "wifi", "cellular" or "" while not registered or not known */
+	const gchar *ims_bearer;
+	/* ofono's name of the registered radio technology: "gsm", "edge",
+	 * "umts", "hspa", "lte", "nr" or "" */
+	const gchar *technology;
 	/* enum telephony_data_type data_type; */
 };
 

@@ -40,6 +40,19 @@ static void test_parse_technology(void)
 	g_assert_cmpint(parse_ofono_network_technology(NULL), ==, OFONO_NETWORK_TECHNOLOGY_UNKNOWN);
 }
 
+/* Back to the names they were parsed from, for what telephonyd reports */
+static void test_technology_to_string(void)
+{
+	static const char *const names[] = { "gsm", "edge", "umts", "hspa", "lte", "nr" };
+	unsigned int i;
+
+	for (i = 0; i < G_N_ELEMENTS(names); i++)
+		g_assert_cmpstr(ofono_network_technology_to_string(parse_ofono_network_technology(names[i])), ==, names[i]);
+
+	g_assert_cmpstr(ofono_network_technology_to_string(OFONO_NETWORK_TECHNOLOGY_UNKNOWN), ==, "");
+	g_assert_cmpstr(ofono_network_technology_to_string(OFONO_NETWORK_TECHNOLOGY_MAX), ==, "");
+}
+
 static void test_parse_bearer(void)
 {
 	g_assert_cmpint(parse_ofono_connection_bearer("gprs"), ==, OFONO_CONNECTION_BEARER_GPRS);
@@ -86,6 +99,7 @@ int main(int argc, char **argv)
 	g_test_init(&argc, &argv, NULL);
 
 	g_test_add_func("/ofonotechnology/parse-technology", test_parse_technology);
+	g_test_add_func("/ofonotechnology/technology-to-string", test_technology_to_string);
 	g_test_add_func("/ofonotechnology/parse-bearer", test_parse_bearer);
 	g_test_add_func("/ofonotechnology/select-without-data", test_select_without_data);
 	g_test_add_func("/ofonotechnology/select-with-data", test_select_with_data);

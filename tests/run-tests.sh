@@ -80,6 +80,8 @@ run_test test_ofonodatasim "" "$TESTS_DIR/test_ofonodatasim.c" "$TOP_DIR/drivers
 run_test test_ofonotechnology "" "$TESTS_DIR/test_ofonotechnology.c" "$TOP_DIR/drivers/ofono/ofonotechnology.c"
 run_test test_ofonoims "$STUBS" "$TESTS_DIR/test_ofonoims.c" "$TOP_DIR/drivers/ofono/ofonoims.c" \
 	"$TOP_DIR/drivers/ofono/ofonobase.c" "$BUILD_DIR/ofono-interface.c"
+run_test test_ofonoimsbearer "$STUBS" "$TESTS_DIR/test_ofonoimsbearer.c" "$TOP_DIR/drivers/ofono/ofonoimsbearer.c" \
+	"$TOP_DIR/drivers/ofono/ofonoims.c" "$TOP_DIR/drivers/ofono/ofonobase.c" "$BUILD_DIR/ofono-interface.c"
 # The WAN driver following the data SIM across a fake ofono's modems.
 run_test test_ofonowan "$STUBS" "$TESTS_DIR/test_ofonowan.c" "$TOP_DIR/drivers/ofono/wan.c" \
 	"$TOP_DIR/drivers/ofono/ofonobase.c" "$TOP_DIR/drivers/ofono/ofonomanager.c" \

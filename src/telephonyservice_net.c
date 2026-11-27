@@ -67,6 +67,34 @@ void telephony_service_signal_strength_changed_notify(struct telephony_service *
 	telephony_service_repost_sim_list(service);
 }
 
+/*
+ * What networkStatusQuery reports about IMS and the radio, next to the
+ * registration:
+ *   "volte": registered with IMS for voice, over any bearer (LTE, NR or Wi-Fi)
+ *   "vowifi": volte, over Wi-Fi
+ *   "technology": the radio technology registered on, "" without one
+ *   "ims": { "registered", "voiceCapable", "smsCapable", "bearer" }, the bearer
+ *          "wifi", "cellular", or "" while not registered or not known
+ * A status bar shows VoWiFi for vowifi and VoLTE for the rest of volte; one
+ * that knows only volte shows VoLTE for both, as it did before.
+ */
+static void put_ims_status(jvalue_ref obj, const struct telephony_network_status *net_status)
+{
+	jvalue_ref ims_obj = jobject_create();
+
+	jobject_put(obj, J_CSTR_TO_JVAL("volte"), jboolean_create(net_status->volte));
+	jobject_put(obj, J_CSTR_TO_JVAL("vowifi"), jboolean_create(net_status->vowifi));
+	jobject_put(obj, J_CSTR_TO_JVAL("technology"),
+				jstring_create(net_status->technology != NULL ? net_status->technology : ""));
+
+	jobject_put(ims_obj, J_CSTR_TO_JVAL("registered"), jboolean_create(net_status->ims_registered));
+	jobject_put(ims_obj, J_CSTR_TO_JVAL("voiceCapable"), jboolean_create(net_status->ims_voice_capable));
+	jobject_put(ims_obj, J_CSTR_TO_JVAL("smsCapable"), jboolean_create(net_status->ims_sms_capable));
+	jobject_put(ims_obj, J_CSTR_TO_JVAL("bearer"),
+				jstring_create(net_status->ims_bearer != NULL ? net_status->ims_bearer : ""));
+	jobject_put(obj, J_CSTR_TO_JVAL("ims"), ims_obj);
+}
+
 void telephony_service_network_status_changed_notify(struct telephony_service *service, int sim_id,
                                                      struct telephony_network_status *net_status)
 {
@@ -104,7 +132,7 @@ void telephony_service_network_status_changed_notify(struct telephony_service *s
 				jstring_create(telephony_network_registration_to_string(net_status->registration)));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
 	jobject_put(network_obj, J_CSTR_TO_JVAL("dataRegistered"), jboolean_create(net_status->data_registered));
-	jobject_put(network_obj, J_CSTR_TO_JVAL("volte"), jboolean_create(net_status->volte));
+	put_ims_status(network_obj, net_status);
 	jobject_put(network_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 
 	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), network_obj);
@@ -232,7 +260,7 @@ static int _service_network_status_query_finish(const struct telephony_error *er
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("registration"),
 				jstring_create(telephony_network_registration_to_string(net_status->registration)));
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("networkName"), jstring_create(net_status->name != NULL ? net_status->name : ""));
-		jobject_put(extended_obj, J_CSTR_TO_JVAL("volte"), jboolean_create(net_status->volte));
+		put_ims_status(extended_obj, net_status);
 		jobject_put(extended_obj, J_CSTR_TO_JVAL("causeCode"), jstring_create(""));
 		jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
 	}
@@ -266,6 +294,11 @@ cleanup:
  *           "networkName": <string>,
  *           "dataRegistered": <boolean>,
  *           "dataType": <string>,
+ *           "volte": <boolean>,
+ *           "vowifi": <boolean>,
+ *           "technology": <string>,
+ *           "ims": { "registered": <boolean>, "voiceCapable": <boolean>,
+ *                    "smsCapable": <boolean>, "bearer": <string> },
  *           "causeCode": <string>,
  *       },
  *    }
