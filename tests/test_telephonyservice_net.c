@@ -51,10 +51,18 @@ struct LSHandle {
 
 struct LSMessage {
 	const char *payload;
+	bool subscribe;
 };
 
 /* subscription posts on com.palm.telephony: key -> payloads, in order */
 static GHashTable *posts;
+/* keys clients were subscribed under, in order */
+static GPtrArray *subscribed;
+/* what a call was answered */
+static char *last_reply;
+
+bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_rat_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 
 bool LSErrorInit(LSError *error)
 {
@@ -107,7 +115,7 @@ const char* LSMessageGetPayload(LSMessage *message)
 
 bool LSMessageIsSubscription(LSMessage *message)
 {
-	return false;
+	return message->subscribe;
 }
 
 void LSMessageRef(LSMessage *message)
@@ -120,11 +128,14 @@ void LSMessageUnref(LSMessage *message)
 
 bool LSMessageReply(LSHandle *sh, LSMessage *lsmsg, const char *payload, LSError *lserror)
 {
+	g_free(last_reply);
+	last_reply = g_strdup(payload);
 	return true;
 }
 
 bool LSSubscriptionAdd(LSHandle *sh, const char *key, LSMessage *message, LSError *lserror)
 {
+	g_ptr_array_add(subscribed, g_strdup(key));
 	return true;
 }
 
@@ -281,10 +292,18 @@ static void driver_network_status_query(struct telephony_service *service, int s
 	cb(NULL, &sim_status[sim_id], data);
 }
 
+/* ratQuery, which cannot be subscribed to; no SIM is ever asked here */
+static void driver_rat_query(struct telephony_service *service, int sim_id,
+                             telephony_rat_query_cb cb, void *data)
+{
+	g_assert_not_reached();
+}
+
 static struct telephony_driver driver = {
 	.probe = driver_probe,
 	.remove = driver_remove,
 	.network_status_query = driver_network_status_query,
+	.rat_query = driver_rat_query,
 };
 
 /* ------------------------------------------------------------------------
@@ -376,6 +395,8 @@ static struct telephony_service* start(void)
 	struct telephony_service *service;
 
 	g_hash_table_remove_all(posts);
+	g_ptr_array_set_size(subscribed, 0);
+	g_clear_pointer(&last_reply, g_free);
 	memset(queries, 0, sizeof(queries));
 	memset(sim_fails, 0, sizeof(sim_fails));
 	status_noservice(&sim_status[0]);
@@ -420,6 +441,51 @@ static void test_restart_race(void)
 	g_assert_cmpint(extended_sim(post), ==, 1);
 	g_assert_true(extended_bool(post, "volte"));
 	g_assert_false(extended_bool(post, "vowifi"));
+	j_release(&post);
+
+	telephony_service_free(service);
+}
+
+/*
+ * The Card Shell subscribes again as soon as telephonyd is back on the bus,
+ * before telephonyd knows of any SIM slot. It is told there is no SIM yet,
+ * and it stays subscribed, so it hears the voice SIM once there is one.
+ */
+static void test_subscribed_before_slots(void)
+{
+	struct telephony_service *service = start();
+	LSMessage message = { "{\"subscribe\":true}", true };
+	LSMessage for_sim = { "{\"subscribe\":true,\"simId\":1}", true };
+	jvalue_ref post;
+
+	_service_network_status_query_cb(service->palmHandle, &message, service);
+	g_assert_nonnull(last_reply);
+	g_assert_nonnull(strstr(last_reply, "\"returnValue\":false"));
+	g_assert_cmpuint(subscribed->len, ==, 1);
+	g_assert_cmpstr(g_ptr_array_index(subscribed, 0), ==, "/networkStatusQuery");
+
+	/* nor is a method that cannot be subscribed to */
+	_service_rat_query_cb(service->palmHandle, &message, service);
+	g_assert_nonnull(strstr(last_reply, "No SIM slot available"));
+	g_assert_cmpuint(subscribed->len, ==, 1);
+
+	/* a SIM that is not there is not one to wait for */
+	_service_network_status_query_cb(service->palmHandle, &for_sim, service);
+	g_assert_nonnull(strstr(last_reply, "Unknown SIM slot"));
+	g_assert_cmpuint(subscribed->len, ==, 1);
+
+	/* the modems and SIMs come; SIM 2 is registered with IMS over Wi-Fi */
+	status_volte(&sim_status[1]);
+	sim_status[1].ims_bearer = "wifi";
+	sim_status[1].vowifi = true;
+	telephony_service_sim_count_changed_notify(service, 2);
+	sim_info(service, 0, false, NULL);
+	sim_info(service, 1, true, "8931000000000000002");
+
+	post = last_post("/networkStatusQuery");
+	g_assert_cmpint(extended_sim(post), ==, 1);
+	g_assert_true(extended_bool(post, "volte"));
+	g_assert_true(extended_bool(post, "vowifi"));
 	j_release(&post);
 
 	telephony_service_free(service);
@@ -528,9 +594,11 @@ int main(int argc, char **argv)
 
 	g_test_init(&argc, &argv, NULL);
 	posts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify) g_ptr_array_unref);
+	subscribed = g_ptr_array_new_with_free_func(g_free);
 	telephony_driver_register(&driver);
 
 	g_test_add_func("/telephonyservice-net/restart-race", test_restart_race);
+	g_test_add_func("/telephonyservice-net/subscribed-before-slots", test_subscribed_before_slots);
 	g_test_add_func("/telephonyservice-net/only-on-change", test_only_on_change);
 	g_test_add_func("/telephonyservice-net/voice-sim-set", test_voice_sim_set);
 	g_test_add_func("/telephonyservice-net/driver-fails", test_driver_fails);
@@ -540,6 +608,8 @@ int main(int argc, char **argv)
 
 	telephony_driver_unregister(&driver);
 	g_hash_table_destroy(posts);
+	g_ptr_array_unref(subscribed);
+	g_free(last_reply);
 	return ret;
 }
 
