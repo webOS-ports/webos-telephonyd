@@ -130,6 +130,8 @@ static void update_property(const gchar *name, GVariant *value, void *user_data)
 				modem->interfaces[OFONO_MODEM_INTERFACE_IP_MULTIMEDIA_SYSTEM] = 1;
 			else if (g_str_equal(interface_name, "org.ofono.mtk.IpMultimediaSystem"))
 				modem->interfaces[OFONO_MODEM_INTERFACE_MTK_IMS] = 1;
+			else if (g_str_equal(interface_name, "org.nemomobile.ofono.CellInfo"))
+				modem->interfaces[OFONO_MODEM_INTERFACE_CELL_INFO] = 1;
 
 			g_variant_unref(child);
 		}

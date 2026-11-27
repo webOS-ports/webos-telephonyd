@@ -73,8 +73,11 @@ void telephony_service_signal_strength_changed_notify(struct telephony_service *
  *   "volte": registered with IMS for voice, over any bearer (LTE, NR or Wi-Fi)
  *   "vowifi": volte, over Wi-Fi
  *   "technology": the radio technology registered on, "" without one
- *   "ims": { "registered", "voiceCapable", "smsCapable", "bearer" }, the bearer
- *          "wifi", "cellular", or "" while not registered or not known
+ *   "ims": { "registered", "voiceCapable", "smsCapable", "bearer",
+ *            ["wfcPreference"] }, the bearer "wifi", "cellular", or "" while
+ *          not registered or not known; the Wi-Fi calling preference "wifi",
+ *          "cellular", "wifi-only" or "" (unknown), left out where the modem
+ *          has none
  * A status bar shows VoWiFi for vowifi and VoLTE for the rest of volte; one
  * that knows only volte shows VoLTE for both, as it did before.
  */
@@ -92,6 +95,8 @@ static void put_ims_status(jvalue_ref obj, const struct telephony_network_status
 	jobject_put(ims_obj, J_CSTR_TO_JVAL("smsCapable"), jboolean_create(net_status->ims_sms_capable));
 	jobject_put(ims_obj, J_CSTR_TO_JVAL("bearer"),
 				jstring_create(net_status->ims_bearer != NULL ? net_status->ims_bearer : ""));
+	if (net_status->ims_wfc_preference != NULL)
+		jobject_put(ims_obj, J_CSTR_TO_JVAL("wfcPreference"), jstring_create(net_status->ims_wfc_preference));
 	jobject_put(obj, J_CSTR_TO_JVAL("ims"), ims_obj);
 }
 
@@ -234,6 +239,100 @@ bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, voi
 	return true;
 }
 
+static int _service_cell_info_query_finish(const struct telephony_error *error, const struct telephony_cell_signal *cells,
+										  unsigned int count, void *data)
+{
+	struct luna_service_req_data *req_data = data;
+	jvalue_ref reply_obj = jobject_create();
+	jvalue_ref extended_obj = NULL;
+	jvalue_ref cell_list = NULL;
+	unsigned int n;
+
+	if (error) {
+		luna_service_message_reply_custom_error(req_data->handle, req_data->message,
+												"No cell information available");
+		goto cleanup;
+	}
+
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	telephony_service_add_sim_id(reply_obj, req_data->sim_id);
+
+	extended_obj = jobject_create();
+	cell_list = jarray_create(NULL);
+
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("simId"), jnumber_create_i32(req_data->sim_id));
+	for (n = 0; n < count; n++) {
+		const struct telephony_cell_signal *cell = &cells[n];
+		jvalue_ref cell_obj = jobject_create();
+
+		jobject_put(cell_obj, J_CSTR_TO_JVAL("type"), jstring_create(cell->type ? cell->type : ""));
+		if (cell->has_rssi)
+			jobject_put(cell_obj, J_CSTR_TO_JVAL("rssi"), jnumber_create_i32(cell->rssi));
+		if (cell->has_rsrp)
+			jobject_put(cell_obj, J_CSTR_TO_JVAL("rsrp"), jnumber_create_i32(cell->rsrp));
+		if (cell->has_rsrq)
+			jobject_put(cell_obj, J_CSTR_TO_JVAL("rsrq"), jnumber_create_i32(cell->rsrq));
+		if (cell->has_sinr)
+			jobject_put(cell_obj, J_CSTR_TO_JVAL("sinr"), jnumber_create_f64(cell->sinr));
+		jarray_append(cell_list, cell_obj);
+	}
+	jobject_put(extended_obj, J_CSTR_TO_JVAL("cells"), cell_list);
+	jobject_put(reply_obj, J_CSTR_TO_JVAL("extended"), extended_obj);
+
+	if (!luna_service_message_validate_and_send(req_data->handle, req_data->message, reply_obj))
+		luna_service_message_reply_error_internal(req_data->handle, req_data->message);
+
+cleanup:
+	j_release(&reply_obj);
+	luna_service_req_data_free(req_data);
+	return 0;
+}
+
+/**
+ * @brief The signal of the cells the SIM's modem is registered on, in dBm
+ * and dB, for a phone-information page. Not subscribable: asking keeps the
+ * modem reporting its cells, and it stops a while after the last time, so
+ * ask again every few seconds while the values are on screen.
+ *
+ * JSON format:
+ *  request:
+ *    { ["simId": <integer>] }
+ *  response:
+ *    {
+ *       "returnValue": true,
+ *       "simId": <integer>,
+ *       "extended": {
+ *           "simId": <integer>,
+ *           "cells": [ { "type": "gsm" | "wcdma" | "lte" | "nr",
+ *                        ["rssi": <dBm>], ["rsrp": <dBm>], ["rsrq": <dB>],
+ *                        ["sinr": <dB>] }, ... ]
+ *       }
+ *    }
+ *  rsrp, rsrq and sinr are LTE's RSRP, RSRQ and RS-SNR or NR's SS-RSRP,
+ *  SS-RSRQ and SS-SINR; a value the modem does not report is left out. No
+ *  cells on a modem that does not report them.
+ **/
+bool _service_cell_info_query_cb(LSHandle *handle, LSMessage *message, void *user_data)
+{
+	struct telephony_service *service = user_data;
+	struct luna_service_req_data *req_data = NULL;
+
+	if (!service->driver || !service->driver->cell_info_query) {
+		g_warning("No implementation available for service cellInfoQuery API method");
+		luna_service_message_reply_error_not_implemented(handle, message);
+		return true;
+	}
+
+	req_data = telephony_service_begin_request(service, handle, message, "cellInfoQuery",
+											   TELEPHONY_SIM_ROLE_VOICE, true, false, NULL);
+	if (!req_data)
+		return true;
+
+	service->driver->cell_info_query(service, req_data->sim_id, _service_cell_info_query_finish, req_data);
+
+	return true;
+}
+
 static int _service_network_status_query_finish(const struct telephony_error *error, struct telephony_network_status *net_status, void *data)
 {
 	struct luna_service_req_data *req_data = data;
@@ -298,7 +397,8 @@ cleanup:
  *           "vowifi": <boolean>,
  *           "technology": <string>,
  *           "ims": { "registered": <boolean>, "voiceCapable": <boolean>,
- *                    "smsCapable": <boolean>, "bearer": <string> },
+ *                    "smsCapable": <boolean>, "bearer": <string>,
+ *                    ["wfcPreference": <string>] },
  *           "causeCode": <string>,
  *       },
  *    }

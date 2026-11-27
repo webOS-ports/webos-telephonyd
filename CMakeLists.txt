@@ -148,6 +148,11 @@ if(WITH_TESTS)
     target_link_libraries(test_ofonoimsbearer ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
     add_test(NAME ofonoimsbearer COMMAND test_ofonoimsbearer)
 
+    add_executable(test_ofonocellinfo tests/test_ofonocellinfo.c drivers/ofono/ofonocellinfo.c)
+    target_include_directories(test_ofonocellinfo PRIVATE drivers/ofono src)
+    target_link_libraries(test_ofonocellinfo ${GLIB2_LDFLAGS} ${GIO2_LDFLAGS} ${GOBJECT2_LDFLAGS})
+    add_test(NAME ofonocellinfo COMMAND test_ofonocellinfo)
+
     add_executable(test_stkjson tests/test_stkjson.c src/stkjson.c src/stkcore.c)
     target_link_libraries(test_stkjson ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
     add_test(NAME stkjson COMMAND test_stkjson)
