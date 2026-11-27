@@ -376,6 +376,40 @@ static void test_switch_to_known_modem(void)
 }
 
 /*
+ * The driver removed while a status request is out, as when telephonyd
+ * stops just after switching packet data: ofono answers the request when
+ * the ConnectionManager goes, cancelled, after the driver's data is gone.
+ * That answer wrote to the freed data (seen under valgrind); ASan and
+ * valgrind tell here.
+ */
+static void test_remove_while_asking(void)
+{
+	struct wan_service service = { 0 };
+	int round;
+
+	fake_reset(TRUE, TRUE);
+	g_assert_cmpint(ofono_wan_probe(&service), ==, 0);
+	assert_status_from(&service, 0);
+	spin(100);
+
+	for (round = 0; round < 3; round++) {
+		struct wan_service again = { 0 };
+
+		/* switching packet data asks for the status again */
+		g_assert_cmpint(ofono_wan_probe(&again), ==, 0);
+		assert_status_from(&again, 0);
+		spin(50);
+		ofono_wan_set_data_sim(&again, 1, NULL);
+		ofono_wan_remove(&again);
+		g_assert_null(again.data);
+		spin(100);
+	}
+
+	ofono_wan_remove(&service);
+	spin(50);
+}
+
+/*
  * A data modem without a ConnectionManager yet has no status to give;
  * once ofono reports the interface the driver picks it up.
  */
@@ -491,6 +525,7 @@ int main(int argc, char **argv)
 	fake.thread = g_thread_new("fake-ofono", fake_thread, NULL);
 
 	g_test_add_func("/ofonowan/switch-to-known-modem", test_switch_to_known_modem);
+	g_test_add_func("/ofonowan/remove-while-asking", test_remove_while_asking);
 	g_test_add_func("/ofonowan/connection-manager-appears", test_connection_manager_appears);
 	g_test_add_func("/ofonowan/update-after-failed-request", test_update_after_failed_request);
 
