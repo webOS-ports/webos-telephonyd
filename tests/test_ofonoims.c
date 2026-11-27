@@ -47,6 +47,7 @@ static struct {
 	GDBusConnection *conn;
 	gboolean registered;
 	gboolean voice_capable;
+	gboolean sms_capable;
 } fake;
 
 /* What the code under test reported */
@@ -69,7 +70,7 @@ static void fake_method_call(GDBusConnection *conn, const gchar *sender, const g
 	g_variant_builder_init(&props, G_VARIANT_TYPE("a{sv}"));
 	g_variant_builder_add(&props, "{sv}", "Registered", g_variant_new_boolean(fake.registered));
 	g_variant_builder_add(&props, "{sv}", "VoiceCapable", g_variant_new_boolean(fake.voice_capable));
-	g_variant_builder_add(&props, "{sv}", "SmsCapable", g_variant_new_boolean(TRUE));
+	g_variant_builder_add(&props, "{sv}", "SmsCapable", g_variant_new_boolean(fake.sms_capable));
 	g_dbus_method_invocation_return_value(invocation, g_variant_new("(@a{sv})", g_variant_builder_end(&props)));
 }
 
@@ -150,11 +151,12 @@ static void test_registered_with_voice(void)
 	fake.voice_capable = TRUE;
 	ims = create_ims();
 
-	/* Registered and VoiceCapable from GetProperties; SmsCapable is not news */
-	wait_for_changes(2);
+	/* Registered, VoiceCapable and SmsCapable from GetProperties */
+	wait_for_changes(3);
 	g_assert_true(ofono_ims_get_registered(ims));
 	g_assert_true(ofono_ims_get_voice_capable(ims));
 	g_assert_true(ofono_ims_voice_available(ims));
+	g_assert_false(ofono_ims_get_sms_capable(ims));
 
 	free_ims(ims);
 }
@@ -166,11 +168,14 @@ static void test_registered_without_voice(void)
 	/* Registered for SMS over IMS only: no VoLTE */
 	fake.registered = TRUE;
 	fake.voice_capable = FALSE;
+	fake.sms_capable = TRUE;
 	ims = create_ims();
 
-	wait_for_changes(2);
+	wait_for_changes(3);
 	g_assert_true(ofono_ims_get_registered(ims));
+	g_assert_true(ofono_ims_get_sms_capable(ims));
 	g_assert_false(ofono_ims_voice_available(ims));
+	fake.sms_capable = FALSE;
 
 	free_ims(ims);
 }
@@ -182,22 +187,27 @@ static void test_changes_follow(void)
 	fake.registered = FALSE;
 	fake.voice_capable = FALSE;
 	ims = create_ims();
-	wait_for_changes(2);
+	wait_for_changes(3);
 	g_assert_false(ofono_ims_voice_available(ims));
 
 	fake_change("VoiceCapable", g_variant_new_boolean(TRUE));
-	wait_for_changes(3);
+	wait_for_changes(4);
 	g_assert_cmpstr(seen.last, ==, "VoiceCapable");
 	g_assert_false(ofono_ims_voice_available(ims));
 
 	fake_change("Registered", g_variant_new_boolean(TRUE));
-	wait_for_changes(4);
+	wait_for_changes(5);
 	g_assert_cmpstr(seen.last, ==, "Registered");
 	g_assert_true(ofono_ims_voice_available(ims));
 
+	fake_change("SmsCapable", g_variant_new_boolean(TRUE));
+	wait_for_changes(6);
+	g_assert_cmpstr(seen.last, ==, "SmsCapable");
+	g_assert_true(ofono_ims_get_sms_capable(ims));
+
 	/* Lost IMS, as when the phone leaves LTE */
 	fake_change("Registered", g_variant_new_boolean(FALSE));
-	wait_for_changes(5);
+	wait_for_changes(7);
 	g_assert_false(ofono_ims_voice_available(ims));
 	g_assert_true(ofono_ims_get_voice_capable(ims));
 
@@ -211,13 +221,14 @@ static void test_other_properties_ignored(void)
 	fake.registered = TRUE;
 	fake.voice_capable = TRUE;
 	ims = create_ims();
-	wait_for_changes(2);
+	wait_for_changes(3);
 
-	fake_change("SmsCapable", g_variant_new_boolean(FALSE));
+	/* ofono has no such property; one it adds later is not news */
+	fake_change("SmsOverIms", g_variant_new_boolean(FALSE));
 	/* A property of the wrong type changes nothing */
 	fake_change("Registered", g_variant_new_string("no"));
 	spin();
-	g_assert_cmpint(seen.changes, ==, 2);
+	g_assert_cmpint(seen.changes, ==, 3);
 	g_assert_true(ofono_ims_voice_available(ims));
 
 	free_ims(ims);
@@ -228,6 +239,7 @@ static void test_without_ims(void)
 	g_assert_false(ofono_ims_get_registered(NULL));
 	g_assert_false(ofono_ims_get_voice_capable(NULL));
 	g_assert_false(ofono_ims_voice_available(NULL));
+	g_assert_false(ofono_ims_get_sms_capable(NULL));
 	ofono_ims_register_prop_changed_handler(NULL, changed_cb, &seen);
 	ofono_ims_free(NULL);
 }

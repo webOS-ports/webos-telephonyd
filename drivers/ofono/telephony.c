@@ -30,6 +30,8 @@
 #include "ofononetworkoperator.h"
 #include "ofonoradiosettings.h"
 #include "ofonoims.h"
+#include "ofonoimsbearer.h"
+#include "ofonotechnology.h"
 #include "ofonovoicecallmanager.h"
 #include "ofonovoicecall.h"
 #include "ofonomessagemanager.h"
@@ -59,6 +61,7 @@ struct ofono_sim_data {
 	struct ofono_network_registration *netreg;
 	struct ofono_radio_settings *rs;
 	struct ofono_ims *ims;
+	struct ofono_ims_bearer_info *ims_bearer;
 	struct ofono_voicecall_manager *vm;
 	struct ofono_message_manager *mm;
 	struct ofono_sms_history *sms_history;
@@ -597,7 +600,8 @@ static void retrieve_network_status(struct ofono_sim_data *od, struct telephony_
 	/* FIXME when we support the relevant ofono interfaces set this correctly */
 	status->cause_code = 0;
 	status->data_registered = false;
-	status->volte = ofono_ims_voice_available(od->ims);
+	status->technology = ofono_network_technology_to_string(ofono_network_registration_get_technology(od->netreg));
+	ofono_ims_fill_network_status(od->ims, od->ims_bearer, status);
 }
 
 void ofono_network_status_query(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data)
@@ -620,7 +624,14 @@ void ofono_network_status_query(struct telephony_service *service, int sim_id, t
 		status.name = NULL;
 		status.cause_code = 0;
 		status.data_registered = false;
+		status.technology = "";
+		/* as notify_no_network_registration reports it */
 		status.volte = false;
+		status.vowifi = false;
+		status.ims_registered = false;
+		status.ims_voice_capable = false;
+		status.ims_sms_capable = false;
+		status.ims_bearer = "";
 	}
 
 	cb(NULL, &status, data);
@@ -654,7 +665,7 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 	struct telephony_network_status net_status;
 	int strength;
 
-	if (g_str_equal(name, "Status") || g_str_equal(name, "Name")) {
+	if (g_str_equal(name, "Status") || g_str_equal(name, "Name") || g_str_equal(name, "Technology")) {
 		retrieve_network_status(od, &net_status);
 		telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 	}
@@ -664,7 +675,8 @@ static void network_prop_changed_cb(const gchar *name, void *data)
 	}
 }
 
-/* Registered with IMS for voice or not any more: the status bar's VoLTE */
+/* Registered with IMS for voice or not any more, over Wi-Fi or not: the
+ * status bar's VoLTE and VoWiFi; and what a phone-info page shows */
 static void ims_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_sim_data *od = data;
@@ -673,7 +685,8 @@ static void ims_prop_changed_cb(const gchar *name, void *data)
 	if (!od->netreg)
 		return;
 
-	if (g_str_equal(name, "Registered") || g_str_equal(name, "VoiceCapable")) {
+	if (g_str_equal(name, "Registered") || g_str_equal(name, "VoiceCapable") ||
+		g_str_equal(name, "SmsCapable") || g_str_equal(name, "Bearer")) {
 		retrieve_network_status(od, &net_status);
 		telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
 	}
@@ -1571,6 +1584,21 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 			}
 		}
 
+		if (!od->ims_bearer && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MTK_IMS)) {
+			od->ims_bearer = ofono_ims_bearer_create(path);
+			ofono_ims_bearer_register_prop_changed_handler(od->ims_bearer, ims_prop_changed_cb, od);
+		}
+		else if (od->ims_bearer && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MTK_IMS)) {
+			ofono_ims_bearer_free(od->ims_bearer);
+			od->ims_bearer = NULL;
+			if (od->netreg) {
+				struct telephony_network_status net_status;
+
+				retrieve_network_status(od, &net_status);
+				telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
+			}
+		}
+
 		if (!od->vm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
 			od->vm = ofono_voicecall_manager_create(path);
 		}
@@ -1707,6 +1735,9 @@ static void free_used_instances(struct ofono_sim_data *od)
 
 	ofono_ims_free(od->ims);
 	od->ims = NULL;
+
+	ofono_ims_bearer_free(od->ims_bearer);
+	od->ims_bearer = NULL;
 
 	if (od->vm) {
 		ofono_voicecall_manager_free(od->vm);
