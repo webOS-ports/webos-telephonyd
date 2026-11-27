@@ -119,6 +119,17 @@ else
 	echo "SKIP: test_telephonyservice_stk (no pbnjson_c / luna-service2 headers)"
 fi
 
+# networkStatusQuery for clients without a simId, through the real service
+if $PC --exists pbnjson_c luna-service2 2>/dev/null; then
+	EXTRA_LIBS="$($PC --libs pbnjson_c)" \
+	run_test test_telephonyservice_net "$($PC --cflags pbnjson_c luna-service2)" \
+		"$TESTS_DIR/test_telephonyservice_net.c" "$TOP_DIR/src/telephonyservice.c" \
+		"$TOP_DIR/src/telephonyservice_net.c" "$TOP_DIR/src/telephonydriver.c" \
+		"$TOP_DIR/src/luna_service_utils.c"
+else
+	echo "SKIP: test_telephonyservice_net (no pbnjson_c / luna-service2 headers)"
+fi
+
 # Pictures made smaller for an MMS: gdk-pixbuf with its JPEG and PNG loaders.
 if $PC --exists gdk-pixbuf-2.0 2>/dev/null; then
 	EXTRA_LIBS="$($PC --libs gdk-pixbuf-2.0)" \

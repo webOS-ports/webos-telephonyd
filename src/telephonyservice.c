@@ -485,6 +485,7 @@ static bool recompute_default_sims(struct telephony_service *service)
 	int role, n;
 	int previous;
 	bool changed = false;
+	int previous_voice = service->default_sim[TELEPHONY_SIM_ROLE_VOICE];
 
 	for (role = 0; role < TELEPHONY_SIM_ROLE_MAX; role++) {
 		previous = service->default_sim[role];
@@ -525,6 +526,11 @@ static bool recompute_default_sims(struct telephony_service *service)
 		wan_service_set_data_sim(sim->sim_id, chosen ? sim->imsi : NULL);
 	}
 
+	/* a SIM that is not there is ignored there */
+	if (service->default_sim[TELEPHONY_SIM_ROLE_VOICE] != previous_voice)
+		telephony_service_default_sim_changed(service, TELEPHONY_SIM_ROLE_VOICE,
+											  service->default_sim[TELEPHONY_SIM_ROLE_VOICE]);
+
 	return changed;
 }
 
@@ -539,6 +545,7 @@ int telephony_service_get_default_sim(struct telephony_service *service, enum te
 bool telephony_service_set_default_sim(struct telephony_service *service, enum telephony_sim_role role, int sim_id)
 {
 	struct telephony_sim_state *sim;
+	int previous;
 
 	if (!service || role < 0 || role >= TELEPHONY_SIM_ROLE_MAX)
 		return false;
@@ -547,6 +554,7 @@ bool telephony_service_set_default_sim(struct telephony_service *service, enum t
 	if (!sim)
 		return false;
 
+	previous = service->default_sim[role];
 	service->default_sim[role] = sim_id;
 
 	g_free(service->default_sim_iccid[role]);
@@ -556,6 +564,9 @@ bool telephony_service_set_default_sim(struct telephony_service *service, enum t
 
 	if (role == TELEPHONY_SIM_ROLE_DATA)
 		wan_service_set_data_sim(sim_id, sim->imsi);
+
+	if (sim_id != previous)
+		telephony_service_default_sim_changed(service, role, sim_id);
 
 	return true;
 }

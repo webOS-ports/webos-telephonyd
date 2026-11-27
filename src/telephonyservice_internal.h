@@ -179,6 +179,11 @@ struct luna_service_req_data* telephony_service_begin_request(struct telephony_s
                                                               bool subscribable,
                                                               jvalue_ref *parsed_obj);
 
+/* The default SIM of a role is now sim_id: re-post what clients without a
+ * simId follow for it (telephonyservice_net.c) */
+void telephony_service_default_sim_changed(struct telephony_service *service, enum telephony_sim_role role,
+										   int sim_id);
+
 /* Re-post the state of every slot; used after the default SIM assignment changed. */
 void telephony_service_repost_sim_list(struct telephony_service *service);
 
