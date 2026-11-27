@@ -853,6 +853,16 @@ struct luna_service_req_data* telephony_service_begin_request(struct telephony_s
 
 	sim = telephony_service_sim_state(service, sim_id);
 	if (!sim) {
+		/*
+		 * Before the driver has reported its SIM slots, a client without a
+		 * simId is still subscribed: it hears the voice SIM once there is
+		 * one. Clients like the Card Shell subscribe again the moment
+		 * telephonyd is back on the bus, which is before that, and were
+		 * left without updates.
+		 */
+		if (subscribable && !explicit_sim)
+			telephony_service_process_sim_subscription(service, handle, message,
+													   method, sim_id, false);
 		luna_service_message_reply_custom_error(handle, message,
 			explicit_sim ? "Unknown SIM slot" : "No SIM slot available");
 		goto failed;
