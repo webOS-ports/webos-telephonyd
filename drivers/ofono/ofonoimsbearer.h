@@ -29,7 +29,9 @@
  * What carries a modem's IMS registration, from the MediaTek extension to
  * ofono-binder, org.ofono.mtk.IpMultimediaSystem: its Bearer property is
  * "wifi" while IMS is registered over Wi-Fi (VoWiFi), "cellular" over LTE or
- * NR, and "" while not registered. Stock ofono has no such interface; the bearer is then
+ * NR, and "" while not registered. Its WfcPreference is the Wi-Fi calling
+ * preference: "wifi" (preferred), "cellular" (preferred), "wifi-only", or
+ * "" while unknown; an extension without it leaves it unset. Stock ofono has no such interface; the bearer is then
  * unknown, and telephonyd never reports Wi-Fi calling.
  */
 
@@ -44,12 +46,17 @@ struct ofono_ims_bearer_info;
 struct ofono_ims_bearer_info* ofono_ims_bearer_create(const gchar *path);
 void ofono_ims_bearer_free(struct ofono_ims_bearer_info *info);
 
-/* Called with "Bearer" after it changed, the first read included. */
+/* Called with "Bearer" or "WfcPreference" after it changed, the first read
+ * included. */
 void ofono_ims_bearer_register_prop_changed_handler(struct ofono_ims_bearer_info *info,
 													ofono_property_changed_cb cb, void *data);
 
 /* OFONO_IMS_BEARER_NONE without the interface, or for a bearer it does not know */
 enum ofono_ims_bearer ofono_ims_bearer_get(struct ofono_ims_bearer_info *info);
+
+/* "wifi", "cellular", "wifi-only" or "" (unknown); NULL when the extension
+ * never reported one, as it is then not to be shown */
+const char* ofono_ims_bearer_get_wfc_preference(struct ofono_ims_bearer_info *info);
 
 /* "wifi", "cellular" or "" */
 const char* ofono_ims_bearer_to_string(enum ofono_ims_bearer bearer);

@@ -135,10 +135,32 @@ struct telephony_network_status {
 	bool ims_sms_capable;
 	/* "wifi", "cellular" or "" while not registered or not known */
 	const gchar *ims_bearer;
+	/* the Wi-Fi calling preference: "wifi", "cellular", "wifi-only", ""
+	 * (unknown), or NULL where the modem has none to report */
+	const gchar *ims_wfc_preference;
 	/* ofono's name of the registered radio technology: "gsm", "edge",
 	 * "umts", "hspa", "lte", "nr" or "" */
 	const gchar *technology;
 	/* enum telephony_data_type data_type; */
+};
+
+/*
+ * A serving cell's signal, in the units a phone-information page shows:
+ * RSSI, RSRP in dBm, RSRQ and SINR in dB. RSRP, RSRQ and SINR are LTE's
+ * RSRP, RSRQ and RS-SNR, or NR's SS-RSRP, SS-RSRQ and SS-SINR. A value the
+ * modem did not report, or reported out of its range, is left out.
+ */
+struct telephony_cell_signal {
+	/* "gsm", "wcdma", "lte" or "nr" */
+	const gchar *type;
+	bool has_rssi;
+	int rssi;
+	bool has_rsrp;
+	int rsrp;
+	bool has_rsrq;
+	int rsrq;
+	bool has_sinr;
+	double sinr;
 };
 
 struct telephony_platform_info {
@@ -205,6 +227,9 @@ typedef int (*telephony_power_query_cb)(const struct telephony_error* error, boo
 typedef int (*telephony_sim_status_query_cb)(const struct telephony_error* error, enum telephony_sim_status status, void *data);
 typedef int (*telephony_network_status_query_cb)(const struct telephony_error* error, struct telephony_network_status *status, void *data);
 typedef int (*telephony_signal_strength_query_cb)(const struct telephony_error* error, unsigned int bars, void *data);
+/* The cells the SIM's modem is registered on, count of them */
+typedef int (*telephony_cell_info_query_cb)(const struct telephony_error* error, const struct telephony_cell_signal *cells,
+											unsigned int count, void *data);
 typedef int (*telephony_pin_status_query_cb)(const struct telephony_error* error, struct telephony_pin_status *status, void *data);
 typedef int (*telephony_network_list_query_cb)(const struct telephony_error* error, GList *networks, void *data);
 typedef int (*telephony_platform_query_cb)(const struct telephony_error* error, struct telephony_platform_info *platform_info, void *data);
@@ -248,6 +273,7 @@ struct telephony_driver {
 	/* network */
 	void (*network_status_query)(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data);
 	void (*signal_strength_query)(struct telephony_service *service, int sim_id, telephony_signal_strength_query_cb cb, void *data);
+	void (*cell_info_query)(struct telephony_service *service, int sim_id, telephony_cell_info_query_cb cb, void *data);
 	void (*network_list_query)(struct telephony_service *service, int sim_id, telephony_network_list_query_cb cb, void *data);
 	void (*network_list_query_cancel)(struct telephony_service *service, int sim_id, telephony_result_cb cb, void *data);
 	void (*network_set)(struct telephony_service *service, int sim_id, bool automatic, const char *id, telephony_result_cb cb, void *data);

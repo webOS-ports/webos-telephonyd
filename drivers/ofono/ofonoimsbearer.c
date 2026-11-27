@@ -28,6 +28,8 @@ struct ofono_ims_bearer_info {
 	OfonoInterfaceMtkIpMultimediaSystem *remote;
 	struct ofono_base *base;
 	enum ofono_ims_bearer bearer;
+	/* NULL until the extension reported one */
+	const char *wfc_preference;
 	ofono_property_changed_cb prop_changed_cb;
 	void *prop_changed_data;
 };
@@ -42,18 +44,38 @@ static enum ofono_ims_bearer parse_bearer(const gchar *bearer)
 	return OFONO_IMS_BEARER_NONE;
 }
 
+/* One of the names telephonyd reports, "" for one it does not know */
+static const char* parse_wfc_preference(const gchar *preference)
+{
+	static const char *const known[] = { "wifi", "cellular", "wifi-only" };
+	unsigned int i;
+
+	for (i = 0; i < G_N_ELEMENTS(known); i++) {
+		if (g_str_equal(preference, known[i]))
+			return known[i];
+	}
+
+	return "";
+}
+
 static void update_property(const gchar *name, GVariant *value, void *user_data)
 {
 	struct ofono_ims_bearer_info *info = user_data;
-	enum ofono_ims_bearer bearer;
 
-	if (!g_str_equal(name, "Bearer") || g_variant_classify(value) != G_VARIANT_CLASS_STRING)
+	if (g_variant_classify(value) != G_VARIANT_CLASS_STRING)
 		return;
 
-	bearer = parse_bearer(g_variant_get_string(value, NULL));
-	g_message("[IMS:%s] Bearer is now \"%s\"", info->path, ofono_ims_bearer_to_string(bearer));
+	if (g_str_equal(name, "Bearer")) {
+		info->bearer = parse_bearer(g_variant_get_string(value, NULL));
+		g_message("[IMS:%s] Bearer is now \"%s\"", info->path, ofono_ims_bearer_to_string(info->bearer));
+	}
+	else if (g_str_equal(name, "WfcPreference")) {
+		info->wfc_preference = parse_wfc_preference(g_variant_get_string(value, NULL));
+		g_message("[IMS:%s] WfcPreference is now \"%s\"", info->path, info->wfc_preference);
+	}
+	else
+		return;
 
-	info->bearer = bearer;
 	if (info->prop_changed_cb)
 		info->prop_changed_cb(name, info->prop_changed_data);
 }
@@ -121,6 +143,11 @@ enum ofono_ims_bearer ofono_ims_bearer_get(struct ofono_ims_bearer_info *info)
 	return info ? info->bearer : OFONO_IMS_BEARER_NONE;
 }
 
+const char* ofono_ims_bearer_get_wfc_preference(struct ofono_ims_bearer_info *info)
+{
+	return info ? info->wfc_preference : NULL;
+}
+
 const char* ofono_ims_bearer_to_string(enum ofono_ims_bearer bearer)
 {
 	switch (bearer) {
@@ -149,6 +176,9 @@ void ofono_ims_fill_network_status(struct ofono_ims *ims, struct ofono_ims_beare
 		bearer = ofono_ims_bearer_get(info);
 	status->ims_bearer = ofono_ims_bearer_to_string(bearer);
 	status->vowifi = status->volte && bearer == OFONO_IMS_BEARER_WIFI;
+
+	/* A setting, not a state: it holds without a registration */
+	status->ims_wfc_preference = ofono_ims_bearer_get_wfc_preference(info);
 }
 
 // vim:ts=4:sw=4:noexpandtab

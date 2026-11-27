@@ -54,6 +54,7 @@ bool _service_pin1_unblock_cb(LSHandle *handle, LSMessage *message, void *user_d
 bool _service_fdn_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_signal_strength_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_status_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
+bool _service_cell_info_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_list_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_list_query_cancel_cb(LSHandle *handle, LSMessage *message, void *user_data);
 bool _service_network_id_query_cb(LSHandle *handle, LSMessage *message, void *user_data);
@@ -90,6 +91,7 @@ static LSMethod _telephony_service_methods[]  = {
 	{ "fdnStatusQuery", _service_fdn_status_query_cb },
 	{ "signalStrengthQuery", _service_signal_strength_query_cb },
 	{ "networkStatusQuery", _service_network_status_query_cb },
+	{ "cellInfoQuery", _service_cell_info_query_cb },
 	{ "networkListQuery", _service_network_list_query_cb },
 	{ "networkListQueryCancel", _service_network_list_query_cancel_cb },
 	{ "networkIdQuery", _service_network_id_query_cb },

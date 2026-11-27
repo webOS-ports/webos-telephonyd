@@ -56,6 +56,8 @@ static struct {
 	gboolean registered;
 	gboolean voice_capable;
 	const gchar *bearer;
+	/* NULL: an extension from before WfcPreference */
+	const gchar *wfc_preference;
 } fake;
 
 /* What the code under test reported */
@@ -84,6 +86,8 @@ static void fake_method_call(GDBusConnection *conn, const gchar *sender, const g
 	}
 	else {
 		g_variant_builder_add(&props, "{sv}", "Bearer", g_variant_new_string(fake.bearer));
+		if (fake.wfc_preference)
+			g_variant_builder_add(&props, "{sv}", "WfcPreference", g_variant_new_string(fake.wfc_preference));
 	}
 	g_dbus_method_invocation_return_value(invocation, g_variant_new("(@a{sv})", g_variant_builder_end(&props)));
 }
@@ -202,7 +206,73 @@ static void test_over_wifi(void)
 	g_assert_true(modem.status.ims_voice_capable);
 	g_assert_true(modem.status.ims_sms_capable);
 	g_assert_cmpstr(modem.status.ims_bearer, ==, "wifi");
+	/* not reported, so not to be shown */
+	g_assert_null(ofono_ims_bearer_get_wfc_preference(modem.info));
+	g_assert_null(modem.status.ims_wfc_preference);
 
+	free_modem(&modem);
+}
+
+/* The Brax3's: Wi-Fi preferred, while on LTE; then changed in its settings */
+static void test_wfc_preference(void)
+{
+	struct modem modem;
+
+	fake.registered = TRUE;
+	fake.voice_capable = TRUE;
+	fake.bearer = "cellular";
+	fake.wfc_preference = "wifi";
+	memset(&seen, 0, sizeof(seen));
+	memset(&modem, 0, sizeof(modem));
+	modem.ims = ofono_ims_create(MODEM_PATH);
+	ofono_ims_register_prop_changed_handler(modem.ims, ims_changed_cb, &seen);
+	modem.info = ofono_ims_bearer_create(MODEM_PATH);
+	ofono_ims_bearer_register_prop_changed_handler(modem.info, bearer_changed_cb, &seen);
+	wait_for_changes(3, 2);
+	g_assert_cmpstr(seen.last, ==, "WfcPreference");
+
+	g_assert_cmpstr(ofono_ims_bearer_get_wfc_preference(modem.info), ==, "wifi");
+	fill(&modem);
+	g_assert_cmpstr(modem.status.ims_wfc_preference, ==, "wifi");
+	g_assert_cmpstr(modem.status.ims_bearer, ==, "cellular");
+	g_assert_false(modem.status.vowifi);
+
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string("wifi-only"));
+	wait_for_changes(3, 3);
+	fill(&modem);
+	g_assert_cmpstr(modem.status.ims_wfc_preference, ==, "wifi-only");
+
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string("cellular"));
+	wait_for_changes(3, 4);
+	g_assert_cmpstr(ofono_ims_bearer_get_wfc_preference(modem.info), ==, "cellular");
+
+	/* unknown to the extension, or a name telephonyd does not know: "" */
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string(""));
+	wait_for_changes(3, 5);
+	g_assert_cmpstr(ofono_ims_bearer_get_wfc_preference(modem.info), ==, "");
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string("wifi"));
+	wait_for_changes(3, 6);
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string("roaming-wifi"));
+	wait_for_changes(3, 7);
+	g_assert_cmpstr(ofono_ims_bearer_get_wfc_preference(modem.info), ==, "");
+
+	/* not a string: kept */
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_string("wifi"));
+	wait_for_changes(3, 8);
+	fake_change(BEARER_IFACE, "WfcPreference", g_variant_new_uint32(1));
+	spin();
+	g_assert_cmpint(seen.bearer_changes, ==, 8);
+	g_assert_cmpstr(ofono_ims_bearer_get_wfc_preference(modem.info), ==, "wifi");
+
+	/* A setting: shown without an IMS registration too */
+	fake_change(IMS_IFACE, "Registered", g_variant_new_boolean(FALSE));
+	wait_for_changes(4, 8);
+	fill(&modem);
+	g_assert_false(modem.status.ims_registered);
+	g_assert_cmpstr(modem.status.ims_bearer, ==, "");
+	g_assert_cmpstr(modem.status.ims_wfc_preference, ==, "wifi");
+
+	fake.wfc_preference = NULL;
 	free_modem(&modem);
 }
 
@@ -358,8 +428,10 @@ static void test_without_ims(void)
 	g_assert_false(status.ims_voice_capable);
 	g_assert_false(status.ims_sms_capable);
 	g_assert_cmpstr(status.ims_bearer, ==, "");
+	g_assert_null(status.ims_wfc_preference);
 
 	g_assert_cmpint(ofono_ims_bearer_get(NULL), ==, OFONO_IMS_BEARER_NONE);
+	g_assert_null(ofono_ims_bearer_get_wfc_preference(NULL));
 	ofono_ims_bearer_register_prop_changed_handler(NULL, bearer_changed_cb, &seen);
 	ofono_ims_bearer_free(NULL);
 }
@@ -410,6 +482,7 @@ int main(int argc, char **argv)
 
 	g_test_add_func("/ofonoimsbearer/over-wifi", test_over_wifi);
 	g_test_add_func("/ofonoimsbearer/over-cellular", test_over_cellular);
+	g_test_add_func("/ofonoimsbearer/wfc-preference", test_wfc_preference);
 	g_test_add_func("/ofonoimsbearer/wifi-without-voice", test_wifi_without_voice);
 	g_test_add_func("/ofonoimsbearer/bearer-without-registration", test_bearer_without_registration);
 	g_test_add_func("/ofonoimsbearer/changes-follow", test_changes_follow);

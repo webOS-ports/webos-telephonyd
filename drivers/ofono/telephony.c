@@ -31,6 +31,7 @@
 #include "ofonoradiosettings.h"
 #include "ofonoims.h"
 #include "ofonoimsbearer.h"
+#include "ofonocellinfo.h"
 #include "ofonotechnology.h"
 #include "ofonovoicecallmanager.h"
 #include "ofonovoicecall.h"
@@ -62,6 +63,7 @@ struct ofono_sim_data {
 	struct ofono_radio_settings *rs;
 	struct ofono_ims *ims;
 	struct ofono_ims_bearer_info *ims_bearer;
+	struct ofono_cell_info *cellinfo;
 	struct ofono_voicecall_manager *vm;
 	struct ofono_message_manager *mm;
 	struct ofono_sms_history *sms_history;
@@ -573,6 +575,17 @@ static void retrieve_network_status(struct ofono_sim_data *od, struct telephony_
 	status->state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
 	status->registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
 
+	/* IMS does not need the cellular network: over Wi-Fi it is there while
+	 * the phone has no cellular service, or no NetworkRegistration at all */
+	if (!od->netreg) {
+		status->name = NULL;
+		status->cause_code = 0;
+		status->data_registered = false;
+		status->technology = "";
+		ofono_ims_fill_network_status(od->ims, od->ims_bearer, status);
+		return;
+	}
+
 	net_status = ofono_network_registration_get_status(od->netreg);
 	switch (net_status) {
 	case OFONO_NETWORK_REGISTRATION_STATUS_REGISTERED:
@@ -604,6 +617,14 @@ static void retrieve_network_status(struct ofono_sim_data *od, struct telephony_
 	ofono_ims_fill_network_status(od->ims, od->ims_bearer, status);
 }
 
+static void notify_network_status(struct ofono_sim_data *od)
+{
+	struct telephony_network_status net_status;
+
+	retrieve_network_status(od, &net_status);
+	telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
+}
+
 void ofono_network_status_query(struct telephony_service *service, int sim_id, telephony_network_status_query_cb cb, void *data)
 {
 	struct ofono_sim_data *od = get_sim_data(service, sim_id);
@@ -615,24 +636,7 @@ void ofono_network_status_query(struct telephony_service *service, int sim_id, t
 		return;
 	}
 
-	if (od->netreg) {
-		retrieve_network_status(od, &status);
-	}
-	else {
-		status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
-		status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
-		status.name = NULL;
-		status.cause_code = 0;
-		status.data_registered = false;
-		status.technology = "";
-		/* as notify_no_network_registration reports it */
-		status.volte = false;
-		status.vowifi = false;
-		status.ims_registered = false;
-		status.ims_voice_capable = false;
-		status.ims_sms_capable = false;
-		status.ims_bearer = "";
-	}
+	retrieve_network_status(od, &status);
 
 	cb(NULL, &status, data);
 }
@@ -659,6 +663,47 @@ void ofono_signal_strength_query(struct telephony_service *service, int sim_id, 
 	cb(NULL, strength, data);
 }
 
+/* A phone-information page asks every few seconds while it is shown; the
+ * modem keeps reporting its cells this long after the last time */
+#define CELL_INFO_LINGER_MS 30000
+
+struct cell_info_query_data {
+	telephony_cell_info_query_cb cb;
+	void *data;
+};
+
+static void cell_info_query_cb(const GError *error, const struct telephony_cell_signal *cells,
+							   unsigned int count, void *data)
+{
+	struct cell_info_query_data *cqd = data;
+
+	if (error) {
+		struct telephony_error terr = { .code = TELEPHONY_ERROR_FAIL };
+		cqd->cb(&terr, NULL, 0, cqd->data);
+	}
+	else
+		cqd->cb(NULL, cells, count, cqd->data);
+
+	g_free(cqd);
+}
+
+void ofono_cell_info_query_cells(struct telephony_service *service, int sim_id, telephony_cell_info_query_cb cb, void *data)
+{
+	struct ofono_sim_data *od = get_sim_data(service, sim_id);
+	struct cell_info_query_data *cqd;
+
+	if (!od) {
+		struct telephony_error nosim = { .code = TELEPHONY_ERROR_NOT_AVAILABLE };
+		cb(&nosim, NULL, 0, data);
+		return;
+	}
+
+	cqd = g_new0(struct cell_info_query_data, 1);
+	cqd->cb = cb;
+	cqd->data = data;
+	ofono_cell_info_query(od->cellinfo, cell_info_query_cb, cqd);
+}
+
 static void network_prop_changed_cb(const gchar *name, void *data)
 {
 	struct ofono_sim_data *od = data;
@@ -679,17 +724,11 @@ static void network_prop_changed_cb(const gchar *name, void *data)
  * status bar's VoLTE and VoWiFi; and what a phone-info page shows */
 static void ims_prop_changed_cb(const gchar *name, void *data)
 {
-	struct ofono_sim_data *od = data;
-	struct telephony_network_status net_status;
-
-	if (!od->netreg)
-		return;
-
+	/* Without NetworkRegistration too: IMS over Wi-Fi needs no cellular */
 	if (g_str_equal(name, "Registered") || g_str_equal(name, "VoiceCapable") ||
-		g_str_equal(name, "SmsCapable") || g_str_equal(name, "Bearer")) {
-		retrieve_network_status(od, &net_status);
-		telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
-	}
+		g_str_equal(name, "SmsCapable") || g_str_equal(name, "Bearer") ||
+		g_str_equal(name, "WfcPreference"))
+		notify_network_status(data);
 }
 
 enum telephony_radio_access_mode select_best_radio_access_mode(struct ofono_network_operator *netop)
@@ -1422,16 +1461,8 @@ static void incoming_message_cb(struct ofono_message *message, void *data)
 static void notify_no_network_registration(struct ofono_sim_data *od)
 {
 	/* notify possible network status subscribers about us having no connectivity
-	 * anymore */
-	struct telephony_network_status net_status;
-
-	memset(&net_status, 0, sizeof(net_status));
-
-	net_status.state = TELEPHONY_NETWORK_STATE_NO_SERVICE;
-	net_status.registration = TELEPHONY_NETWORK_REGISTRATION_NO_SERVICE;
-	net_status.name = 0;
-
-	telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
+	 * anymore; IMS, over Wi-Fi, may still be there */
+	notify_network_status(od);
 }
 
 /* ------------------------------------------------------------------------
@@ -1576,12 +1607,7 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->ims && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_IP_MULTIMEDIA_SYSTEM)) {
 			ofono_ims_free(od->ims);
 			od->ims = NULL;
-			if (od->netreg) {
-				struct telephony_network_status net_status;
-
-				retrieve_network_status(od, &net_status);
-				telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
-			}
+			notify_network_status(od);
 		}
 
 		if (!od->ims_bearer && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MTK_IMS)) {
@@ -1591,12 +1617,15 @@ static void modem_prop_changed_cb(const gchar *name, void *data)
 		else if (od->ims_bearer && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_MTK_IMS)) {
 			ofono_ims_bearer_free(od->ims_bearer);
 			od->ims_bearer = NULL;
-			if (od->netreg) {
-				struct telephony_network_status net_status;
+			notify_network_status(od);
+		}
 
-				retrieve_network_status(od, &net_status);
-				telephony_service_network_status_changed_notify(od->service, od->sim_id, &net_status);
-			}
+		if (!od->cellinfo && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_CELL_INFO)) {
+			od->cellinfo = ofono_cell_info_create(path, CELL_INFO_LINGER_MS);
+		}
+		else if (od->cellinfo && !ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_CELL_INFO)) {
+			ofono_cell_info_free(od->cellinfo);
+			od->cellinfo = NULL;
 		}
 
 		if (!od->vm && ofono_modem_is_interface_supported(od->modem, OFONO_MODEM_INTERFACE_VOICE_CALL_MANAGER)) {
@@ -1738,6 +1767,9 @@ static void free_used_instances(struct ofono_sim_data *od)
 
 	ofono_ims_bearer_free(od->ims_bearer);
 	od->ims_bearer = NULL;
+
+	ofono_cell_info_free(od->cellinfo);
+	od->cellinfo = NULL;
 
 	if (od->vm) {
 		ofono_voicecall_manager_free(od->vm);
@@ -1950,6 +1982,7 @@ struct telephony_driver ofono_telephony_driver = {
 	.fdn_status_query = ofono_fdn_status_query,
 	.network_status_query = ofono_network_status_query,
 	.signal_strength_query = ofono_signal_strength_query,
+	.cell_info_query = ofono_cell_info_query_cells,
 	.network_list_query = ofono_network_list_query,
 	.network_list_query_cancel = ofono_network_list_query_cancel,
 	.network_id_query = ofono_network_id_query,
